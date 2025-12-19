@@ -1,0 +1,5 @@
+{
+  "name": "Pixel Life: Observer",
+  "description": "A pixel-art simulation game where autonomous agents live, interact, and evolve.",
+  "requestFramePermissions": []
+}
