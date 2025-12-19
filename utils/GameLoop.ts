@@ -78,7 +78,8 @@ export const gameLoopStep = (dt: number = 1) => {
     // C. UI 通知限流
     // ------------------------------------------------
     tickCount++;
-    if (tickCount % 10 === 0) {
+    // [优化] 降低 UI 刷新频率到每 30 帧一次 (约 2 次/秒)，极大减少 React 重绘压力
+    if (tickCount % 30 === 0) {
         GameStore.notify();
     }
 };

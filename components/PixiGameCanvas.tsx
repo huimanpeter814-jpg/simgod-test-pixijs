@@ -29,6 +29,8 @@ const PixiGameCanvas: React.FC = () => {
 
     // --- UI/Ghost ---
     const uiLayerRef = useRef<Container | null>(null);
+    // [优化] 复用 Graphics 对象，避免每帧创建销毁
+    const uiGraphicsRef = useRef<Graphics | null>(null); 
     const ghostLayerRef = useRef<Container | null>(null);
 
     // --- 交互状态 ---
@@ -98,14 +100,14 @@ const PixiGameCanvas: React.FC = () => {
         }
     });
 
-    // --- 3. 实时 UI 更新 (每一帧调用，但只画简单的框) ---
+    // --- 3. 实时 UI 更新 (每一帧调用) ---
     const updateEditorVisuals = () => {
-        if (!uiLayerRef.current || !ghostLayerRef.current || !appRef.current || !viewportRef.current) return;
-        const ui = uiLayerRef.current;
+        if (!uiGraphicsRef.current || !ghostLayerRef.current || !appRef.current || !viewportRef.current) return;
+        const uiG = uiGraphicsRef.current;
         const ghost = ghostLayerRef.current;
 
-        // 清空上一帧的 UI (注意：不再清空 GridLayer)
-        ui.removeChildren(); 
+        // [优化] 只清除内容，不销毁对象
+        uiG.clear();
         ghost.removeChildren();
 
         if (GameStore.editor.mode === 'none') {
@@ -122,15 +124,13 @@ const PixiGameCanvas: React.FC = () => {
 
         // 绘制选中框 (轻量级)
         const drawBox = (x: number, y: number, w: number, h: number, color: number) => {
-            const g = new Graphics();
-            g.rect(x, y, w, h).stroke({ width: 2/zoom, color });
-            ui.addChild(g);
+            uiG.rect(x, y, w, h).stroke({ width: 2/zoom, color });
+            
             // 只有 plot 和 room 模式显示手柄
             if (['plot', 'floor'].includes(GameStore.editor.mode)) {
                 const s = 10 / zoom, half = s/2;
                 [{x:x-half,y:y-half}, {x:x+w-half,y:y-half}, {x:x-half,y:y+h-half}, {x:x+w-half,y:y+h-half}].forEach(p => {
-                    const hG = new Graphics().rect(p.x, p.y, s, s).fill(0xffffff).stroke({width:1/zoom, color:0});
-                    ui.addChild(hG);
+                    uiG.rect(p.x, p.y, s, s).fill(0xffffff).stroke({width:1/zoom, color:0});
                 });
             }
         };
@@ -175,6 +175,7 @@ const PixiGameCanvas: React.FC = () => {
             }
 
             if (!GameStore.editor.placingFurniture) {
+                // Ghost Box 也可以用 uiGraphics 绘制，或者保留单独 Graphics
                 const g = new Graphics().rect(x, y, w, h).fill({ color: 0xffffff, alpha: 0.2 }).stroke({ width: 2, color: 0xffff00 });
                 ghost.addChild(g);
             }
@@ -253,6 +254,11 @@ const PixiGameCanvas: React.FC = () => {
             // --- 5. UI层 ---
             const ghostL = new Container(); ghostL.zIndex = 1000; viewport.addChild(ghostL); ghostLayerRef.current = ghostL;
             const uiL = new Container(); uiL.zIndex = 1001; viewport.addChild(uiL); uiLayerRef.current = uiL;
+            
+            // [优化] 创建持久的 UI Graphics 对象
+            const uiGraphics = new Graphics();
+            uiL.addChild(uiGraphics);
+            uiGraphicsRef.current = uiGraphics;
 
             refreshWorld(); 
             viewport.moveCenter(CONFIG.CANVAS_W / 2, CONFIG.CANVAS_H / 2);
@@ -308,7 +314,7 @@ const PixiGameCanvas: React.FC = () => {
                     }
                 });
 
-                // 这里不再重绘 Grid，只更新简单的选框
+                // 更新选框
                 updateEditorVisuals();
             });
         };
@@ -328,7 +334,7 @@ const PixiGameCanvas: React.FC = () => {
         return unsub;
     }, []);
 
-    // --- 交互处理 (关键修改) ---
+    // --- 交互处理 ---
     const handleMouseDown = (e: React.MouseEvent) => {
         if (!viewportRef.current || e.button !== 0) return; // 只处理左键
         const pt = viewportRef.current.toWorld(e.clientX, e.clientY);
@@ -360,13 +366,17 @@ const PixiGameCanvas: React.FC = () => {
         // 2. 选择 Sim (None 模式)
         if (GameStore.editor.mode === 'none') {
             const sim = GameStore.sims.find(s => Math.abs(s.pos.x - wX) < 30 && Math.abs(s.pos.y - wY) < 50);
-            GameStore.selectedSimId = sim ? sim.id : null;
             
-            // 如果点到了 Sim，暂停拖拽镜头；否则继续允许拖拽镜头(Pan)
-            if (sim) viewportRef.current.plugins.pause('drag');
-            else viewportRef.current.plugins.resume('drag');
+            if (sim) {
+                GameStore.selectedSimId = sim.id;
+                // [修复] 选中Sim时不要暂停镜头拖拽，这样用户仍然可以拖动镜头
+                // 只有当你需要实现"拖拽Sim"功能时才需要暂停 Viewport 拖拽
+            } else {
+                GameStore.selectedSimId = null;
+            }
             
             GameStore.notify();
+            // 不 return，允许事件继续，以免阻断 Viewport 自身的 Drag 逻辑
             return;
         }
 
@@ -439,10 +449,11 @@ const PixiGameCanvas: React.FC = () => {
             GameStore.editor.previewPos = { x: hitObj.x, y: hitObj.y };
             dragStartPos.current = { x: hitObj.x, y: hitObj.y };
         } else {
-            // 没点中任何东西 -> 取消选择，并恢复镜头拖拽 (允许 Pan)
+            // 没点中任何东西 -> 取消选择
             GameStore.editor.selectedPlotId = null; 
             GameStore.editor.selectedFurnitureId = null; 
             GameStore.editor.selectedRoomId = null;
+            // [修复] 确保没有选中物体时，镜头可以拖拽
             viewportRef.current.plugins.resume('drag');
         }
         GameStore.notify();

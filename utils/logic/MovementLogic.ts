@@ -24,17 +24,21 @@ export const MovementLogic = {
 
         // 2. 路径生成
         if (sim.path.length === 0) {
-            // [解放] 移除了所有 pathCalculationsThisFrame 的检查
-            // 50 个人同时寻路对现在的算法来说也是小菜一碟
+            // [优化] 寻路非常消耗性能，如果找不到路径，不要每一帧都重试
             sim.path = GameStore.pathFinder.findPath(sim.pos.x, sim.pos.y, sim.target.x, sim.target.y);
             sim.currentPathIndex = 0;
             
-            // 兜底
+            // 兜底：如果没有路径
             if (sim.path.length === 0) {
                 if (distSq < 10000) { 
+                     // 距离很近，直接走直线尝试
                      sim.path.push({ x: sim.target.x, y: sim.target.y });
                 } else {
+                    // 距离太远且无路径，放弃移动
                     sim.decisionTimer = 60; 
+                    // [关键修复] 返回 true 强制结束移动状态，防止下一帧继续寻路导致 FPS 暴跌
+                    sim.target = null;
+                    return true; 
                 }
             }
         }
