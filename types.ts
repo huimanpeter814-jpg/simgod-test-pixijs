@@ -70,7 +70,7 @@ export interface Furniture {
   y: number;
   w: number;
   h: number;
-  rotation?: number; // 🆕 0, 1, 2, 3 (对应 0, 90, 180, 270 度)
+  rotation?: number; 
   color: string;
   label: string;
   utility: string;
@@ -172,7 +172,7 @@ export interface EditorState {
 }
 
 export interface EditorAction {
-    type: 'add' | 'remove' | 'move' | 'modify' | 'resize' | 'rotate'; // 🆕 新增 rotate
+    type: 'add' | 'remove' | 'move' | 'modify' | 'resize' | 'rotate';
     entityType: 'plot' | 'furniture' | 'room';
     id: string;
     prevData?: any; 
@@ -247,11 +247,16 @@ export interface Buff {
   source: string;
 }
 
+// 🆕 更新外观接口：改为 Body, Outfit, Hair 三层结构
 export interface SimAppearance {
-    face: string;
-    hair: string;
-    clothes: string;
-    pants: string;
+    body: string;   // 身体图层 (最底层)
+    outfit: string; // 衣服图层 (中间层)
+    hair: string;   // 头发图层 (最顶层)
+    
+    // 兼容旧字段 (可选)
+    face?: string;
+    clothes?: string;
+    pants?: string;
 }
 
 export interface Memory {
@@ -286,7 +291,7 @@ export interface SimData {
   hairColor: string;
   clothesColor: string;
   pantsColor: string; 
-  appearance: SimAppearance;
+  appearance: SimAppearance; // 使用新的接口
   mbti: string;
   zodiac: Zodiac;
   
@@ -325,11 +330,9 @@ export interface SimData {
   dailyIncome: number; 
   isSideHustle?: boolean;
   
-  // 🆕 新增：版税收入与物品系统字段
   royalty?: { amount: number, daysLeft: number };
   hasFreshIngredients?: boolean;
   
-  // 🆕 [修复] 购物意图：记录市民想买的物品ID，防止云购物
   intendedShoppingItemId?: string;
 
   buffs: Buff[];

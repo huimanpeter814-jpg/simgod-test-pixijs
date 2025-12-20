@@ -114,21 +114,28 @@ export const SimInitializer = {
             sim.name = sim.surname + GIVEN_NAMES[Math.floor(Math.random() * GIVEN_NAMES.length)];
         }
         
-        // 外观 (支持自定义颜色配置)
+        // 外观 (支持自定义颜色配置) - 仍然保留颜色字段以备不时之需（例如 UI 文字颜色）
         sim.skinColor = config.skinColor || CONFIG.COLORS.skin[Math.floor(Math.random() * CONFIG.COLORS.skin.length)];
         sim.hairColor = config.hairColor || CONFIG.COLORS.hair[Math.floor(Math.random() * CONFIG.COLORS.hair.length)];
         sim.clothesColor = config.clothesColor || CONFIG.COLORS.clothes[Math.floor(Math.random() * CONFIG.COLORS.clothes.length)];
         sim.pantsColor = config.pantsColor || CONFIG.COLORS.pants[Math.floor(Math.random() * CONFIG.COLORS.pants.length)];
 
-        // 外观样式 (Assets)
+        // 🆕 核心修改：初始化三层图片资源
         if (config.appearance) {
             sim.appearance = config.appearance;
         } else {
+            // 从 ASSET_CONFIG 中随机挑选
+            // 简单逻辑：随机选一个。如果有性别区分需求，可以根据文件名判断 (但这里先全随机)
+            const pick = (list: string[]) => list.length > 0 ? list[Math.floor(Math.random() * list.length)] : '';
+            
             sim.appearance = {
-                face: ASSET_CONFIG.face.length > 0 ? ASSET_CONFIG.face[Math.floor(Math.random() * ASSET_CONFIG.face.length)] : '',
-                hair: ASSET_CONFIG.hair.length > 0 ? ASSET_CONFIG.hair[Math.floor(Math.random() * ASSET_CONFIG.hair.length)] : '',
-                clothes: ASSET_CONFIG.clothes.length > 0 ? ASSET_CONFIG.clothes[Math.floor(Math.random() * ASSET_CONFIG.clothes.length)] : '',
-                pants: ASSET_CONFIG.pants.length > 0 ? ASSET_CONFIG.pants[Math.floor(Math.random() * ASSET_CONFIG.pants.length)] : '',
+                body: pick(ASSET_CONFIG.bodies),
+                outfit: pick(ASSET_CONFIG.outfits),
+                hair: pick(ASSET_CONFIG.hairs),
+                // 兼容字段
+                face: '',
+                clothes: '',
+                pants: ''
             };
         }
 

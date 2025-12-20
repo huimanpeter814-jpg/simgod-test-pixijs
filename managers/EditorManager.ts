@@ -268,6 +268,29 @@ export class EditorManager implements EditorState {
         GameStore.triggerMapUpdate();
     }
 
+    // [新增修复] 添加缺失的方法：切换地块模板
+    changePlotTemplate(plotId: string, templateId: string) {
+        const plot = GameStore.worldLayout.find(p => p.id === plotId);
+        if (plot) {
+            // 1. 清理旧数据：移除该地块原有的房间、家具、住户单元
+            // 假设 ID 命名规则是 `${plotId}_${itemId}`
+            GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
+            GameStore.furniture = GameStore.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
+            GameStore.housingUnits = GameStore.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
+
+            // 2. 更新模板 ID
+            plot.templateId = templateId;
+            
+            // 3. 重新实例化地块内容 (使用 GameStore 的静态方法)
+            GameStore.instantiatePlot(plot);
+
+            // 4. 重建索引并刷新
+            GameStore.initIndex();
+            GameStore.refreshFurnitureOwnership();
+            GameStore.triggerMapUpdate();
+        }
+    }
+
     removePlot(plotId: string, record = true) {
         GameStore.worldLayout = GameStore.worldLayout.filter(p => p.id !== plotId);
         GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`)); 

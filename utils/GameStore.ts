@@ -1,4 +1,4 @@
-import { JOBS, CONFIG } from '../constants'; 
+import { JOBS, CONFIG, ASSET_CONFIG } from '../constants'; // [注意] 引入 ASSET_CONFIG
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
 import { LogEntry, GameTime, Furniture, RoomDef, HousingUnit, WorldPlot, SimAction, AgeStage, EditorAction, EditorState } from '../types';
@@ -23,8 +23,6 @@ export class GameStore {
     static selectedSimId: string | null = null;
     static listeners: (() => void)[] = [];
 
-    // 🆕 地图版本号：只有当建筑/家具发生变化时才增加
-    // 这解决了 FPS 低的问题，防止每帧都重建世界
     static mapVersion: number = 0;
 
     static editor = new EditorManager();
@@ -51,12 +49,11 @@ export class GameStore {
         this.listeners.forEach(cb => cb());
     }
 
-    // 🆕 核心方法：标记地图已更新
     static triggerMapUpdate() {
         this.mapVersion++;
-        this.initIndex(); // 重建索引
-        this.refreshFurnitureOwnership(); // 刷新归属权
-        this.notify(); // 通知 UI
+        this.initIndex(); 
+        this.refreshFurnitureOwnership(); 
+        this.notify(); 
     }
 
     static showToast(msg: string) {
@@ -203,7 +200,6 @@ export class GameStore {
             GameStore.instantiatePlot(plot);
         });
 
-        // 标记地图已更新
         this.triggerMapUpdate();
     }
 
@@ -367,14 +363,13 @@ export class GameStore {
     static resetEditorState() { this.editor.resetState(); }
     static clearMap() { this.editor.clearMap(); }
     static recordAction(action: EditorAction) { this.editor.recordAction(action); }
-    static undo() { this.editor.undo(); this.triggerMapUpdate(); } // 撤销时刷新
-    static redo() { this.editor.redo(); this.triggerMapUpdate(); } // 重做时刷新
+    static undo() { this.editor.undo(); this.triggerMapUpdate(); } 
+    static redo() { this.editor.redo(); this.triggerMapUpdate(); } 
     static startPlacingPlot(templateId: string) { this.editor.startPlacingPlot(templateId); }
     static startDrawingPlot(templateId: string) { this.editor.startDrawingPlot(templateId); }
     static startPlacingFurniture(template: Partial<Furniture>) { this.editor.startPlacingFurniture(template); }
     static startDrawingFloor(pattern: string, color: string, label: string, hasWall: boolean) { this.editor.startDrawingFloor(pattern, color, label, hasWall); }
     
-    // 以下操作修改了地图，需要触发刷新
     static placePlot(x: number, y: number) { this.editor.placePlot(x, y); this.triggerMapUpdate(); }
     static createCustomPlot(rect: any, templateId: string) { this.editor.createCustomPlot(rect, templateId); this.triggerMapUpdate(); }
     static placeFurniture(x: number, y: number) { this.editor.placeFurniture(x, y); this.triggerMapUpdate(); }
@@ -384,7 +379,7 @@ export class GameStore {
     static removeFurniture(id: string) { this.editor.removeFurniture(id); this.triggerMapUpdate(); }
     static changePlotTemplate(plotId: string, templateId: string) { this.editor.changePlotTemplate(plotId, templateId); this.triggerMapUpdate(); }
     static finalizeMove(type: 'plot'|'furniture'|'room', id: string, startPos: any) { this.editor.finalizeMove(type, id, startPos); this.triggerMapUpdate(); }
-    static resizeEntity(type: 'plot'|'room', id: string, newRect: any) { this.editor.resizeEntity(type, id, newRect); this.triggerMapUpdate(); } // 缩放时实时刷新
+    static resizeEntity(type: 'plot'|'room', id: string, newRect: any) { this.editor.resizeEntity(type, id, newRect); this.triggerMapUpdate(); } 
     
     static furnitureByPlot: Map<string, Furniture[]> = new Map();
 
@@ -529,7 +524,7 @@ export class GameStore {
 
             this.loadSims(data.sims);
 
-            this.triggerMapUpdate(); // 触发地图更新
+            this.triggerMapUpdate(); 
             
             if (!silent) {
                 this.showToast(`📂 读取存档 ${slotIndex} 成功！`);
@@ -559,6 +554,17 @@ export class GameStore {
             if (!sim.ageStage) sim.ageStage = AgeStage.Adult;
             if (sim.interactionTarget) sim.interactionTarget = null;
             
+            // [关键] 自动分配缺失的服装资源 (存档迁移)
+            if (!sim.appearance.clothes && ASSET_CONFIG.clothes.length > 0) {
+                sim.appearance.clothes = ASSET_CONFIG.clothes[Math.floor(Math.random() * ASSET_CONFIG.clothes.length)];
+            }
+            if (!sim.appearance.pants && ASSET_CONFIG.pants.length > 0) {
+                sim.appearance.pants = ASSET_CONFIG.pants[Math.floor(Math.random() * ASSET_CONFIG.pants.length)];
+            }
+            if (!sim.appearance.hair && ASSET_CONFIG.hairs.length > 0) {
+                sim.appearance.hair = ASSET_CONFIG.hairs[Math.floor(Math.random() * ASSET_CONFIG.hairs.length)];
+            }
+
             const currentJobDefinition = JOBS.find(j => j.id === sim.job.id);
             if (currentJobDefinition) {
                 sim.job = { ...currentJobDefinition };
@@ -627,8 +633,15 @@ export class GameStore {
             });
             sim.id = newId; 
             
-            if (!cfg.appearance?.hair) {
-                sim.appearance.hair = ''; 
+            // 如果外观没有设置，尝试自动分配
+            if (!sim.appearance.hair && ASSET_CONFIG.hairs.length > 0) {
+                sim.appearance.hair = ASSET_CONFIG.hairs[Math.floor(Math.random() * ASSET_CONFIG.hairs.length)];
+            }
+            if (!sim.appearance.clothes && ASSET_CONFIG.clothes.length > 0) {
+                sim.appearance.clothes = ASSET_CONFIG.clothes[Math.floor(Math.random() * ASSET_CONFIG.clothes.length)];
+            }
+            if (!sim.appearance.pants && ASSET_CONFIG.pants.length > 0) {
+                sim.appearance.pants = ASSET_CONFIG.pants[Math.floor(Math.random() * ASSET_CONFIG.pants.length)];
             }
 
             newSims.push(sim);
@@ -719,7 +732,6 @@ export function initGame() {
     GameStore.logs = []; 
     GameStore.time = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
 
-    // 初始重建，必须触发地图更新
     GameStore.rebuildWorld(true); 
 
     if (GameStore.loadGame(1,true)) {

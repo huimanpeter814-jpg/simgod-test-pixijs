@@ -227,7 +227,16 @@ const PixiGameCanvasComponent: React.FC = () => {
             appRef.current = app;
 
             // 2. 加载资源
-            await loadGameAssets([...ASSET_CONFIG.bg, ...ASSET_CONFIG.face, ...ASSET_CONFIG.hair, ...ASSET_CONFIG.clothes, ...ASSET_CONFIG.pants]);
+            // [修复] 加载 bodies, outfits, hairs
+            await loadGameAssets([
+                ...ASSET_CONFIG.bg,
+                ...ASSET_CONFIG.bodies,
+                ...ASSET_CONFIG.outfits,
+                ...ASSET_CONFIG.hairs,
+                ...(ASSET_CONFIG.face || []),
+                ...(ASSET_CONFIG.clothes || []),
+                ...(ASSET_CONFIG.pants || [])
+            ]);
             setLoading(false);
 
             // 3. 创建 Viewport
@@ -259,7 +268,6 @@ const PixiGameCanvasComponent: React.FC = () => {
             const uiL = new Container(); uiL.zIndex = 999999; viewport.addChild(uiL); uiLayerRef.current = uiL;
 
             // 6. 初始世界渲染
-            // 注意：这里可能是在 Store 加载完成前执行，所以需要下面的 useEffect 再次触发
             refreshWorld();
             viewport.moveCenter(CONFIG.CANVAS_W / 2, CONFIG.CANVAS_H / 2);
             viewport.setZoom(1.0);
@@ -299,11 +307,11 @@ const PixiGameCanvasComponent: React.FC = () => {
                     
                     if (GameStore.selectedSimId === sim.id) {
                         view.container.alpha = 1; 
-                        view.container.scale.set(1.1); 
+                        view.container.scale.set(1.0); 
                         view.container.zIndex = SIM_LAYER_OFFSET + 99999; 
                     } else {
                         view.container.alpha = 1; 
-                        view.container.scale.set(1.0); 
+                        view.container.scale.set(0.8); 
                         view.container.zIndex = SIM_LAYER_OFFSET + sim.pos.y; 
                     }
                 });
@@ -332,8 +340,6 @@ const PixiGameCanvasComponent: React.FC = () => {
 
     // 监听 GameStore 变化
     useEffect(() => {
-        // [修复] 挂载时立即同步一次，防止在组件渲染期间 initGame 已经完成并触发了 notify
-        // 如果我们不立即检查，就会因为错过了那个 notify 而一直等待下一次更新
         if (GameStore.mapVersion !== editorRefresh) {
             setEditorRefresh(GameStore.mapVersion);
         }
@@ -349,7 +355,7 @@ const PixiGameCanvasComponent: React.FC = () => {
             }
         });
         return unsub;
-    }, [editorRefresh]); // 依赖 editorRefresh 以便在更新后重新订阅（虽然 store 本身是单例）
+    }, [editorRefresh]);
 
     // === 交互事件处理 ===
     const handleMouseDown = (e: React.MouseEvent) => {
