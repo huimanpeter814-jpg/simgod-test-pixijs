@@ -86,7 +86,7 @@ export class PixiSimView {
             text: '',
             style: {
                 fontFamily: 'Arial',
-                fontSize: 12,
+                fontSize: 18,
                 fill: 0x000000,
                 align: 'center',
                 wordWrap: true,
@@ -153,8 +153,8 @@ export class PixiSimView {
                 else if (sim.bubble.type === 'bad') { bgColor = 0xff7675; strokeColor = 0xd63031; }
                 else if (sim.bubble.type === 'money') { bgColor = 0xffeaa7; strokeColor = 0xfdcb6e; }
 
-                const width = this.bubbleText.width + 10;
-                const height = this.bubbleText.height + 6;
+                const width = this.bubbleText.width + 25;
+                const height = this.bubbleText.height + 20;
                 
                 this.bubbleBg.clear();
                 this.bubbleBg.roundRect(-width/2, -height/2, width, height, 5);

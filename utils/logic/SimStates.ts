@@ -59,13 +59,14 @@ export class TransitionState extends BaseState {
         // 简单 Lerp 动画
         // 注意：dt 是 tick 增量，这里我们需要将其视为时间流逝
         // 假设 dt=1 约为 1/60 秒 (16ms)
-        const deltaSec = 0.016 * dt * GameStore.time.speed; 
-        
-        // 为了视觉平滑，忽略游戏加速带来的过快跳跃，使用固定步长
-        // 或者直接累加进度
-        this.elapsed += 0.05 * dt; // 调节这个系数控制速度
+        const visualDt = Math.min(dt, 2.0); 
+    
+        this.elapsed += 0.05 * visualDt; 
 
-        const t = Math.min(1, this.elapsed / (this.duration * 60)); // duration以秒为单位，这里简单估算
+    // 或者更彻底的做法：不使用 dt，而是使用固定值 (但这需要 update 在高倍速下不被多次调用)
+    // 推荐上面的 Math.min 方法
+    
+        const t = Math.min(1, this.elapsed / (this.duration * 60));
         
         // Ease-out
         const easeT = 1 - Math.pow(1 - t, 3);
@@ -397,7 +398,7 @@ export class NannyState extends BaseState {
     wanderTimer = 0;
     update(sim: Sim, dt: number) {
         const parentsHome = GameStore.sims.some(s => s.homeId === sim.homeId && !s.isTemporary && s.ageStage !== AgeStage.Infant && s.ageStage !== AgeStage.Toddler && s.isAtHome());
-        if (parentsHome) { GameStore.addLog(sim, "主人回来啦，我下班了。", "normal"); GameStore.removeSim(sim.id); return; }
+        if (parentsHome) {  GameStore.removeSim(sim.id); return; }
         const babies = GameStore.sims.filter(s => s.homeId === sim.homeId && (s.ageStage === AgeStage.Infant || s.ageStage === AgeStage.Toddler));
         if (babies.length > 0) {
             const needyBaby = babies.sort((a, b) => a.mood - b.mood)[0];

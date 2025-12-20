@@ -226,8 +226,26 @@ const PixiGameCanvasComponent: React.FC = () => {
             containerRef.current.appendChild(app.canvas);
             appRef.current = app;
 
-            // 2. 加载资源
-            // [修复] 加载 bodies, outfits, hairs
+            // ==========================================
+            // 🚨 关键修改：Viewport 创建必须提前！
+            // 原来是在 loadGameAssets 之后，现在移到这里
+            // ==========================================
+            
+            // 2. 创建 Viewport
+            const viewport = new Viewport({
+                screenWidth: app.screen.width, screenHeight: app.screen.height,
+                worldWidth: CONFIG.CANVAS_W, worldHeight: CONFIG.CANVAS_H,
+                events: app.renderer.events, ticker: app.ticker,
+            });
+            app.stage.addChild(viewport);
+            viewportRef.current = viewport; // ✅ 立即赋值，确保后续任何时机的重绘都能找到它
+            
+            viewport.drag().pinch().wheel().decelerate().clampZoom({ minScale: 0.1, maxScale: 4.0 });
+            viewport.sortableChildren = true;
+
+            // ==========================================
+
+            // 3. 加载资源 (现在可以放心地 await 了)
             await loadGameAssets([
                 ...ASSET_CONFIG.bg,
                 ...ASSET_CONFIG.bodies,
@@ -237,19 +255,10 @@ const PixiGameCanvasComponent: React.FC = () => {
                 ...(ASSET_CONFIG.clothes || []),
                 ...(ASSET_CONFIG.pants || [])
             ]);
-            setLoading(false);
-
-            // 3. 创建 Viewport
-            const viewport = new Viewport({
-                screenWidth: app.screen.width, screenHeight: app.screen.height,
-                worldWidth: CONFIG.CANVAS_W, worldHeight: CONFIG.CANVAS_H,
-                events: app.renderer.events, ticker: app.ticker,
-            });
-            app.stage.addChild(viewport);
-            viewportRef.current = viewport;
             
-            viewport.drag().pinch().wheel().decelerate().clampZoom({ minScale: 0.1, maxScale: 4.0 });
-            viewport.sortableChildren = true;
+            // 4. 资源加载完毕，解除 Loading 状态
+            // 此时 viewportRef.current 绝对有值，useEffect 中的 refreshWorld() 将被正确触发
+            setLoading(false);
 
             // 4. 静态背景
             const bgPath = ASSET_CONFIG.bg[0];

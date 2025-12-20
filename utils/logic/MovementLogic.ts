@@ -14,7 +14,7 @@ export const MovementLogic = {
         const dy = sim.target.y - sim.pos.y;
         const distSq = dx * dx + dy * dy;
         
-        if (distSq <= 225) { // 15px 范围内视为到达
+        if (distSq <= 4) { // 15px 范围内视为到达
             sim.pos = { ...sim.target };
             sim.target = null;
             sim.path = [];

@@ -10,6 +10,18 @@ interface RosterProps {
 
 const AvatarCanvas: React.FC<{ sim: SimData }> = ({ sim }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    // 🆕 新增：重绘触发器
+    const [retry, setRetry] = React.useState(0);
+
+    // 🆕 新增：检测机制
+    // 刚加载时，每隔 300ms 强制重绘一次，尝试 5 次
+    // 这能解决“组件渲染了但图片还没加载好”导致的空白问题
+    useEffect(() => {
+        if (retry < 5) {
+            const timer = setTimeout(() => setRetry(r => r + 1), 300);
+            return () => clearTimeout(timer);
+        }
+    }, [retry]);
     useEffect(() => {
         if (canvasRef.current) {
             const ctx = canvasRef.current.getContext('2d');
@@ -18,7 +30,7 @@ const AvatarCanvas: React.FC<{ sim: SimData }> = ({ sim }) => {
                 drawAvatarHead(ctx, 20, 25, 12, sim);
             }
         }
-    }, [sim]);
+    }, [sim, retry]); // 添加 retry 到依赖数组
     return <canvas ref={canvasRef} width={40} height={40} className="w-10 h-10 object-contain" />;
 };
 

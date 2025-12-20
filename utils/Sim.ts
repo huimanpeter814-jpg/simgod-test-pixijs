@@ -282,7 +282,7 @@ export class Sim {
 
     say(text: string, type: string = 'normal') { 
         this.bubble.text = text; 
-        this.bubble.timer = 150; 
+        this.bubble.timer = 300; 
         this.bubble.type = type; 
     }
 

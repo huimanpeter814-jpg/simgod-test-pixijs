@@ -165,7 +165,7 @@ const TopUI: React.FC = () => {
                 
                 <div className="flex gap-1">
                     {[
-                        { l: 'II', s: 0 }, { l: '▶', s: 1 }, { l: '▶▶', s: 50 }, { l: '>>>', s: 200 }
+                        { l: 'II', s: 0 }, { l: '▶', s: 1 }, { l: '▶▶', s: 5 }, { l: '>>>', s: 20 }
                     ].map(btn => (
                         <button 
                             key={btn.s}

@@ -60,7 +60,7 @@ export const SimInitializer = {
         };
         sim.prevPos = { ...sim.pos }; 
         
-        sim.speed = (5.0 + Math.random() * 2.0) * 2.0;
+        sim.speed = (1.5 + Math.random() * 1.0) * 1.5;
 
         sim.gender = config.gender || (Math.random() > 0.5 ? 'M' : 'F');
 

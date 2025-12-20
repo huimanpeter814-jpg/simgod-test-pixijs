@@ -19,38 +19,48 @@ export function drawAvatarHead(
     const outfitImg = getAsset(sim.appearance.outfit);
     const hairImg = getAsset(sim.appearance.hair);
 
-    // 计算绘制尺寸 (保持素材比例)
-    // 假设 size 是半径，直径是 size * 2
-    const targetSize = size * 2.5; 
-    const offset = targetSize / 2;
+    // === 核心修改：只截取头部区域 ===
+    // 假设 48x48 素材中，头部位于上方中间
+    // sourceX/Y/W/H: 在原图上裁剪的区域 (头部框)
+    const srcX = 15; 
+    const srcY = 10;  
+    const srcS = 50; // 截取 20x20 像素的头部区域
 
-    // 绘制顺序：Body -> Outfit -> Hair
-    // 注意：素材是 48x48 的全身图，我们可能只想在头像框里显示头部
-    // 假设头部在素材的上方中间区域
-    // 我们可以通过 drawImage 的 source 参数裁剪，或者直接画整个并缩放
-    
-    // 这里简单处理：画整个图，缩放到合适大小
-    
-    if (bodyImg) {
-        ctx.drawImage(bodyImg, x - offset, y - offset, targetSize, targetSize);
+    // destX/Y/W/H: 在画布上绘制的区域 (放大显示)
+    const destSize = size * 2.5; // 根据传入的半径 size 放大填充
+    const destX = x - destSize / 2;
+    const destY = y - destSize / 2;
+
+    // 辅助绘制函数
+    const drawLayer = (img: HTMLImageElement | null) => {
+        if (img) {
+            ctx.imageSmoothingEnabled = false; // 保持像素清晰
+            // 参数详解: 图片, 裁剪X, 裁剪Y, 裁剪宽, 裁剪高, 绘制X, 绘制Y, 绘制宽, 绘制高
+            ctx.drawImage(img, srcX, srcY, srcS, srcS, destX, destY, destSize, destSize);
+        }
+    };
+
+    if (renderLayer === 'all' || renderLayer === 'back') {
+        drawLayer(bodyImg);
     }
     
-    if (outfitImg) {
-        ctx.drawImage(outfitImg, x - offset, y - offset, targetSize, targetSize);
-    }
-    
-    if (hairImg) {
-        ctx.drawImage(hairImg, x - offset, y - offset, targetSize, targetSize);
+    if (renderLayer === 'all' || renderLayer === 'front') {
+        drawLayer(outfitImg);
+        drawLayer(hairImg);
     }
 
-    // 如果没有素材 (比如旧存档或者加载失败)，绘制一个兜底的色块
+    // 兜底逻辑：如果没有图片，画一个带问号的圆圈
     if (!bodyImg && !outfitImg && !hairImg) {
         ctx.fillStyle = sim.skinColor || '#cccccc';
         ctx.beginPath();
         ctx.arc(x, y, size * 0.8, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#000';
-        ctx.fillText("?", x - 3, y + 3);
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText("?", x, y);
     }
 }
 
