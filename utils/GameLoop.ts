@@ -14,29 +14,28 @@ export function getActivePalette() {
 
 let tickCount = 0;
 
-// [修改] 接受 dt (delta time) 参数，默认值为 1
 export const gameLoopStep = (dt: number = 1) => {
-    // 游戏暂停时不运行
     if (GameStore.time.speed <= 0) return;
 
-    // A. 高频逻辑 (移动)
-    // ------------------------------------------------
-    // 直接把 dt 传给 update，让移动距离和帧时间完美挂钩
-    // 这样 60帧时每次走1步，120帧时每次走0.5步，视觉效果完全一致且顺滑
-    GameStore.sims.forEach(s => s.update(dt * GameStore.time.speed, false));
+    // A. 移动逻辑 (保持流畅)
+    // 注意：这里我们让移动速度也稍微适配一下慢节奏，防止人走得太快像瞬移
+    // 如果觉得人走得太慢，可以把 * 1.0 改成 * 1.5 或更高
+    GameStore.sims.forEach(s => s.update(dt * GameStore.time.speed * 0.5, false));
 
-
-    // B. 处理时间流逝 (Time)
-    // ------------------------------------------------
+    // B. 时间流速控制
     GameStore.timeAccumulator += dt * GameStore.time.speed;
     
-    const ticksPerMin = TIME_CONFIG?.TICKS_PER_MINUTE || 120;
+    // [核心调整]
+    // 60 = 1秒1分钟 (太快)
+    // 120 = 2秒1分钟 (标准)
+    // 180 = 3秒1分钟 (悠闲) <-- 我们用这个
+    const ticksPerMin = 180; 
 
     while (GameStore.timeAccumulator >= ticksPerMin) {
         GameStore.timeAccumulator -= ticksPerMin;
         GameStore.time.minute++;
 
-        // 低频逻辑 (状态更新)
+        // 低频逻辑
         GameStore.sims.forEach(s => s.update(0, true));
 
         if (GameStore.time.minute >= 60) {
@@ -75,11 +74,9 @@ export const gameLoopStep = (dt: number = 1) => {
         }
     }
 
-    // C. UI 通知限流
-    // ------------------------------------------------
+    // C. UI 通知
     tickCount++;
-    // [优化] 降低 UI 刷新频率到每 30 帧一次 (约 2 次/秒)，极大减少 React 重绘压力
-    if (tickCount % 30 === 0) {
+    if (tickCount % 10 === 0) {
         GameStore.notify();
     }
 };

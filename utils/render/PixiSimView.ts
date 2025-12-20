@@ -158,11 +158,10 @@ export class PixiSimView {
     }
 
     updatePosition(sim: Sim) {
-        // [视觉插值] 平滑移动
-        this.container.x = lerp(this.container.x, sim.pos.x, 0.2);
-        this.container.y = lerp(this.container.y, sim.pos.y, 0.2);
+        this.container.x = sim.pos.x;
+        this.container.y = sim.pos.y;
         
-        // [深度排序] 确保遮挡关系正确
+        // Z-Sorting
         this.container.zIndex = sim.pos.y;
 
         // 气泡逻辑
