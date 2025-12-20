@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Assets, Text, Texture } from 'pixi.js';
 import { Sim } from '../Sim';
 import { AGE_CONFIG } from '../../constants';
 import { drawAvatarHead } from './pixelArt'; 
+import { OutlineFilter } from 'pixi-filters'; // 引入描边滤镜
 
 // 简单的线性插值函数
 const lerp = (start: number, end: number, factor: number) => {
@@ -10,9 +11,17 @@ const lerp = (start: number, end: number, factor: number) => {
 
 export class PixiSimView {
     container: Container;
+    
+    // 🆕 新增：角色整体容器（用于应用统一的轮廓描边）
+    private characterContainer: Container; 
+
     private shadow: Graphics;
     private body: Graphics;
-    private head: Sprite; 
+    
+    // 🆕 修改：将头部拆分为前后两层
+    private headFront: Sprite; 
+    private headBack: Sprite;
+
     private selectionRing: Graphics;
     
     private bubbleContainer: Container;
@@ -27,27 +36,45 @@ export class PixiSimView {
         this.container.x = sim.pos.x;
         this.container.y = sim.pos.y;
         
-        // 0. 选中光环
+        // 0. 选中光环 (在最底层，不参与人物轮廓描边)
         this.selectionRing = new Graphics();
         this.selectionRing.ellipse(0, 5, 12, 6).fill({ color: 0x39ff14, alpha: 0.5 });
         this.selectionRing.visible = false;
         this.container.addChild(this.selectionRing);
 
-        // 1. 影子
+        // 1. 影子 (也不参与轮廓描边)
         this.shadow = new Graphics();
         this.shadow.ellipse(0, 0, 6, 3).fill({ color: 0x000000, alpha: 0.2 });
         this.container.addChild(this.shadow);
 
-        // 2. 身体
+        // === 🆕 角色主体容器 ===
+        this.characterContainer = new Container();
+        this.container.addChild(this.characterContainer);
+
+        // 尝试添加轮廓描边滤镜
+        // [修复] 提升质量参数：thickness: 1, color: 0x000000, quality: 1 (原分辨率)
+        // 之前 0.1 导致了严重的模糊
+        try {
+            this.characterContainer.filters = [new OutlineFilter(2, 0x000000, 1)]; 
+        } catch (e) {
+            console.warn("OutlineFilter load failed, ignoring outline.", e);
+        }
+
+        // 2. 后发 (Back Hair) - 最底层
+        this.headBack = new Sprite();
+        this.headBack.anchor.set(0.5);
+        this.characterContainer.addChild(this.headBack);
+
+        // 3. 身体 (Body) - 中间层 (遮挡后发)
         this.body = new Graphics();
-        this.container.addChild(this.body);
+        this.characterContainer.addChild(this.body);
 
-        // 3. 头部
-        this.head = new Sprite(); 
-        this.head.anchor.set(0.5); // 居中锚点
-        this.container.addChild(this.head);
+        // 4. 前发与脸 (Front Hair & Face) - 最上层 (遮挡身体顶部)
+        this.headFront = new Sprite(); 
+        this.headFront.anchor.set(0.5); 
+        this.characterContainer.addChild(this.headFront);
 
-        // 5. 气泡
+        // 5. 气泡 (在最上层)
         this.bubbleContainer = new Container();
         this.bubbleContainer.visible = false; 
         
@@ -72,47 +99,73 @@ export class PixiSimView {
         this.redraw(sim);
     }
 
-    private updateHeadTexture(sim: Sim, size: number) {
+    // 🆕 更新：生成两张纹理（前层和后层）
+    private updateHeadTextures(sim: Sim, size: number) {
         const cacheKey = `${sim.id}_${sim.ageStage}_${sim.appearance.hair}_${sim.hairColor}`;
-        if (this.headTextureCache === cacheKey && this.head.texture) return;
+        if (this.headTextureCache === cacheKey && this.headFront.texture && this.headBack.texture) return;
 
         if (sim.appearance.face && Assets.cache.has(sim.appearance.face)) {
-            this.head.texture = Assets.get(sim.appearance.face);
-            // 确保外部加载的图片也是像素风格
-            this.head.texture.source.scaleMode = 'nearest'; 
+            // 如果是图片资源，目前简化处理，都放在前层
+            this.headFront.texture = Assets.get(sim.appearance.face);
+            this.headFront.texture.source.scaleMode = 'nearest'; 
+            this.headBack.texture = Texture.EMPTY;
         } 
         else {
-            // [修复1] 扩大画布尺寸：4倍缓冲，防止发型被切
-            const bufferScale = 4; 
+            // [修复] 缓冲倍率优化：2倍足够且通常能保持整数运算，避免子像素模糊
+            const bufferScale = 2; 
             const pixelSize = size * bufferScale; 
             
-            const canvas = document.createElement('canvas');
-            canvas.width = pixelSize;
-            canvas.height = pixelSize;
-            const ctx = canvas.getContext('2d');
+            // --- 生成后发纹理 ---
+            const canvasBack = document.createElement('canvas');
+            canvasBack.width = pixelSize;
+            canvasBack.height = pixelSize;
+            const ctxBack = canvasBack.getContext('2d');
             
-            if (ctx) {
-                // [修复2] 关闭 Canvas 平滑处理，确保绘制锐利
-                ctx.imageSmoothingEnabled = false;
+            if (ctxBack) {
+                ctxBack.imageSmoothingEnabled = false;
+                // 仅绘制 'back' 层
+                drawAvatarHead(ctxBack, pixelSize / 2, pixelSize / 2, size, sim as any, 'back');
+                
+                const textureBack = Texture.from(canvasBack);
+                textureBack.source.scaleMode = 'nearest'; 
+                this.headBack.texture = textureBack;
+                this.headBack.width = pixelSize; 
+                this.headBack.height = pixelSize;
+                // 恢复到正常大小 (因为 texture 是 2 倍大，如果不缩放会显示很大，或者设置 width/height 也可以)
+                // 这里通过设置 width/height 来控制显示大小，保持和 bufferScale 无关的逻辑尺寸
+                // 但为了保持像素点 sharp，最好是 texture 是多少像素就显示多少像素，然后让 camera zoom 去缩放
+                // 不过 SimView 的逻辑是基于 World Unit 的，所以这里 width 设为 pixelSize 其实是让它在世界中变大了
+                // 实际上我们应该缩放 Sprite 以匹配 bufferScale
+                
+                // 修正：如果 bufferScale=2，texture 是 size*2。
+                // 我们希望在世界中显示的大小仍然大致对应 size。
+                // pixelArt 绘制时是基于 size 的。
+                // 如果我们把 width 设为 pixelSize，它在屏幕上会很大。
+                // 我们直接设置 scale = 1，让它按像素显示，这样看起来更清晰，但可能有点大。
+                // 或者我们可以缩放回去：
+                // this.headBack.scale.set(1 / bufferScale); 
+                // 但之前的代码是直接设置 width = pixelSize，这会让头变得很大 (size * 2)。
+                // 让我们保持 width = pixelSize，这样头会比较清晰（大像素），配合身体。
+                this.headBack.width = pixelSize; 
+                this.headBack.height = pixelSize;
+            }
 
-                // 绘制像素画 (注意居中)
-                drawAvatarHead(ctx, pixelSize / 2, pixelSize / 2, size, sim as any);
-
-                // [修复3] 修正报错的地方
-                const texture = Texture.from(canvas);
+            // --- 生成前发+脸部纹理 ---
+            const canvasFront = document.createElement('canvas');
+            canvasFront.width = pixelSize;
+            canvasFront.height = pixelSize;
+            const ctxFront = canvasFront.getContext('2d');
+            
+            if (ctxFront) {
+                ctxFront.imageSmoothingEnabled = false;
+                // 仅绘制 'front' 层 (包含脸部)
+                drawAvatarHead(ctxFront, pixelSize / 2, pixelSize / 2, size, sim as any, 'front');
                 
-                // 手动设置缩放模式为最近邻 (Nearest Neighbor)
-                // 注意：在 PixiJS v8 中使用 .source.scaleMode
-                texture.source.scaleMode = 'nearest'; 
-                
-                this.head.texture = texture;
-                
-                // 调整显示大小
-                this.head.width = pixelSize; 
-                this.head.height = pixelSize;
-                
-                // 缩小一半以匹配原来的视觉大小 (因为我们用了4倍缓冲)
-                this.head.scale.set(1); 
+                const textureFront = Texture.from(canvasFront);
+                textureFront.source.scaleMode = 'nearest'; 
+                this.headFront.texture = textureFront;
+                this.headFront.width = pixelSize; 
+                this.headFront.height = pixelSize;
             }
         }
         
@@ -144,18 +197,19 @@ export class PixiSimView {
             this.body.fill({ color: sim.clothesColor });
         }
 
-        this.updateHeadTexture(sim, headSize);
+        // 更新前后两层纹理
+        this.updateHeadTextures(sim, headSize);
         
-        // [调整] 头部位置修正
-        // 因为现在 head Sprite 的中心点是 (0.5, 0.5)，且画布很大
-        // 我们只需要把 Sprite 放在脖子的位置即可
-        this.head.y = -h + (headSize * 0.5);
+        // 头部位置
+        const headY = -h + (headSize * 0.5);
+        this.headFront.y = headY;
+        this.headBack.y = headY;
 
         this.bubbleContainer.y = -h - 25;
     }
 
     updatePosition(sim: Sim) {
-        // [修复4] 确保坐标是整数，避免子像素渲染导致的模糊
+        // [修复] 使用 Math.round 确保像素对齐，防止模糊
         this.container.x = Math.round(sim.pos.x);
         this.container.y = Math.round(sim.pos.y);
         

@@ -77,6 +77,24 @@ export const DecisionLogic = {
                 // 🚫 禁止非员工使用办公设施
                 return true;
             }
+
+            // [规则 D] 养老院/私人社区门禁 (Elder Care / Residential Access Control)
+            // [新增] 解决养老院被蹭睡问题
+            const isElderHome = plot.templateId.includes('elder') || plot.customType === 'residential' || plot.customType === 'elder_care';
+            if (isElderHome) {
+                // 1. 允许该地块的住户 (归属于该地皮下的 housingUnit)
+                const unit = GameStore.housingUnits.find(u => u.id === sim.homeId && u.id.startsWith(plot.id));
+                if (unit) return false;
+                
+                // 2. 允许工作人员 (护工等)
+                if (sim.workplaceId === plot.id) return false;
+
+                // 3. 允许特殊状态 (如保姆)
+                if (sim.job.id === 'nanny' && sim.isTemporary && sim.homeId && sim.homeId.startsWith(plot.id)) return false;
+
+                // 🚫 禁止闲杂人等进入 (防止路人进去睡觉)
+                return true;
+            }
         }
 
         // --- 3. 私宅归属权检查 (Private Property) ---
@@ -192,7 +210,7 @@ export const DecisionLogic = {
             // 状态权重：闲着的人优先
             if (candidate.action === SimAction.Idle || candidate.action === SimAction.Wandering) score += 30;
             if (candidate.action === SimAction.Working) score -= 50; // 在家办公也不容易
-            if (candidate.action === SimAction.Sleeping) score -= 20; // 睡觉会被吵醒，但权重较低，毕竟要喂奶
+            if (candidate.action === SimAction.Sleeping) score -= 20; // 睡觉会被吵醒，但权重甚至高于睡觉
 
             return { sim: candidate, score };
         });
@@ -546,12 +564,42 @@ export const DecisionLogic = {
             candidates = GameStore.furnitureIndex.get(utility) || [];
         }
 
+        // === [新增] 优先回家解决生理需求逻辑 ===
+        const basicNeeds = [NeedType.Hunger, NeedType.Energy, NeedType.Bladder, NeedType.Hygiene];
+        let forceHome = false;
+
+        if (sim.homeId && basicNeeds.includes(type as NeedType)) {
+            // 检查当前是否在工作/上学地点
+            const currentPlot = GameStore.worldLayout.find(p => 
+                sim.pos.x >= p.x && sim.pos.x <= p.x + (p.width||300) &&
+                sim.pos.y >= p.y && sim.pos.y <= p.y + (p.height||300)
+            );
+            
+            const isAtWork = sim.workplaceId && currentPlot && currentPlot.id === sim.workplaceId;
+            const isAtSchool = currentPlot && ['school','kindergarten'].some(t => currentPlot.templateId.includes(t));
+            
+            // 如果不在工作也不在上学，且不是婴儿(婴儿由保姆照顾)，则优先回家
+            if (!isAtWork && !isAtSchool) {
+                forceHome = true;
+            }
+        }
+
         // 过滤不可用对象
         if (candidates.length) {
             candidates = candidates.filter((f: Furniture)=> {
                  // 1. 权限检查 (私宅/学校/夜店)
                  if (DecisionLogic.isRestricted(sim, f)) return false;
                  
+                 // [新增] 归家优先逻辑
+                 if (forceHome) {
+                     // 如果家里有这类设施，就只允许回家用
+                     // 如果家里没有 (比如家里没买灶台)，则允许用外面的
+                     const hasHomeItem = candidates.some(c => c.homeId === sim.homeId);
+                     if (hasHomeItem) {
+                         if (f.homeId !== sim.homeId) return false;
+                     }
+                 }
+
                  // 2. 经济检查
                  if (type === NeedType.Hunger && sim.money < 20) {
                      // 没钱只能用免费的 (冰箱/公共饮水)

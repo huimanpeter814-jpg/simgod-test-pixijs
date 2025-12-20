@@ -222,6 +222,11 @@ export const SocialLogic = {
     },
 
     triggerJealousy(sim: Sim, actor: Sim, target: Sim) {
+        // [修复] 防止自己吃自己的醋 (Sims shouldn't get jealous of themselves being the target)
+        if (sim.id === target.id) return;
+        // 观察者不应该是事件的参与者
+        if (sim.id === actor.id) return;
+
         let sensitivity = 50; 
         
         if (sim.mbti.includes('F')) sensitivity -= 10; 
@@ -247,6 +252,7 @@ export const SocialLogic = {
 
             SocialLogic.updateRelationship(sim, actor, 'romance', finalImpact);
             SocialLogic.updateRelationship(sim, actor, 'friendship', finalImpact * 0.5);
+            // 迁怒于第三者
             SocialLogic.updateRelationship(sim, target, 'friendship', finalImpact * 0.8);
 
             let oldLabelA = SocialLogic.getRelLabel(sim.relationships[actor.id] || {});

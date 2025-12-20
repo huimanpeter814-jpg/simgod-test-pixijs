@@ -4,8 +4,9 @@ import { JOBS, BUFFS, HOLIDAYS } from '../../constants';
 import { Furniture, JobType, SimAction, AgeStage, Job } from '../../types';
 import { CommutingState, IdleState, WorkingState } from './SimStates';
 import { SocialLogic } from './social';
-import { SkillLogic } from './SkillLogic'; // 🆕 引入 SkillLogic
-import { hasRequiredTags } from '../simulationHelpers'; // [修复] 引入标签检查工具
+import { SkillLogic } from './SkillLogic'; 
+import { hasRequiredTags } from '../simulationHelpers'; 
+import { PLOTS } from '../../data/plots'; // [修复] 引入 PLOTS 用于查找默认地块类型
 
 // Job Preferences logic remains the same...
 const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
@@ -178,6 +179,10 @@ export const CareerLogic = {
         const potentialWorkplaces = GameStore.worldLayout.filter(p => {
             let isMatch = false;
             
+            // [修复] 优先使用实例的自定义类型，如果未定义，则查找模板定义的类型
+            // 解决默认地图中 plot 实例缺少 customType 导致匹配失败的问题
+            const plotType = p.customType || PLOTS[p.templateId]?.type || 'public';
+
             if (targetPlotTemplateId !== 'any' && targetPlotTemplateId !== 'work') {
                 isMatch = p.templateId === targetPlotTemplateId;
             }
@@ -186,9 +191,9 @@ export const CareerLogic = {
             }
             else if (targetPlotTemplateId === 'work' || (sim.job.companyType === JobType.Store)) {
                 if (sim.job.companyType === JobType.Internet || sim.job.companyType === JobType.Design || sim.job.companyType === JobType.Business) {
-                    isMatch = p.customType === 'work';
+                    isMatch = plotType === 'work';
                 } else {
-                    isMatch = p.customType === 'commercial';
+                    isMatch = plotType === 'commercial';
                 }
             }
 
