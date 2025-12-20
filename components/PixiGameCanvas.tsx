@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Application, Container, Sprite, Graphics, TextureStyle } from 'pixi.js';
-import { Viewport } from 'pixi-viewport';
 import { ASSET_CONFIG, CONFIG } from '../constants';
 import { loadGameAssets } from '../utils/assetLoader';
-import { GameStore } from '../utils/simulation';
+import { GameStore } from '../utils/GameStore';
 import { PixiSimView } from '../utils/render/PixiSimView';
 import { PixiWorldBuilder } from '../utils/render/PixiWorldBuilder';
 import { gameLoopStep } from '../utils/GameLoop';
@@ -14,10 +13,31 @@ TextureStyle.defaultOptions.scaleMode = 'nearest';
 
 const lerp = (start: number, end: number, factor: number) => start + (end - start) * factor;
 
+// --- 辅助：绘制4个角的缩放手柄 (Pixi Graphics 版本) ---
+const drawPixiResizeHandles = (g: Graphics, x: number, y: number, w: number, h: number, zoom: number) => {
+    const handleSize = 10 / zoom;
+    const half = handleSize / 2;
+
+    const corners = [
+        { x: x - half, y: y - half }, // NW
+        { x: x + w - half, y: y - half }, // NE
+        { x: x - half, y: y + h - half }, // SW
+        { x: x + w - half, y: y + h - half } // SE
+    ];
+
+    corners.forEach(c => {
+        g.rect(c.x, c.y, handleSize, handleSize);
+        
+        // [修改] 在绘制命令中直接指定样式
+        g.fill('white'); 
+        g.stroke({ width: 1 / zoom, color: 'black' });
+    });
+};
+
 const PixiGameCanvasComponent: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<Application | null>(null);
-    const viewportRef = useRef<Viewport | null>(null);
+    const worldContainerRef = useRef<Container | null>(null); // 替代 Viewport
     
     // 实体管理 (Pixi 对象缓存)
     const simViewsRef = useRef<Map<string, PixiSimView>>(new Map());
@@ -36,58 +56,69 @@ const PixiGameCanvasComponent: React.FC = () => {
     const isDraggingObject = useRef(false);
     const isStickyDragging = useRef(false);
     const isResizing = useRef(false);
+    const isPanning = useRef(false); // 手动漫游状态
     const activeResizeHandle = useRef<string | null>(null);
     const resizeStartRect = useRef({ x: 0, y: 0, w: 0, h: 0 });
+    const panStartPos = useRef({ x: 0, y: 0 }); // 漫游起始位置
 
     const [loading, setLoading] = useState(true);
     const [showInstructions, setShowInstructions] = useState(false);
     const prevModeRef = useRef(GameStore.editor.mode);
     
-    // [修复] 初始化时直接获取 Store 的当前版本，防止错过 initGame 的更新通知
     const [editorRefresh, setEditorRefresh] = useState(() => GameStore.mapVersion);
+
+    // === 辅助：坐标转换 (屏幕 -> 世界) ===
+    const screenToWorld = (x: number, y: number) => {
+        if (!worldContainerRef.current) return { x: 0, y: 0 };
+        const world = worldContainerRef.current;
+        return {
+            x: (x - world.x) / world.scale.x,
+            y: (y - world.y) / world.scale.y
+        };
+    };
 
     // === 核心：世界重建 (当建筑/家具变化时) ===
     const refreshWorld = () => {
-        if (!viewportRef.current) return;
-        const viewport = viewportRef.current;
+        if (!worldContainerRef.current) return;
+        const world = worldContainerRef.current;
 
         // 1. 清理旧对象
-        furnViewsRef.current.forEach(v => { viewport.removeChild(v); v.destroy({ children: true }); }); 
+        furnViewsRef.current.forEach(v => { world.removeChild(v); v.destroy({ children: true }); }); 
         furnViewsRef.current.clear();
         
-        roomViewsRef.current.forEach(v => { viewport.removeChild(v); v.destroy(); }); 
+        roomViewsRef.current.forEach(v => { world.removeChild(v); v.destroy(); }); 
         roomViewsRef.current.clear();
         
         // 2. 重绘房间 (层级 -100)
         GameStore.rooms.forEach(room => {
             const g = PixiWorldBuilder.createRoom(room);
             g.zIndex = -100; // 地板永远在最下层
-            viewport.addChild(g);
+            world.addChild(g);
             roomViewsRef.current.set(room.id, g);
         });
 
         // 3. 重绘家具 (层级 0 ~ 10000，基于 Y 轴)
         GameStore.furniture.forEach(furn => {
             const c = PixiWorldBuilder.createFurniture(furn);
-            // 确保家具层级正确：Y 越大层级越高，但永远小于市民层级
+            // 确保家具层级正确：Y 越大层级越高
             c.zIndex = furn.y + furn.h; 
-            viewport.addChild(c);
+            world.addChild(c);
             furnViewsRef.current.set(furn.id, c);
         });
         
-        viewport.sortChildren();
+        world.sortChildren();
     };
 
     // 监听外部触发的编辑器刷新
     useEffect(() => {
-        if (!loading && viewportRef.current) {
+        if (!loading && worldContainerRef.current) {
             refreshWorld();
         }
     }, [editorRefresh, loading]);
 
     // === 核心：编辑器 UI 更新 (Grid, Ghost, SelectionBox) ===
     const updateEditorVisuals = () => {
-        if (!gridLayerRef.current || !uiLayerRef.current || !ghostLayerRef.current || !viewportRef.current) return;
+        if (!gridLayerRef.current || !uiLayerRef.current || !ghostLayerRef.current || !worldContainerRef.current) return;
         const grid = gridLayerRef.current;
         const ui = uiLayerRef.current;
         const ghost = ghostLayerRef.current;
@@ -101,16 +132,22 @@ const PixiGameCanvasComponent: React.FC = () => {
             return;
         }
 
-        const zoom = viewportRef.current.scaled;
+        const zoom = worldContainerRef.current.scale.x;
         
         // 1. 绘制网格
         if (zoom > 0.4) {
-            grid.strokeStyle = { width: 1 / zoom, color: 0xffffff, alpha: 0.1 };
             const w = CONFIG.CANVAS_W; 
             const h = CONFIG.CANVAS_H;
+            
+            // 构建路径
             for (let x = 0; x <= w; x += 50) { grid.moveTo(x, 0); grid.lineTo(x, h); }
             for (let y = 0; y <= h; y += 50) { grid.moveTo(0, y); grid.lineTo(w, y); }
-            grid.stroke();
+            
+            // [修改] 在 stroke 中传入样式对象
+            grid.stroke({ 
+                width: 1 / zoom, 
+                color: 'rgba(255, 255, 255, 0.1)' 
+            });
         }
 
         // 2. 绘制选中框 (Selection Box)
@@ -119,19 +156,10 @@ const PixiGameCanvasComponent: React.FC = () => {
             g.rect(x, y, w, h).stroke({ width: 2 / zoom, color });
             ui.addChild(g);
             
-            if (['plot', 'floor'].includes(GameStore.editor.mode)) {
-                const s = 10 / zoom, half = s/2;
-                const handles = [
-                    {x: x - half, y: y - half},         // NW
-                    {x: x + w - half, y: y - half},     // NE
-                    {x: x - half, y: y + h - half},     // SW
-                    {x: x + w - half, y: y + h - half}  // SE
-                ];
-                handles.forEach(p => {
-                    const hG = new Graphics();
-                    hG.rect(p.x, p.y, s, s).fill(0xffffff).stroke({width: 1/zoom, color: 0x000000});
-                    ui.addChild(hG);
-                });
+            // 如果不是相机工具，绘制调整手柄
+            // @ts-ignore
+            if (GameStore.editor.activeTool !== 'camera') {
+                drawPixiResizeHandles(g, x, y, w, h, zoom);
             }
         };
 
@@ -226,26 +254,13 @@ const PixiGameCanvasComponent: React.FC = () => {
             containerRef.current.appendChild(app.canvas);
             appRef.current = app;
 
-            // ==========================================
-            // 🚨 关键修改：Viewport 创建必须提前！
-            // 原来是在 loadGameAssets 之后，现在移到这里
-            // ==========================================
+            // 2. 创建世界容器 (World Container) - 替代 pixi-viewport
+            const worldContainer = new Container();
+            worldContainer.sortableChildren = true;
+            app.stage.addChild(worldContainer);
+            worldContainerRef.current = worldContainer;
             
-            // 2. 创建 Viewport
-            const viewport = new Viewport({
-                screenWidth: app.screen.width, screenHeight: app.screen.height,
-                worldWidth: CONFIG.CANVAS_W, worldHeight: CONFIG.CANVAS_H,
-                events: app.renderer.events, ticker: app.ticker,
-            });
-            app.stage.addChild(viewport);
-            viewportRef.current = viewport; // ✅ 立即赋值，确保后续任何时机的重绘都能找到它
-            
-            viewport.drag().pinch().wheel().decelerate().clampZoom({ minScale: 0.1, maxScale: 4.0 });
-            viewport.sortableChildren = true;
-
-            // ==========================================
-
-            // 3. 加载资源 (现在可以放心地 await 了)
+            // 3. 加载资源
             await loadGameAssets([
                 ...ASSET_CONFIG.bg,
                 ...ASSET_CONFIG.bodies,
@@ -256,8 +271,6 @@ const PixiGameCanvasComponent: React.FC = () => {
                 ...(ASSET_CONFIG.pants || [])
             ]);
             
-            // 4. 资源加载完毕，解除 Loading 状态
-            // 此时 viewportRef.current 绝对有值，useEffect 中的 refreshWorld() 将被正确触发
             setLoading(false);
 
             // 4. 静态背景
@@ -268,18 +281,21 @@ const PixiGameCanvasComponent: React.FC = () => {
                 bg.height = CONFIG.CANVAS_H; 
                 bg.zIndex = -99999; 
                 bg.eventMode = 'none';
-                viewport.addChild(bg);
+                worldContainer.addChild(bg);
             }
             
             // 5. 编辑器图层
-            const gridL = new Graphics(); gridL.zIndex = 999999; viewport.addChild(gridL); gridLayerRef.current = gridL;
-            const ghostL = new Container(); ghostL.zIndex = 999999; viewport.addChild(ghostL); ghostLayerRef.current = ghostL;
-            const uiL = new Container(); uiL.zIndex = 999999; viewport.addChild(uiL); uiLayerRef.current = uiL;
+            const gridL = new Graphics(); gridL.zIndex = 999999; worldContainer.addChild(gridL); gridLayerRef.current = gridL;
+            const ghostL = new Container(); ghostL.zIndex = 999999; worldContainer.addChild(ghostL); ghostLayerRef.current = ghostL;
+            const uiL = new Container(); uiL.zIndex = 999999; worldContainer.addChild(uiL); uiLayerRef.current = uiL;
 
             // 6. 初始世界渲染
             refreshWorld();
-            viewport.moveCenter(CONFIG.CANVAS_W / 2, CONFIG.CANVAS_H / 2);
-            viewport.setZoom(1.0);
+            // 初始居中
+            const initialScale = 0.8;
+            worldContainer.scale.set(initialScale);
+            worldContainer.x = (app.screen.width - CONFIG.CANVAS_W * initialScale) / 2;
+            worldContainer.y = (app.screen.height - CONFIG.CANVAS_H * initialScale) / 2;
 
             // 7. 启动游戏循环
             app.ticker.add((ticker) => {
@@ -288,12 +304,16 @@ const PixiGameCanvasComponent: React.FC = () => {
                 // A. 逻辑步进
                 gameLoopStep(dt);
 
-                // B. 摄像机跟随
-                if (GameStore.selectedSimId && GameStore.editor.mode === 'none' && !isDraggingObject.current) {
+                // B. 摄像机跟随 (当没有操作且有选中市民时)
+                if (GameStore.selectedSimId && GameStore.editor.mode === 'none' && !isDraggingObject.current && !isPanning.current) {
                     const sim = GameStore.sims.find(s => s.id === GameStore.selectedSimId);
                     if (sim) {
-                        const cur = viewport.center;
-                        viewport.moveCenter(lerp(cur.x, sim.pos.x, 0.1), lerp(cur.y, sim.pos.y, 0.1));
+                        const scale = worldContainer.scale.x;
+                        const targetX = app.screen.width / 2 - sim.pos.x * scale;
+                        const targetY = app.screen.height / 2 - sim.pos.y * scale;
+                        
+                        worldContainer.x = lerp(worldContainer.x, targetX, 0.1);
+                        worldContainer.y = lerp(worldContainer.y, targetY, 0.1);
                     }
                 }
 
@@ -307,7 +327,7 @@ const PixiGameCanvasComponent: React.FC = () => {
                     
                     if (!view) {
                         view = new PixiSimView(sim);
-                        viewport.addChild(view.container);
+                        worldContainer.addChild(view.container as any); 
                         simViewsRef.current.set(sim.id, view);
                     }
                     
@@ -327,7 +347,7 @@ const PixiGameCanvasComponent: React.FC = () => {
 
                 simViewsRef.current.forEach((v, id) => { 
                     if (!activeIds.has(id)) { 
-                        viewport.removeChild(v.container); 
+                        worldContainer.removeChild(v.container as any); 
                         v.destroy(); 
                         simViewsRef.current.delete(id); 
                     }
@@ -366,15 +386,44 @@ const PixiGameCanvasComponent: React.FC = () => {
         return unsub;
     }, [editorRefresh]);
 
-    // === 交互事件处理 ===
-    const handleMouseDown = (e: React.MouseEvent) => {
-        if (!viewportRef.current || e.button !== 0) return;
+    // === 手动交互事件处理 ===
+    const handleWheel = (e: React.WheelEvent) => {
+        if (!worldContainerRef.current) return;
+        const world = worldContainerRef.current;
         
-        const pt = viewportRef.current.toWorld(e.clientX, e.clientY);
+        const scaleFactor = 1.1;
+        const direction = e.deltaY > 0 ? 1 / scaleFactor : scaleFactor;
+        
+        // 计算缩放前的鼠标在世界中的位置
+        const mouseX = e.clientX - containerRef.current!.getBoundingClientRect().left;
+        const mouseY = e.clientY - containerRef.current!.getBoundingClientRect().top;
+        
+        const worldMouseX = (mouseX - world.x) / world.scale.x;
+        const worldMouseY = (mouseY - world.y) / world.scale.y;
+        
+        // 应用新的缩放
+        let newScale = world.scale.x * direction;
+        newScale = Math.max(0.1, Math.min(newScale, 4.0)); // 限制缩放范围
+        world.scale.set(newScale);
+        
+        // 调整位置以保持鼠标下的点不变
+        world.x = mouseX - worldMouseX * newScale;
+        world.y = mouseY - worldMouseY * newScale;
+    };
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (!worldContainerRef.current || e.button !== 0) return;
+        
+        const rect = containerRef.current!.getBoundingClientRect();
+        const clientX = e.clientX - rect.left;
+        const clientY = e.clientY - rect.top;
+        const pt = screenToWorld(clientX, clientY);
         const wX = pt.x, wY = pt.y;
         
-        lastMousePos.current = { x: e.clientX, y: e.clientY };
-        dragStartMousePos.current = { x: e.clientX, y: e.clientY };
+        lastMousePos.current = { x: clientX, y: clientY };
+        dragStartMousePos.current = { x: clientX, y: clientY };
+        
+        // 1. 检查是否在放置模式
         const isPlacing = !!(GameStore.editor.placingTemplateId || GameStore.editor.placingFurniture);
 
         if (isStickyDragging.current || isPlacing) {
@@ -393,18 +442,25 @@ const PixiGameCanvasComponent: React.FC = () => {
             return;
         }
 
+        // 2. Play Mode: Select Sim
         if (GameStore.editor.mode === 'none') {
             const sim = GameStore.sims.find(s => 
                 Math.abs(s.pos.x - wX) < 20 && 
                 Math.abs(s.pos.y - 20 - wY) < 30
             );
-            GameStore.selectedSimId = sim ? sim.id : null;
-            GameStore.notify();
+            
+            // 如果点到了 Sim，选中它，否则开始漫游
+            if (sim) {
+                GameStore.selectedSimId = sim.id;
+                GameStore.notify();
+            } else {
+                isPanning.current = true;
+                panStartPos.current = { x: worldContainerRef.current.x, y: worldContainerRef.current.y };
+            }
             return;
         }
 
-        viewportRef.current.plugins.pause('drag');
-
+        // 3. 编辑模式：检查缩放手柄或对象点击
         let resizeTarget: { x: number, y: number, w: number, h: number } | null = null;
         if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
             const plot = GameStore.worldLayout.find(p => p.id === GameStore.editor.selectedPlotId);
@@ -415,7 +471,7 @@ const PixiGameCanvasComponent: React.FC = () => {
         }
 
         if (resizeTarget) {
-            const handleSize = 15 / viewportRef.current.scaled;
+            const handleSize = 15 / worldContainerRef.current.scale.x;
             const { x, y, w, h } = resizeTarget;
             if (Math.abs(wX - x) < handleSize && Math.abs(wY - y) < handleSize) activeResizeHandle.current = 'nw';
             else if (Math.abs(wX - (x+w)) < handleSize && Math.abs(wY - y) < handleSize) activeResizeHandle.current = 'ne';
@@ -462,18 +518,37 @@ const PixiGameCanvasComponent: React.FC = () => {
             GameStore.editor.previewPos = { x: hitObj.x, y: hitObj.y };
             dragStartPos.current = { x: hitObj.x, y: hitObj.y };
         } else {
+            // 没有点到物体，开始漫游
+            if (GameStore.editor.activeTool === 'camera' || !hitObj) {
+                isPanning.current = true;
+                panStartPos.current = { x: worldContainerRef.current.x, y: worldContainerRef.current.y };
+            }
+            
             GameStore.editor.selectedPlotId = null; 
             GameStore.editor.selectedFurnitureId = null; 
             GameStore.editor.selectedRoomId = null;
-            viewportRef.current.plugins.resume('drag');
         }
         GameStore.notify();
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
-        if (!viewportRef.current) return;
-        const pt = viewportRef.current.toWorld(e.clientX, e.clientY);
+        if (!worldContainerRef.current) return;
+        
+        const rect = containerRef.current!.getBoundingClientRect();
+        const clientX = e.clientX - rect.left;
+        const clientY = e.clientY - rect.top;
+        const pt = screenToWorld(clientX, clientY);
         const wX = pt.x, wY = pt.y;
+
+        // 处理漫游
+        if (isPanning.current) {
+            const dx = clientX - lastMousePos.current.x;
+            const dy = clientY - lastMousePos.current.y;
+            worldContainerRef.current.x += dx;
+            worldContainerRef.current.y += dy;
+            lastMousePos.current = { x: clientX, y: clientY };
+            return;
+        }
 
         if (isResizing.current && activeResizeHandle.current) {
             const startR = resizeStartRect.current; const snap = 50; let newRect = { ...startR };
@@ -515,14 +590,18 @@ const PixiGameCanvasComponent: React.FC = () => {
     };
 
     const handleMouseUp = (e: React.MouseEvent) => {
-        if (!viewportRef.current) return;
-        const dist = Math.sqrt(Math.pow(e.clientX - dragStartMousePos.current.x, 2) + Math.pow(e.clientY - dragStartMousePos.current.y, 2));
+        if (!worldContainerRef.current) return;
+        const rect = containerRef.current!.getBoundingClientRect();
+        const clientX = e.clientX - rect.left;
+        const clientY = e.clientY - rect.top;
+
+        const dist = Math.sqrt(Math.pow(clientX - dragStartMousePos.current.x, 2) + Math.pow(clientY - dragStartMousePos.current.y, 2));
         const isClick = dist < 10;
         
         isDraggingObject.current = false; 
         isResizing.current = false; 
+        isPanning.current = false;
         activeResizeHandle.current = null;
-        viewportRef.current.plugins.resume('drag');
 
         if (GameStore.editor.drawingFloor || GameStore.editor.drawingPlot) {
              if (GameStore.editor.drawingFloor) {
@@ -559,16 +638,37 @@ const PixiGameCanvasComponent: React.FC = () => {
     };
 
     return (
-        <div ref={containerRef} className="relative w-full h-full overflow-hidden" 
-             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onContextMenu={e => e.preventDefault()}>
-            
+        <div 
+            ref={containerRef} 
+            className="relative w-full h-full overflow-hidden bg-[#121212]" 
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown} 
+            onMouseMove={handleMouseMove} 
+            onMouseUp={handleMouseUp} 
+            onMouseLeave={() => { isDraggingObject.current = false; isPanning.current = false; }}
+            onContextMenu={e => e.preventDefault()}
+        >
             {loading && <div className="absolute inset-0 flex items-center justify-center text-white bg-black/80 z-50">LOADING ASSETS...</div>}
             
             {GameStore.editor.mode !== 'none' && showInstructions && (
                 <div className="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none bg-black/60 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-lg z-20 border border-white/10">
-                    <button onClick={() => setShowInstructions(false)} className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full pointer-events-auto flex items-center justify-center transition-colors">✕</button>
-                    <div className="font-bold text-center mb-1 text-warning">编辑模式</div>
-                    <div>🖱️ 单击: 拿起/放置 | 🔄 R键: 旋转 | ⌨️ Del: 删除</div>
+                    <button 
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => setShowInstructions(false)}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] pointer-events-auto shadow-md transition-colors border border-white/20 z-30 cursor-pointer"
+                        title="关闭指引"
+                    >
+                        ✕
+                    </button>
+                    <div className="font-bold text-warning border-b border-white/20 pb-1 mb-1 w-full text-center">
+                        编辑模式指引
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[10px]">
+                        <div className="flex items-center gap-2"><span className="text-xl">🖱️</span> <span>单击物体: 拿起 / 再次点击放置</span></div>
+                        <div className="flex items-center gap-2"><span className="text-xl">🔄</span> <span>R 键: 旋转物体</span></div>
+                        <div className="flex items-center gap-2"><span className="text-xl">✋</span> <span>漫游: 拖拽移动视角</span></div>
+                        <div className="flex items-center gap-2"><span className="text-xl">⌨️</span> <span>Delete键: 删除选中物体</span></div>
+                    </div>
                 </div>
             )}
         </div>

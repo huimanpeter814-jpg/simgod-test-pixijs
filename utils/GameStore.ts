@@ -1,4 +1,4 @@
-import { JOBS, CONFIG, ASSET_CONFIG } from '../constants'; // [注意] 引入 ASSET_CONFIG
+import { JOBS, CONFIG, ASSET_CONFIG } from '../constants'; 
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
 import { LogEntry, GameTime, Furniture, RoomDef, HousingUnit, WorldPlot, SimAction, AgeStage, EditorAction, EditorState } from '../types';
@@ -176,7 +176,9 @@ export class GameStore {
     }
 
     static rebuildWorld(initial = false) {
+        // [修复] 如果世界布局为空，强制重载默认布局
         if (this.worldLayout.length === 0) {
+            console.warn("⚠️ World Layout is empty, reloading default.");
             this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
         }
 
@@ -200,12 +202,17 @@ export class GameStore {
             GameStore.instantiatePlot(plot);
         });
 
+        // [修复] 重建后必须强制更新索引，否则寻路和查询会失效
         this.triggerMapUpdate();
     }
 
     static instantiatePlot(plot: WorldPlot) {
         let template = PLOTS[plot.templateId];
         
+        if (!template) {
+            console.error(`❌ Template not found for plot: ${plot.templateId} (at ${plot.x},${plot.y}). Falling back to empty.`);
+        }
+
         if (!template || plot.templateId === 'default_empty') {
             const w = plot.width || 300;
             const h = plot.height || 300;
@@ -508,8 +515,13 @@ export class GameStore {
         }
 
         try {
-            if (data.worldLayout) this.worldLayout = data.worldLayout;
-            else this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT)); 
+            // [修复] 增加对 worldLayout 数据的校验
+            if (data.worldLayout && Array.isArray(data.worldLayout) && data.worldLayout.length > 0) {
+                this.worldLayout = data.worldLayout;
+            } else {
+                console.warn("[GameStore] Corrupted world layout in save, using default.");
+                this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
+            }
 
             this.rebuildWorld(true); 
 

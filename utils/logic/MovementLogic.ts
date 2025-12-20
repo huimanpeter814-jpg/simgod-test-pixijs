@@ -9,6 +9,13 @@ export const MovementLogic = {
     moveTowardsTarget(sim: Sim, dt: number): boolean {
         if (!sim.target) return true;
 
+        // [修复] 防止目标坐标非法
+        if (isNaN(sim.target.x) || isNaN(sim.target.y)) {
+            console.warn(`[Movement] Invalid target for ${sim.name}:`, sim.target);
+            sim.target = null;
+            return true;
+        }
+
         // 1. 终点判定 (到达检查)
         const dx = sim.target.x - sim.pos.x;
         const dy = sim.target.y - sim.pos.y;

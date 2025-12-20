@@ -1,4 +1,4 @@
-import { WorldPlot, Furniture } from '../types';
+import { WorldPlot, Furniture, PlotTemplate } from '../types';
 
 // ==========================================
 // 🗺️ 默认世界布局 (World Layout)

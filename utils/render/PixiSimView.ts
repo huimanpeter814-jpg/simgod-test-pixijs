@@ -1,6 +1,5 @@
 import { Container, Graphics, Sprite, Assets, Text, Texture } from 'pixi.js';
 import { Sim } from '../Sim';
-import { OutlineFilter } from 'pixi-filters';
 
 // 简单的线性插值函数
 const lerp = (start: number, end: number, factor: number) => {

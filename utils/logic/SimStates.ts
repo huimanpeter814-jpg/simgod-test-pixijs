@@ -33,8 +33,6 @@ export abstract class BaseState implements SimState {
     }
 }
 // === 🆕 过渡状态 (Transition) ===
-// 用于处理从行走结束点(Anchor)到实际交互点(InteractPos)的平滑位移
-// 解决“瞬移”和“穿模”问题
 export class TransitionState extends BaseState {
     actionName = 'transition';
     targetPos: { x: number, y: number };
@@ -52,23 +50,14 @@ export class TransitionState extends BaseState {
     enter(sim: Sim) {
         this.startPos = { ...sim.pos };
         this.elapsed = 0;
-        sim.path = []; // 清空寻路路径，防止干扰
+        sim.path = []; 
     }
 
     update(sim: Sim, dt: number) {
-        // 简单 Lerp 动画
-        // 注意：dt 是 tick 增量，这里我们需要将其视为时间流逝
-        // 假设 dt=1 约为 1/60 秒 (16ms)
         const visualDt = Math.min(dt, 2.0); 
-    
         this.elapsed += 0.05 * visualDt; 
-
-    // 或者更彻底的做法：不使用 dt，而是使用固定值 (但这需要 update 在高倍速下不被多次调用)
-    // 推荐上面的 Math.min 方法
-    
         const t = Math.min(1, this.elapsed / (this.duration * 60));
         
-        // Ease-out
         const easeT = 1 - Math.pow(1 - t, 3);
 
         if (this.startPos) {
@@ -77,7 +66,6 @@ export class TransitionState extends BaseState {
         }
 
         if (t >= 1) {
-            // 动画结束，吸附坐标并进入下一状态
             sim.pos = { ...this.targetPos };
             sim.changeState(this.nextStateFactory());
         }
@@ -101,7 +89,6 @@ export class IdleState extends BaseState {
         if (sim.decisionTimer > 0) {
             sim.decisionTimer -= dt;
         } else {
-            // 只有非工作状态且空闲时才做决策
             if (sim.job.id !== 'unemployed' || ![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
                  DecisionLogic.decideAction(sim);
                  sim.decisionTimer = 30 + Math.random() * 30;
@@ -147,7 +134,9 @@ export class MovingState extends BaseState {
         super.update(sim, dt);
         this.moveTimeout += dt;
         
-        if (this.moveTimeout > 1500 && sim.target) {
+        // [修复] 提高超时阈值，防止初始化Lag导致瞬移 (3000 ticks = ~50秒 at 60fps)
+        if (this.moveTimeout > 3000 && sim.target) {
+            console.warn(`[SimStates] ${sim.name} stuck, teleporting to target.`);
             sim.pos = { ...sim.target };
             this.handleArrival(sim);
             return;
@@ -162,7 +151,7 @@ export class MovingState extends BaseState {
     private handleArrival(sim: Sim) {
         if (this.actionName === SimAction.MovingHome) {
             sim.changeState(new IdleState());
-        } else if (sim.interactionTarget) { // [修复] 这里之前错误地使用了 this.interactionTarget
+        } else if (sim.interactionTarget) { 
             sim.startInteraction(); 
         } else {
             sim.changeState(new IdleState());
@@ -179,8 +168,6 @@ export class CommutingState extends BaseState {
         const station = this.findWorkstation(sim);
         if (station) {
             this.phase = 'to_station';
-            // 🆕 使用 getInteractionPos 确保走到椅子前而不是穿模
-            // 但这里为了简单，暂时保留原逻辑，或者你可以在 findWorkstation 返回后调用 getInteractionPos
             sim.target = { x: station.x + station.w/2, y: station.y + station.h + 5 };
             sim.interactionTarget = { ...station, utility: 'work' };
             sim.say("去工位...", 'act');
@@ -377,7 +364,6 @@ export class PlayingHomeState extends BaseState {
     update(sim: Sim, dt: number) { super.update(sim, dt); sim.actionTimer -= dt; if (sim.actionTimer <= 0) sim.finishAction(); }
 }
 
-// 🆕 修正：跟随状态仅允许在家里跟随
 export class FollowingState extends BaseState {
     actionName = SimAction.Following;
     update(sim: Sim, dt: number) {
@@ -392,7 +378,6 @@ export class FollowingState extends BaseState {
     }
 }
 
-// 🆕 保姆工作状态
 export class NannyState extends BaseState {
     actionName = SimAction.NannyWork;
     wanderTimer = 0;
@@ -422,7 +407,6 @@ export class NannyState extends BaseState {
     }
 }
 
-// 家长去接孩子 (PickingUp)
 export class PickingUpState extends BaseState {
     actionName = SimAction.PickingUp;
     update(sim: Sim, dt: number) {
@@ -459,7 +443,6 @@ export class PickingUpState extends BaseState {
     }
 }
 
-// 家长护送/抱着孩子 (Escorting)
 export class EscortingState extends BaseState {
     actionName = SimAction.Escorting;
     enter(sim: Sim) { sim.path = []; }
@@ -488,7 +471,6 @@ export class EscortingState extends BaseState {
     }
 }
 
-// 孩子被抱着 (BeingEscorted)
 export class BeingEscortedState extends BaseState {
     actionName = SimAction.BeingEscorted;
     update(sim: Sim, dt: number) {
@@ -504,7 +486,6 @@ export class BeingEscortedState extends BaseState {
     }
 }
 
-// 🆕 喂食婴儿状态
 export class FeedBabyState extends BaseState {
     actionName = SimAction.FeedBaby;
     targetBabyId: string;
@@ -531,19 +512,14 @@ export class FeedBabyState extends BaseState {
             return;
         }
 
-        // 如果还没到，继续移动
         if (sim.target) {
             const arrived = sim.moveTowardsTarget(dt);
             if (!arrived) return;
         }
 
-        // 到达后喂食
         if (baby.needs[NeedType.Hunger] < 100) {
-            // 恢复系数
             const restoreAmount = 0.5 * dt; 
             baby.needs[NeedType.Hunger] += restoreAmount;
-            
-            // 家长消耗
             sim.needs[NeedType.Energy] -= 0.05 * dt;
 
             if (Math.random() < 0.05) {
@@ -551,7 +527,6 @@ export class FeedBabyState extends BaseState {
                 baby.say("🍼...", 'normal');
             }
         } else {
-            // 喂饱了
             sim.say("吃饱饱啦！", 'family');
             baby.say("😊", 'love');
             sim.changeState(new IdleState());
