@@ -149,57 +149,75 @@ const CreateSimModal: React.FC<CreateSimModalProps> = ({ onClose }) => {
     }, [currentSim?.appearance]);
 
     // === [核心修复] 绘制全身 ===
-    // === [修改后的核心绘制逻辑] ===
-// 在 CreateSimModal.tsx 中修改渲染逻辑
-    useEffect(() => {
-        if (!currentSim) return;
-        const ctx = canvasRef.current?.getContext('2d');
-        if (!ctx) return;
+// === [核心修复] 绘制全身（支持染色与正确层级） ===
+useEffect(() => {
+    if (!currentSim) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
 
-        // 1. 清除画布
-        ctx.clearRect(0, 0, 300, 400);
-        ctx.imageSmoothingEnabled = false; // 保持像素感
+    // 1. 清除画布
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false; 
 
-        // 2. 设置参数
-        // 画布宽度 300，高度 400
-        // 人物素材 48x48
-        const scale = 6;      // 48 * 6 = 288 像素高
-        const centerX = 150;  // 画布水平中心
-        const groundY = 360;  // 设定“地面”在画布靠下的位置（留 40 像素边距）
+    const scale = 6;      
+    const centerX = canvas.width / 2;
+    const groundY = canvas.height * 0.9; // 底部留出一点空间
+
+    // 内部绘制函数：支持染色
+    const drawLayer = (path: string, tintColor?: string) => {
+        if (!path) return;
+        const img = getAsset(path);
+        if (!img || !img.complete || img.naturalWidth === 0) return;
 
         ctx.save();
-        
-        // 3. 先平移到地面中心点
         ctx.translate(centerX, groundY);
-        
-        // 4. 进行缩放
         ctx.scale(scale, scale);
 
-        const drawFullBodyLayer = (path: string) => {
-            if (!path) return;
-            const img = getAsset(path);
-            if (img && img.complete && img.naturalWidth > 0) {
-                // 【关键修改】
-                // x: -24 是为了让 48 宽的素材水平居中 (-24 到 +24)
-                // y: -48 是为了让 48 高的素材完全在地面上方 (-48 到 0)
-                ctx.drawImage(img, 0, 0, 48, 48, -24, -48, 48, 48);
+        // 如果提供了颜色且不是透明，则进行“正片叠底”染色
+        if (tintColor && tintColor !== 'transparent') {
+            const offscreen = document.createElement('canvas');
+            offscreen.width = 48;
+            offscreen.height = 48;
+            const oCtx = offscreen.getContext('2d');
+            if (oCtx) {
+                oCtx.imageSmoothingEnabled = false;
+                // A. 绘制原始素材
+                oCtx.drawImage(img, 0, 0, 48, 48);
+                // B. 使用正片叠底模式染色
+                oCtx.globalCompositeOperation = 'multiply';
+                oCtx.fillStyle = tintColor;
+                oCtx.fillRect(0, 0, 48, 48);
+                // C. 保持原始透明度
+                oCtx.globalCompositeOperation = 'destination-in';
+                oCtx.drawImage(img, 0, 0, 48, 48);
+                
+                // 绘制染色后的结果
+                ctx.drawImage(offscreen, -24, -48, 48, 48);
             }
-        };
-
-        // 5. 按层绘制
-        drawFullBodyLayer(currentSim.appearance.body);
-        drawFullBodyLayer(currentSim.appearance.outfit);
-        drawFullBodyLayer(currentSim.appearance.hair);
-
-        // 6. 绘制脚底阴影（直接在原点绘制）
-        ctx.globalCompositeOperation = 'destination-over';
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.beginPath();
-        ctx.ellipse(0, -2, 12, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-
+        } else {
+            // 无需染色直接绘制
+            ctx.drawImage(img, 0, 0, 48, 48, -24, -48, 48, 48);
+        }
         ctx.restore();
-    }, [currentSim, tick]);
+    };
+
+    // 2. 绘制脚底阴影
+    ctx.save();
+    ctx.translate(centerX, groundY);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 15 * scale / 2, 4 * scale / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 3. 严格按层级绘制全身 (48x48)
+    // 身体 (底层) -> 衣服 (中层) -> 头发 (顶层)
+    drawLayer(currentSim.appearance.body, currentSim.skinColor); 
+    drawLayer(currentSim.appearance.outfit, currentSim.clothesColor); // 修复点：传入衣服颜色
+    drawLayer(currentSim.appearance.hair, currentSim.hairColor);     // 修复点：传入头发颜色
+
+}, [currentSim, tick]);
 
     // 初始化随机
     useEffect(() => { if (!currentSim.appearance?.body) randomizeVisuals(); }, []);
@@ -292,7 +310,7 @@ const CreateSimModal: React.FC<CreateSimModalProps> = ({ onClose }) => {
                         </section>
                         <section className="space-y-3">
                             <h3 className="text-xs font-bold text-accent uppercase mb-2">色彩偏好</h3>
-                            <div className="grid grid-cols-4 gap-2">{renderColorPicker('皮肤', 'skinColor', CONFIG.COLORS.skin)}{renderColorPicker('头发', 'hairColor', CONFIG.COLORS.hair)}{renderColorPicker('衣服', 'clothesColor', CONFIG.COLORS.clothes)}{renderColorPicker('裤子', 'pantsColor', CONFIG.COLORS.pants)}</div>
+                            <div className="grid grid-cols-4 gap-2">{renderColorPicker('皮肤', 'skinColor', CONFIG.COLORS.skin)}{renderColorPicker('头发', 'hairColor', CONFIG.COLORS.hair)}</div>
                         </section>
                         <section className="space-y-3">
                             <div className="flex justify-between items-center"><h3 className="text-xs font-bold text-accent uppercase">个性与资产</h3><div className="flex items-center gap-2 bg-black/20 rounded px-2 py-1 border border-white/5"><span className="text-[10px] text-gray-400">💰 初始资金</span><input type="number" value={currentSim.money} onChange={(e) => updateCurrentSim({ money: parseInt(e.target.value) })} className="w-16 bg-transparent text-right text-xs text-warning font-mono outline-none" /></div></div>
