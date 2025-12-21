@@ -15,6 +15,7 @@ const lerp = (start: number, end: number, factor: number) => start + (end - star
 const PixiGameCanvasComponent: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const worldContainerRef = useRef<Container | null>(null);
+    const simLayerRef = useRef<Container | null>(null); // 【新增】人物专属图层容器
     const appRef = useRef<Application | null>(null);
     
     // 实体缓存
@@ -37,7 +38,7 @@ const PixiGameCanvasComponent: React.FC = () => {
         if (!worldContainerRef.current) return;
         const world = worldContainerRef.current;
 
-        // 1. 清理旧对象
+        // 1. 清理旧对象 (注意：这里不清理 simLayer，只清理家具和房间)
         furnViewsRef.current.forEach(v => { world.removeChild(v); v.destroy({ children: true }); });
         furnViewsRef.current.clear();
         roomViewsRef.current.forEach(v => { world.removeChild(v); v.destroy(); });
@@ -54,6 +55,7 @@ const PixiGameCanvasComponent: React.FC = () => {
         // 3. 绘制家具
         GameStore.furniture.forEach(furn => {
             const c = PixiWorldBuilder.createFurniture(furn);
+            // 家具的 zIndex 基于 Y 坐标
             c.zIndex = furn.y + furn.h; 
             world.addChild(c);
             furnViewsRef.current.set(furn.id, c);
@@ -67,6 +69,30 @@ const PixiGameCanvasComponent: React.FC = () => {
     useEffect(() => {
         if (!loading && worldContainerRef.current) refreshWorld();
     }, [editorRefresh, loading]);
+
+    // === Web Worker 驱动逻辑 ===
+    useEffect(() => {
+        const workerCode = `
+            let lastTime = Date.now();
+            setInterval(() => {
+                const now = Date.now();
+                const dt = (now - lastTime) / 16.66;
+                lastTime = now;
+                self.postMessage(dt);
+            }, 16);
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const worker = new Worker(URL.createObjectURL(blob));
+
+        worker.onmessage = (e) => {
+            const dt = e.data;
+            if (GameStore.editor.mode === 'none') {
+                gameLoopStep(dt);
+            }
+        };
+
+        return () => worker.terminate();
+    }, []);
 
     // === B. 初始化 & 循环 ===
     useEffect(() => {
@@ -87,7 +113,6 @@ const PixiGameCanvasComponent: React.FC = () => {
 
             if (isCancelled) { await app.destroy(); return; }
 
-            // 安全挂载 Canvas
             if (containerRef.current.querySelector('canvas')) {
                 containerRef.current.innerHTML = '';
             }
@@ -96,25 +121,33 @@ const PixiGameCanvasComponent: React.FC = () => {
             appRef.current = app;
             appInstance = app;
 
+            // 1. 世界主容器
             const worldContainer = new Container();
             worldContainer.sortableChildren = true;
             app.stage.addChild(worldContainer);
             worldContainerRef.current = worldContainer;
 
-            // 1. 加载资源 (关键修复：恢复所有资源加载！)
+            // 2. 【核心修改】创建人物专属图层
+            const simLayer = new Container();
+            simLayer.sortableChildren = true; // 开启排序，让人物之间根据 Y 轴互相遮挡
+            simLayer.zIndex = 10000;         // 赋予极大的 zIndex，确保永远在家具之上
+            worldContainer.addChild(simLayer);
+            simLayerRef.current = simLayer;
+
+            // 3. 加载资源
             console.log("📥 Loading assets...");
             await loadGameAssets([
                 ...(ASSET_CONFIG.bg || []),
                 ...(ASSET_CONFIG.bodies || []),
-                ...(ASSET_CONFIG.outfits || []), // 👈 衣服回来了
-                ...(ASSET_CONFIG.hairs || []),   // 👈 头发回来了
+                ...(ASSET_CONFIG.outfits || []),
+                ...(ASSET_CONFIG.hairs || []),
                 ...(ASSET_CONFIG.face || []),
                 ...(ASSET_CONFIG.clothes || []),
                 ...(ASSET_CONFIG.pants || [])
             ]);
             setLoading(false);
 
-            // 2. 恢复背景图
+            // 4. 背景图
             const bgPath = ASSET_CONFIG.bg?.[0];
             if (bgPath) {
                 const bg = Sprite.from(bgPath);
@@ -127,21 +160,20 @@ const PixiGameCanvasComponent: React.FC = () => {
             refreshWorld();
 
             // 初始相机聚焦
-            if (GameStore.furniture.length > 0) {
-                const target = GameStore.furniture[0];
-                worldContainer.x = (app.screen.width / 2) - target.x;
-                worldContainer.y = (app.screen.height / 2) - target.y;
-            }
+            const centerX = CONFIG.CANVAS_W / 2;
+            const centerY = CONFIG.CANVAS_H / 2;
+            worldContainer.x = (app.screen.width / 2) - centerX;
+            worldContainer.y = (app.screen.height / 2) - centerY;
 
-            // 3. 游戏循环
-            app.ticker.add((ticker) => {
-                const dt = ticker.deltaTime;
-                gameLoopStep(dt);
+            // 5. 渲染循环
+            app.ticker.add(() => {
+                const currentSimLayer = simLayerRef.current;
+                if (!currentSimLayer) return;
 
-                // 镜头跟随
+                // --- 镜头跟随逻辑 ---
                 if (GameStore.selectedSimId && !isDraggingCamera.current && GameStore.editor.mode === 'none') {
                     const sim = GameStore.sims.find(s => s.id === GameStore.selectedSimId);
-                    if (sim) {
+                    if (sim && !isNaN(sim.pos.x)) {
                         const scale = worldContainer.scale.x;
                         const targetX = app.screen.width / 2 - sim.pos.x * scale;
                         const targetY = app.screen.height / 2 - sim.pos.y * scale;
@@ -150,31 +182,43 @@ const PixiGameCanvasComponent: React.FC = () => {
                     }
                 }
 
-                // Sim 渲染
+                // --- 【核心修改】Sim 渲染更新 ---
                 const activeIds = new Set<string>();
                 GameStore.sims.forEach(sim => {
+                    if (isNaN(sim.pos.x) || isNaN(sim.pos.y)) return;
+
                     activeIds.add(sim.id);
                     let view = simViewsRef.current.get(sim.id);
+                    
                     if (!view) {
                         view = new PixiSimView(sim);
-                        worldContainer.addChild(view.container as any);
+                        // 添加到 simLayer 而不是 worldContainer
+                        currentSimLayer.addChild(view.container as any); 
                         simViewsRef.current.set(sim.id, view);
                     }
+
+                    // 设置人物在 layer 内部的排序（根据自身 Y 坐标）
+                    (view.container as any).zIndex = sim.pos.y;
+                    
                     view.updatePosition(sim);
                     view.showSelectionRing(GameStore.selectedSimId === sim.id);
-                    view.container.zIndex = 50000 + sim.pos.y; 
                 });
 
-                simViewsRef.current.forEach((v, id) => { 
-                    if (!activeIds.has(id)) { 
-                        worldContainer.removeChild(v.container as any); 
-                        v.destroy(); 
-                        simViewsRef.current.delete(id); 
-                    }
-                });
+                // 清理销毁的人物
+                if (GameStore.sims.length > 0) {
+                    simViewsRef.current.forEach((v, id) => { 
+                        if (!activeIds.has(id)) { 
+                            currentSimLayer.removeChild(v.container as any); 
+                            v.destroy(); 
+                            simViewsRef.current.delete(id); 
+                        }
+                    });
+                }
+
+                // 执行图层内排序
+                currentSimLayer.sortChildren();
             });
         };
-
         initGame();
 
         return () => {
@@ -183,7 +227,7 @@ const PixiGameCanvasComponent: React.FC = () => {
         };
     }, []);
 
-    // 智能更新
+    // 智能更新订阅
     useEffect(() => {
         const unsub = GameStore.subscribe(() => {
             if (GameStore.mapVersion !== lastMapVersion.current) {
@@ -194,7 +238,7 @@ const PixiGameCanvasComponent: React.FC = () => {
         return unsub;
     }, []);
 
-    // === 交互事件 ===
+    // === 交互事件 (保持不变) ===
     const handleMouseDown = (e: React.MouseEvent) => {
         if (e.button === 0 && GameStore.editor.mode === 'none') {
             isDraggingCamera.current = true;
@@ -208,13 +252,20 @@ const PixiGameCanvasComponent: React.FC = () => {
         if (isDraggingCamera.current && worldContainerRef.current) {
             const dx = e.clientX - lastMousePos.current.x;
             const dy = e.clientY - lastMousePos.current.y;
+            
+            if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                if (GameStore.selectedSimId) {
+                    GameStore.selectedSimId = null;
+                    GameStore.notify();
+                }
+            }
+
             worldContainerRef.current.x += dx;
             worldContainerRef.current.y += dy;
             lastMousePos.current = { x: e.clientX, y: e.clientY };
-            isCameraLocked.current = false;
         }
     };
-
+    
     const handleMouseUp = (e: React.MouseEvent) => {
         if (e.button !== 0) return;
         const dist = Math.sqrt(Math.pow(e.clientX - dragStartMousePos.current.x, 2) + Math.pow(e.clientY - dragStartMousePos.current.y, 2));
@@ -225,8 +276,7 @@ const PixiGameCanvasComponent: React.FC = () => {
             if (containerRef.current) containerRef.current.style.cursor = 'default';
         }
 
-        // 点击选择小人
-        if (isClick && GameStore.editor.mode === 'none' && worldContainerRef.current && appRef.current) {
+        if (isClick && GameStore.editor.mode === 'none' && worldContainerRef.current) {
             const world = worldContainerRef.current;
             const rect = containerRef.current!.getBoundingClientRect();
             const worldX = (e.clientX - rect.left - world.x) / world.scale.x;
@@ -273,7 +323,6 @@ const PixiGameCanvasComponent: React.FC = () => {
                 onWheel={handleWheel}
                 onContextMenu={e => e.preventDefault()}
             />
-            {/* 使用 CSS 控制显隐，避免 DOM 报错 */}
             <div className={`absolute inset-0 flex items-center justify-center text-white bg-black/80 z-50 transition-opacity duration-500 ${loading ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                 LOADING...
             </div>

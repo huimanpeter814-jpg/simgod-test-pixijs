@@ -15,12 +15,21 @@ export function getActivePalette() {
 let tickCount = 0;
 
 export const gameLoopStep = (dt: number = 1) => {
+    // 限制 dt 最大值，防止从后台切换回来时 dt 过大导致位移崩溃
+    const safeDt = Math.min(dt, 5);
+
     if (GameStore.time.speed <= 0) return;
 
     // A. 移动逻辑 (保持流畅)
     // 注意：这里我们让移动速度也稍微适配一下慢节奏，防止人走得太快像瞬移
     // 如果觉得人走得太慢，可以把 * 1.0 改成 * 1.5 或更高
-    GameStore.sims.forEach(s => s.update(dt * GameStore.time.speed * 1, false));
+    GameStore.sims.forEach(s => {
+        // [防消失] 在更新前检查坐标是否合法
+        if (isNaN(s.pos.x)) s.pos.x = 0;
+        if (isNaN(s.pos.y)) s.pos.y = 0;
+        
+        s.update(safeDt * GameStore.time.speed, false);
+    });
 
     // B. 时间流速控制
     GameStore.timeAccumulator += dt * GameStore.time.speed;

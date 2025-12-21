@@ -95,10 +95,19 @@ export class PixiSimView {
     }
 
     private updateLayerTexture(sprite: Sprite, path: string, type: 'body' | 'outfit' | 'hair') {
-        if (this.currentAssets[type] === path) return;
+        if (this.currentAssets[type] === path && sprite.texture !== Texture.EMPTY) return;
+        
         if (path && Assets.cache.has(path)) {
             sprite.texture = Assets.get(path);
             this.currentAssets[type] = path;
+        } else if (path) {
+            // 如果路径存在但不在缓存，可能是异步加载延迟，尝试重新从 Assets 加载
+            Assets.load(path).then(tex => {
+                sprite.texture = tex;
+                this.currentAssets[type] = path;
+            }).catch(() => {
+                sprite.texture = Texture.EMPTY;
+            });
         } else {
             sprite.texture = Texture.EMPTY;
             this.currentAssets[type] = '';
