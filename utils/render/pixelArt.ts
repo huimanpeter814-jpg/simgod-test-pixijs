@@ -359,11 +359,39 @@ export function drawAvatarHead(
     const destY = y - destSize / 2;
 
     // 辅助绘制函数
-    const drawLayer = (img: HTMLImageElement | null) => {
+    const drawLayer = (img: HTMLImageElement | null, tintColor?: string) => {
         if (img) {
             ctx.imageSmoothingEnabled = false; // 保持像素清晰
-            // 参数详解: 图片, 裁剪X, 裁剪Y, 裁剪宽, 裁剪高, 绘制X, 绘制Y, 绘制宽, 绘制高
-            ctx.drawImage(img, srcX, srcY, srcS, srcS, destX, destY, destSize, destSize);
+
+            if (tintColor) {
+                // 🆕 染色逻辑
+                const buffer = document.createElement('canvas');
+                buffer.width = destSize;
+                buffer.height = destSize;
+                const bCtx = buffer.getContext('2d');
+                if (bCtx) {
+                    bCtx.imageSmoothingEnabled = false;
+
+                    // 1. 绘制原图 (裁切后)
+                    bCtx.drawImage(img, srcX, srcY, srcS, srcS, 0, 0, destSize, destSize);
+
+                    // 2. 正片叠底着色 (适用于灰度/白底素材)
+                    bCtx.globalCompositeOperation = 'multiply';
+                    bCtx.fillStyle = tintColor;
+                    bCtx.fillRect(0, 0, destSize, destSize);
+
+                    // 3. 恢复透明度 (将颜色限制在原图非透明区域)
+                    bCtx.globalCompositeOperation = 'destination-in';
+                    bCtx.drawImage(img, srcX, srcY, srcS, srcS, 0, 0, destSize, destSize);
+
+                    // 4. 绘制到主画布
+                    ctx.drawImage(buffer, destX, destY);
+                }
+            } else {
+                // 原逻辑：直接绘制
+                // 参数详解: 图片, 裁剪X, 裁剪Y, 裁剪宽, 裁剪高, 绘制X, 绘制Y, 绘制宽, 绘制高
+                ctx.drawImage(img, srcX, srcY, srcS, srcS, destX, destY, destSize, destSize);
+            }
         }
     };
 
@@ -373,7 +401,8 @@ export function drawAvatarHead(
     
     if (renderLayer === 'all' || renderLayer === 'front') {
         drawLayer(outfitImg);
-        drawLayer(hairImg);
+        // 🆕 传入发色进行绘制
+        drawLayer(hairImg, sim.hairColor);
     }
 
     // 兜底逻辑：如果没有图片，画一个带问号的圆圈

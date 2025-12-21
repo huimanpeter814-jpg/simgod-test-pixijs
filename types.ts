@@ -115,7 +115,7 @@ export interface PlotTemplate {
     id: string;
     width: number;
     height: number;
-    type: 'residential' | 'commercial' | 'public' | 'work';
+    type: 'residential' | 'commercial' | 'public' | 'work' | string;
     rooms: any[]; 
     furniture: Furniture[];
     housingUnits?: HousingUnit[];

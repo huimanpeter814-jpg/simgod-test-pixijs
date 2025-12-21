@@ -25,6 +25,7 @@ export const loadGameAssets = async (sources: string[]) => {
             img.onerror = () => {
                 // 即使失败也不要抛出错误卡死流程
                 console.warn(`[AssetLoader] Failed to load UI image: ${src}`);
+                imageCache.set(src, img);
                 resolve(); 
             };
         });
@@ -57,5 +58,6 @@ export const getAsset = (path: string | undefined): HTMLImageElement | null => {
     // 注意：这只是兜底，尽量在 loadGameAssets 里预加载所有图片
     const img = new Image();
     img.src = path;
+    imageCache.set(path, img); // <--- 防止内存泄漏的关键行
     return img;
 };

@@ -145,26 +145,26 @@ export const CareerLogic = {
         if (sim.traits.includes('懒惰')) sim.commutePreTime = 5;
         if (sim.traits.includes('洁癖')) sim.commutePreTime += 20;
     },
+
     bindWorkplace(sim: Sim) {
         // 1. 定义：当前职业需要寻找什么类型的地块？
-        // 默认去办公楼 ('work')
         let targetType = 'work';
         
         // 特殊职业的类型映射
         switch (sim.job.companyType) {
             case JobType.Hospital:
-                targetType = 'hospital'; // 只要地块属性是 hospital 即可，不再管是 hospital_l 还是 hospital_s
+                targetType = 'hospital'; 
                 break;
                 
             case JobType.School:
-                // 学校可能还是需要细分，防止幼儿园老师跑去大学
+                // 学校可能还是需要细分，但下面会做通用兼容
                 if (sim.job.id.includes('high')) targetType = 'high_school';
                 else if (sim.job.id.includes('elem')) targetType = 'elementary_school';
                 else targetType = 'kindergarten';
                 break;
 
             case JobType.ElderCare:
-                targetType = 'elder_care'; // 建议在 constants 或 plots 里统一定义这些类型
+                targetType = 'elder_care';
                 break;
 
             case JobType.Library:
@@ -172,7 +172,7 @@ export const CareerLogic = {
                 break;
 
             case JobType.Nightlife:
-                targetType = 'bar'; // 或者 'nightclub'
+                targetType = 'bar'; // 默认找酒吧
                 break;
 
             case JobType.Restaurant:
@@ -180,39 +180,63 @@ export const CareerLogic = {
                 break;
 
             case JobType.Store:
-                targetType = 'commercial';
+                targetType = 'store'; // 统一为 store，兼容 shop, market 等
                 break;
 
-            // 互联网、设计、商业等默认去 'work' (办公楼)
+            // 互联网、设计、商业不再默认去 'work'，而是优先找对应公司
             case JobType.Internet:
+                targetType = 'internet';
+                break;
             case JobType.Design:
+                targetType = 'design';
+                break;
             case JobType.Business:
-                targetType = 'work';
+                targetType = 'business';
                 break;
         }
 
         // 2. 搜索地块：支持系统默认地块 AND 玩家自定义地块
         const potentialWorkplaces = GameStore.worldLayout.filter(p => {
             // [关键] 获取地块的最终类型
-            // 优先级：玩家自定义类型 (customType) > 模板默认类型 (PLOTS配置) > 默认为公共场所
-            // 这样玩家只要把地皮属性改为 'hospital'，customType 就会生效
-            const actualPlotType = p.customType || PLOTS[p.templateId]?.type || 'public';
+            const rawType = p.customType || PLOTS[p.templateId]?.type || 'public';
+            
+            // [修复] 移除后缀 (_l, _m, _s) 确保 hospital_l 也能匹配 hospital
+            const actualPlotType = rawType.replace(/_[sml]$/, '');
 
-            // 规则A：精确匹配类型 (例如医生必须去医院)
+            // 规则A：精确匹配类型 (例如医生去 hospital)
             if (actualPlotType === targetType) {
                 return true;
             }
 
-            // 规则B：兼容性匹配 (防止因为类型定义太细找不到工作)
-            // 例如：如果是去 'commercial' (商店)，那么 'restaurant' (餐厅) 或 'market' (市场) 可能也凑合
-            if (targetType === 'commercial' && (actualPlotType === 'restaurant' || actualPlotType === 'market')) {
-                return true;
+            // 规则B：学校兼容 (如果只有通用 school，高中老师也能去)
+            if (targetType.includes('school') && actualPlotType === 'school') return true;
+            if (targetType === 'school' && actualPlotType.includes('school')) return true;
+
+            // 规则C：商业/办公类兼容 (如果找不到专属公司，可以去通用地块)
+            
+            // 互联网: internet_company, tech_park, office, work
+            if (targetType === 'internet') {
+                if (['internet_company', 'tech_park', 'office', 'work'].includes(actualPlotType)) return true;
             }
             
-            // 规则C：办公类职业的宽容匹配
-            // 如果目标是 'work' (办公)，那么去 'tech_park' (科技园) 或 'office' (写字楼) 都可以
-            if (targetType === 'work' && (actualPlotType === 'tech_park' || actualPlotType === 'office')) {
-                return true;
+            // 设计: studio, art_center, office, work
+            if (targetType === 'design') {
+                if (['studio', 'art_center', 'office', 'work'].includes(actualPlotType)) return true;
+            }
+
+            // 商业: financial_center, office, work
+            if (targetType === 'business') {
+                if (['financial_center', 'office', 'work'].includes(actualPlotType)) return true;
+            }
+
+            // 商店: shop, commercial, market, bookstore
+            if (targetType === 'store') {
+                if (['shop', 'commercial', 'market', 'bookstore'].includes(actualPlotType)) return true;
+            }
+            
+            // 夜生活: nightclub, ktv
+            if (targetType === 'bar') {
+                if (['nightclub', 'ktv'].includes(actualPlotType)) return true;
             }
 
             return false;

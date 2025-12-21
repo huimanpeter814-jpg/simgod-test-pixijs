@@ -18,7 +18,6 @@ const createGrid = (baseId: string, startX: number, startY: number, cols: number
 // 1. 居住类 (Residential)
 // ==========================================
 
-// --- 便宜小公寓 (一卧一卫一厨) ---
 const PLOT_APT_CHEAP_S: PlotTemplate = {
     id: 'apt_cheap_s', width: 170, height: 170, type: 'residential',
     housingUnits: [{ id: 'unit', name: '蜗居', capacity: 1, cost: 400, type: 'public_housing', area: { x: 5, y: 5, w: 160, h: 160 } }],
@@ -53,7 +52,6 @@ const PLOT_APT_CHEAP_L: PlotTemplate = {
     ]
 };
 
-// --- 高级公寓 (两卧一卫一厨一厅) ---
 const PLOT_APT_LUXURY_S: PlotTemplate = {
     id: 'apt_luxury_s', width: 215, height: 220, type: 'residential',
     housingUnits: [{ id: 'unit', name: '精致公寓', capacity: 3, cost: 2500, type: 'apartment', area: { x: 5, y: 5, w: 205, h: 210 } }],
@@ -96,7 +94,6 @@ const PLOT_APT_LUXURY_L: PlotTemplate = {
     ]
 };
 
-// --- 别墅 (两卧一卫一厨一厅一书房一花园) ---
 const PLOT_VILLA_S: PlotTemplate = {
     id: 'villa_s', width: 370, height: 290, type: 'residential',
     housingUnits: [{ id: 'unit', name: '花园洋房', capacity: 5, cost: 8000, type: 'villa', area: { x: 5, y: 5, w: 360, h: 280 } }],
@@ -156,9 +153,9 @@ const PLOT_VILLA_L: PlotTemplate = {
 // 2. 办公类 (Workplace)
 // ==========================================
 
-// --- 互联网公司 (办公+厕+饭堂+老板) ---
+// --- 互联网公司 ---
 const PLOT_IT_S: PlotTemplate = {
-    id: 'internet_s', width: 260, height: 230, type: 'work',
+    id: 'internet_s', width: 260, height: 230, type: 'internet', // [修复] 指定类型
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 220, label: '初创IT', color: '#f1f2f6', pixelPattern: 'grid', hasWall: true }],
     furniture: [
         ...createGrid('desk', 20, 20, 2, 2, 70, 50, { w: 60, h: 40, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel', tags: ['desk', 'computer'] }),
@@ -169,7 +166,7 @@ const PLOT_IT_S: PlotTemplate = {
 };
 
 const PLOT_IT_M: PlotTemplate = {
-    id: 'internet_m', width: 285, height: 230, type: 'work',
+    id: 'internet_m', width: 285, height: 230, type: 'internet', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 275, h: 220, label: '科技公司', color: '#f1f2f6', pixelPattern: 'grid', hasWall: true }],
     furniture: [
         ...createGrid('desk', 20, 20, 3, 2, 60, 50, { w: 50, h: 40, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel', tags: ['desk', 'computer'] }),
@@ -180,7 +177,7 @@ const PLOT_IT_M: PlotTemplate = {
 };
 
 const PLOT_IT_L: PlotTemplate = {
-    id: 'internet_l', width: 405, height: 285, type: 'work',
+    id: 'internet_l', width: 405, height: 285, type: 'internet', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 395, h: 275, label: '互联网总部', color: '#f1f2f6', pixelPattern: 'grid', hasWall: true }],
     furniture: [
         ...createGrid('desk', 20, 20, 4, 3, 70, 60, { w: 50, h: 40, color: '#dfe6e9', label: '工位', utility: 'work', pixelPattern: 'desk_pixel', tags: ['desk', 'computer'] }),
@@ -190,9 +187,9 @@ const PLOT_IT_L: PlotTemplate = {
     ]
 };
 
-// --- 商务公司 (办公+厕+饭堂+老板) ---
+// --- 商务公司 ---
 const PLOT_BIZ_S: PlotTemplate = {
-    id: 'business_s', width: 260, height: 220, type: 'work',
+    id: 'business_s', width: 260, height: 220, type: 'business', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 210, label: '办事处', color: '#ced6e0', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('desk', 20, 20, 2, 2, 70, 50, { w: 60, h: 40, color: '#b2bec3', label: '办公桌', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk'] }),
@@ -203,7 +200,7 @@ const PLOT_BIZ_S: PlotTemplate = {
 };
 
 const PLOT_BIZ_M: PlotTemplate = {
-    id: 'business_m', width: 290, height: 205, type: 'work',
+    id: 'business_m', width: 290, height: 205, type: 'business', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 280, h: 195, label: '商务部', color: '#ced6e0', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('desk', 20, 20, 3, 2, 70, 50, { w: 60, h: 40, color: '#b2bec3', label: '办公桌', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk', 'computer'] }),
@@ -214,7 +211,7 @@ const PLOT_BIZ_M: PlotTemplate = {
 };
 
 const PLOT_BIZ_L: PlotTemplate = {
-    id: 'business_l', width: 410, height: 325, type: 'work',
+    id: 'business_l', width: 410, height: 325, type: 'business', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 400, h: 315, label: '金融中心', color: '#ced6e0', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('desk', 20, 20, 3, 3, 90, 60, { w: 70, h: 40, color: '#b2bec3', label: '办公桌', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk', 'computer'] }),
@@ -224,9 +221,9 @@ const PLOT_BIZ_L: PlotTemplate = {
     ]
 };
 
-// --- 设计公司 (办公+厕+总监) ---
+// --- 设计公司 ---
 const PLOT_DESIGN_S: PlotTemplate = {
-    id: 'design_s', width: 195, height: 240, type: 'work',
+    id: 'design_s', width: 195, height: 240, type: 'design', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 185, h: 230, label: '工作室', color: '#fff0f0', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         ...createGrid('mac', 20, 20, 2, 2, 80, 60, { w: 60, h: 40, color: '#fff', label: 'iMac', utility: 'work', pixelPattern: 'desk_pixel', tags: ['computer', 'desk'] }),
@@ -236,7 +233,7 @@ const PLOT_DESIGN_S: PlotTemplate = {
 };
 
 const PLOT_DESIGN_M: PlotTemplate = {
-    id: 'design_m', width: 260, height: 235, type: 'work',
+    id: 'design_m', width: 260, height: 235, type: 'design', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 225, label: '设计部', color: '#fff0f0', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         ...createGrid('mac', 20, 20, 2, 2, 90, 70, { w: 70, h: 40, color: '#fff', label: 'iMac', utility: 'work', pixelPattern: 'desk_pixel', tags: ['computer', 'desk'] }),
@@ -246,7 +243,7 @@ const PLOT_DESIGN_M: PlotTemplate = {
 };
 
 const PLOT_DESIGN_L: PlotTemplate = {
-    id: 'design_l', width: 370, height: 290, type: 'work',
+    id: 'design_l', width: 370, height: 290, type: 'design', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 360, h: 280, label: '创意园', color: '#fff0f0', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         ...createGrid('mac', 20, 20, 3, 2, 90, 70, { w: 70, h: 40, color: '#fff', label: 'iMac', utility: 'work', pixelPattern: 'desk_pixel', tags: ['computer', 'desk'] }),
@@ -260,9 +257,9 @@ const PLOT_DESIGN_L: PlotTemplate = {
 // 3. 商业类 (Commercial)
 // ==========================================
 
-// --- 餐厅 (用餐+前台+后厨+公厕) ---
+// --- 餐厅 ---
 const PLOT_RESTAURANT_S: PlotTemplate = {
-    id: 'restaurant_s', width: 190, height: 205, type: 'commercial',
+    id: 'restaurant_s', width: 190, height: 205, type: 'restaurant', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 180, h: 195, label: '小餐馆', color: '#ffeb3b', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('table', 10, 10, 2, 2, 50, 50, { w: 40, h: 40, color: '#fab1a0', label: '餐桌', utility: 'eat_out', pixelPattern: 'table_dining', tags: ['table'] }),
@@ -273,7 +270,7 @@ const PLOT_RESTAURANT_S: PlotTemplate = {
 };
 
 const PLOT_RESTAURANT_M: PlotTemplate = {
-    id: 'restaurant_m', width: 215, height: 220, type: 'commercial',
+    id: 'restaurant_m', width: 215, height: 220, type: 'restaurant', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 205, h: 210, label: '餐厅', color: '#ffeb3b', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('table', 15, 15, 2, 2, 60, 60, { w: 45, h: 45, color: '#fab1a0', label: '餐桌', utility: 'eat_out', pixelPattern: 'table_dining', tags: ['table'] }),
@@ -284,7 +281,7 @@ const PLOT_RESTAURANT_M: PlotTemplate = {
 };
 
 const PLOT_RESTAURANT_L: PlotTemplate = {
-    id: 'restaurant_l', width: 260, height: 230, type: 'commercial',
+    id: 'restaurant_l', width: 260, height: 230, type: 'restaurant', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 220, label: '大饭店', color: '#ffeb3b', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('table', 20, 20, 3, 2, 60, 60, { w: 50, h: 50, color: '#fab1a0', label: '大桌', utility: 'eat_out', pixelPattern: 'table_dining', tags: ['table'] }),
@@ -294,9 +291,9 @@ const PLOT_RESTAURANT_L: PlotTemplate = {
     ]
 };
 
-// --- 咖啡厅 (用餐+前台+料理+公厕) ---
+// --- 咖啡厅 (Cafe 算餐饮，类型改为 restaurant 方便逻辑匹配，或者单独 cafe) ---
 const PLOT_CAFE_S: PlotTemplate = {
-    id: 'cafe_s', width: 155, height: 195, type: 'commercial',
+    id: 'cafe_s', width: 155, height: 195, type: 'restaurant', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 145, h: 185, label: '小咖', color: '#d4a373', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'counter', x: 10, y: 10, w: 80, h: 30, color: '#8b4513', label: '前台', utility: 'work', pixelPattern: 'reception', tags: ['bar', 'cashier'] },
@@ -307,7 +304,7 @@ const PLOT_CAFE_S: PlotTemplate = {
 };
 
 const PLOT_CAFE_M: PlotTemplate = {
-    id: 'cafe_m', width: 195, height: 180, type: 'commercial',
+    id: 'cafe_m', width: 195, height: 180, type: 'restaurant', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 185, h: 170, label: '咖啡厅', color: '#d4a373', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'counter', x: 10, y: 10, w: 100, h: 30, color: '#8b4513', label: '吧台', utility: 'work', pixelPattern: 'reception', tags: ['bar', 'cashier'] },
@@ -318,7 +315,7 @@ const PLOT_CAFE_M: PlotTemplate = {
 };
 
 const PLOT_CAFE_L: PlotTemplate = {
-    id: 'cafe_l', width: 200, height: 260, type: 'commercial',
+    id: 'cafe_l', width: 200, height: 260, type: 'restaurant', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 190, h: 250, label: '精品咖啡', color: '#d4a373', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'counter', x: 10, y: 10, w: 120, h: 30, color: '#8b4513', label: '大吧台', utility: 'work', pixelPattern: 'reception', tags: ['bar', 'cashier'] },
@@ -328,9 +325,9 @@ const PLOT_CAFE_L: PlotTemplate = {
     ]
 };
 
-// --- 便利店 (收银+货架+仓) ---
+// --- 商店 (便利店/书店/服装店/超市 -> store) ---
 const PLOT_CONVENIENCE_S: PlotTemplate = {
-    id: 'convenience_s', width: 155, height: 195, type: 'commercial',
+    id: 'convenience_s', width: 155, height: 195, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 145, h: 185, label: '小店', color: '#fff', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         { id: 'cash', x: 10, y: 10, w: 50, h: 30, color: '#2c3e50', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -341,7 +338,7 @@ const PLOT_CONVENIENCE_S: PlotTemplate = {
 };
 
 const PLOT_CONVENIENCE_M: PlotTemplate = {
-    id: 'convenience_m', width: 170, height: 170, type: 'commercial',
+    id: 'convenience_m', width: 170, height: 170, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 160, h: 160, label: '便利店', color: '#fff', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         { id: 'cash', x: 10, y: 10, w: 60, h: 30, color: '#2c3e50', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -351,7 +348,7 @@ const PLOT_CONVENIENCE_M: PlotTemplate = {
 };
 
 const PLOT_CONVENIENCE_L: PlotTemplate = {
-    id: 'convenience_l', width: 190, height: 205, type: 'commercial',
+    id: 'convenience_l', width: 190, height: 205, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 180, h: 195, label: '24h店', color: '#fff', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         { id: 'cash', x: 10, y: 10, w: 60, h: 30, color: '#2c3e50', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -360,9 +357,8 @@ const PLOT_CONVENIENCE_L: PlotTemplate = {
     ]
 };
 
-// --- 书店 (书架+收银) ---
 const PLOT_BOOKSTORE_S: PlotTemplate = {
-    id: 'bookstore_s', width: 190, height: 205, type: 'commercial',
+    id: 'bookstore_s', width: 190, height: 205, type: 'bookstore', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 180, h: 195, label: '书店', color: '#f7f1e3', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'cash', x: 10, y: 10, w: 60, h: 30, color: '#8b4513', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -371,7 +367,7 @@ const PLOT_BOOKSTORE_S: PlotTemplate = {
 };
 
 const PLOT_BOOKSTORE_M: PlotTemplate = {
-    id: 'bookstore_m', width: 200, height: 260, type: 'commercial',
+    id: 'bookstore_m', width: 200, height: 260, type: 'bookstore', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 190, h: 250, label: '书屋', color: '#f7f1e3', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'cash', x: 10, y: 10, w: 70, h: 30, color: '#8b4513', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -380,7 +376,7 @@ const PLOT_BOOKSTORE_M: PlotTemplate = {
 };
 
 const PLOT_BOOKSTORE_L: PlotTemplate = {
-    id: 'bookstore_l', width: 260, height: 235, type: 'commercial',
+    id: 'bookstore_l', width: 260, height: 235, type: 'bookstore', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 225, label: '书城', color: '#f7f1e3', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'cash', x: 10, y: 10, w: 80, h: 30, color: '#8b4513', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -388,7 +384,6 @@ const PLOT_BOOKSTORE_L: PlotTemplate = {
     ]
 };
 
-// --- 电影院 (售票+检票+影厅+公厕) ---
 const PLOT_CINEMA_S: PlotTemplate = {
     id: 'cinema_s', width: 260, height: 230, type: 'commercial',
     rooms: [{ id: 'hall', x: 5, y: 5, w: 250, h: 220, label: '影厅', color: '#2d3436', pixelPattern: 'simple', hasWall: true }],
@@ -425,9 +420,8 @@ const PLOT_CINEMA_L: PlotTemplate = {
     ]
 };
 
-// --- 超市 (货架+多收银+公厕) ---
 const PLOT_SUPERMARKET_S: PlotTemplate = {
-    id: 'super_s', width: 260, height: 235, type: 'commercial',
+    id: 'super_s', width: 260, height: 235, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 225, label: '超市', color: '#fff', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('shelf', 20, 20, 3, 2, 70, 70, { w: 50, h: 50, color: '#ffdd59', label: '货', utility: 'buy_item', pixelPattern: 'shelf_food', tags: ['shelf'] }),
@@ -438,7 +432,7 @@ const PLOT_SUPERMARKET_S: PlotTemplate = {
 };
 
 const PLOT_SUPERMARKET_M: PlotTemplate = {
-    id: 'super_m', width: 285, height: 230, type: 'commercial',
+    id: 'super_m', width: 285, height: 230, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 275, h: 220, label: '生鲜超', color: '#fff', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('shelf', 20, 20, 3, 2, 80, 70, { w: 60, h: 50, color: '#ffdd59', label: '货', utility: 'buy_item', pixelPattern: 'shelf_food', tags: ['shelf'] }),
@@ -449,7 +443,7 @@ const PLOT_SUPERMARKET_M: PlotTemplate = {
 };
 
 const PLOT_SUPERMARKET_L: PlotTemplate = {
-    id: 'super_l', width: 290, height: 205, type: 'commercial',
+    id: 'super_l', width: 290, height: 205, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 280, h: 195, label: '大卖场', color: '#fff', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('shelf', 20, 20, 4, 2, 65, 70, { w: 45, h: 50, color: '#ffdd59', label: '货', utility: 'buy_item', pixelPattern: 'shelf_food', tags: ['shelf'] }),
@@ -460,9 +454,8 @@ const PLOT_SUPERMARKET_L: PlotTemplate = {
     ]
 };
 
-// --- 服装店 (衣架+收银) ---
 const PLOT_CLOTHING_S: PlotTemplate = {
-    id: 'clothing_s', width: 155, height: 325, type: 'commercial',
+    id: 'clothing_s', width: 155, height: 325, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 145, h: 315, label: '潮牌', color: '#f5f6fa', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         { id: 'cash', x: 10, y: 10, w: 60, h: 30, color: '#2c3e50', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -471,7 +464,7 @@ const PLOT_CLOTHING_S: PlotTemplate = {
 };
 
 const PLOT_CLOTHING_M: PlotTemplate = {
-    id: 'clothing_m', width: 190, height: 305, type: 'commercial',
+    id: 'clothing_m', width: 190, height: 305, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 180, h: 295, label: '服装店', color: '#f5f6fa', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         { id: 'cash', x: 100, y: 10, w: 70, h: 30, color: '#2c3e50', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -480,7 +473,7 @@ const PLOT_CLOTHING_M: PlotTemplate = {
 };
 
 const PLOT_CLOTHING_L: PlotTemplate = {
-    id: 'clothing_l', width: 200, height: 260, type: 'commercial',
+    id: 'clothing_l', width: 200, height: 260, type: 'store', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 190, h: 250, label: '旗舰店', color: '#f5f6fa', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         { id: 'cash', x: 10, y: 10, w: 80, h: 30, color: '#2c3e50', label: '收银', utility: 'work', pixelPattern: 'cashier', tags: ['cashier', 'desk'] },
@@ -488,9 +481,8 @@ const PLOT_CLOTHING_L: PlotTemplate = {
     ]
 };
 
-// --- 网吧 (电脑+网管+厕) ---
 const PLOT_NETCAFE_S: PlotTemplate = {
-    id: 'netcafe_s', width: 195, height: 240, type: 'commercial',
+    id: 'netcafe_s', width: 195, height: 240, type: 'commercial', // [注] 可改为 internet 或 commercial
     rooms: [{ id: 'main', x: 5, y: 5, w: 185, h: 230, label: '网吧', color: '#2f3542', pixelPattern: 'grid', hasWall: true }],
     furniture: [
         ...createGrid('pc', 15, 15, 2, 3, 80, 60, { w: 60, h: 40, color: '#3742fa', label: '电竞', utility: 'work', pixelPattern: 'desk_pixel', tags: ['computer', 'game'] }),
@@ -519,9 +511,8 @@ const PLOT_NETCAFE_L: PlotTemplate = {
     ]
 };
 
-// --- 夜店 (DJ+吧台+舞池+厕) ---
 const PLOT_NIGHTCLUB_S: PlotTemplate = {
-    id: 'nightclub_s', width: 260, height: 235, type: 'commercial',
+    id: 'nightclub_s', width: 260, height: 235, type: 'bar', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 225, label: 'Club', color: '#000', pixelPattern: 'stripes', hasWall: true }],
     furniture: [
         { id: 'dj', x: 80, y: 10, w: 100, h: 40, color: '#a29bfe', label: 'DJ台', utility: 'music', pixelPattern: 'dj_stage', pixelGlow: true, tags: ['dj_booth'] },
@@ -532,7 +523,7 @@ const PLOT_NIGHTCLUB_S: PlotTemplate = {
 };
 
 const PLOT_NIGHTCLUB_M: PlotTemplate = {
-    id: 'nightclub_m', width: 285, height: 230, type: 'commercial',
+    id: 'nightclub_m', width: 285, height: 230, type: 'bar', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 275, h: 220, label: '夜店', color: '#000', pixelPattern: 'stripes', hasWall: true }],
     furniture: [
         { id: 'dj', x: 90, y: 10, w: 100, h: 40, color: '#a29bfe', label: 'DJ', utility: 'music', pixelPattern: 'dj_stage', pixelGlow: true, tags: ['dj_booth'] },
@@ -543,7 +534,7 @@ const PLOT_NIGHTCLUB_M: PlotTemplate = {
 };
 
 const PLOT_NIGHTCLUB_L: PlotTemplate = {
-    id: 'nightclub_l', width: 370, height: 290, type: 'commercial',
+    id: 'nightclub_l', width: 370, height: 290, type: 'bar', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 360, h: 280, label: '不夜城', color: '#000', pixelPattern: 'stripes', hasWall: true }],
     furniture: [
         { id: 'dj', x: 130, y: 10, w: 100, h: 40, color: '#a29bfe', label: 'DJ台', utility: 'music', pixelPattern: 'dj_stage', pixelGlow: true, tags: ['dj_booth'] },
@@ -559,7 +550,7 @@ const PLOT_NIGHTCLUB_L: PlotTemplate = {
 
 // --- 美术馆 (展品+厕) ---
 const PLOT_GALLERY_S: PlotTemplate = {
-    id: 'gallery_s', width: 200, height: 260, type: 'public',
+    id: 'gallery_s', width: 200, height: 260, type: 'art_center', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 190, h: 250, label: '小画廊', color: '#f5f6fa', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('art', 20, 20, 2, 3, 80, 70, { w: 60, h: 50, color: '#dcdde1', label: '画', utility: 'art', pixelPattern: 'painting', tags: ['art'] }),
@@ -568,7 +559,7 @@ const PLOT_GALLERY_S: PlotTemplate = {
 };
 
 const PLOT_GALLERY_M: PlotTemplate = {
-    id: 'gallery_m', width: 260, height: 235, type: 'public',
+    id: 'gallery_m', width: 260, height: 235, type: 'art_center', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 225, label: '艺术馆', color: '#f5f6fa', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('art', 20, 20, 3, 2, 80, 80, { w: 60, h: 50, color: '#dcdde1', label: '画', utility: 'art', pixelPattern: 'painting', tags: ['art'] }),
@@ -578,7 +569,7 @@ const PLOT_GALLERY_M: PlotTemplate = {
 };
 
 const PLOT_GALLERY_L: PlotTemplate = {
-    id: 'gallery_l', width: 270, height: 305, type: 'public',
+    id: 'gallery_l', width: 270, height: 305, type: 'art_center', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 260, h: 295, label: '美术馆', color: '#f5f6fa', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('art', 30, 30, 2, 3, 100, 80, { w: 80, h: 60, color: '#dcdde1', label: '巨幅画', utility: 'art', pixelPattern: 'painting', tags: ['art'] }),
@@ -588,9 +579,9 @@ const PLOT_GALLERY_L: PlotTemplate = {
     ]
 };
 
-// --- 幼儿园 (休息+玩耍+厕+老师) ---
+// --- 幼儿园 ---
 const PLOT_KINDERGARTEN_S: PlotTemplate = {
-    id: 'kindergarten_s', width: 215, height: 220, type: 'public',
+    id: 'kindergarten_s', width: 215, height: 220, type: 'kindergarten', // [修复]
     rooms: [
         { id: 'play', x: 5, y: 5, w: 140, h: 210, label: '幼托', color: '#ff9ff3', pixelPattern: 'wood', hasWall: true },
         { id: 'nap', x: 150, y: 5, w: 60, h: 210, label: '睡', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
@@ -604,7 +595,7 @@ const PLOT_KINDERGARTEN_S: PlotTemplate = {
 };
 
 const PLOT_KINDERGARTEN_M: PlotTemplate = {
-    id: 'kindergarten_m', width: 260, height: 220, type: 'public',
+    id: 'kindergarten_m', width: 260, height: 220, type: 'kindergarten', // [修复]
     rooms: [
         { id: 'play', x: 5, y: 5, w: 180, h: 210, label: '幼儿园', color: '#ff9ff3', pixelPattern: 'wood', hasWall: true },
         { id: 'nap', x: 190, y: 5, w: 65, h: 210, label: '午睡房', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
@@ -619,7 +610,7 @@ const PLOT_KINDERGARTEN_M: PlotTemplate = {
 };
 
 const PLOT_KINDERGARTEN_L: PlotTemplate = {
-    id: 'kindergarten_l', width: 285, height: 230, type: 'public',
+    id: 'kindergarten_l', width: 285, height: 230, type: 'kindergarten', // [修复]
     rooms: [
         { id: 'play', x: 5, y: 5, w: 200, h: 220, label: '双语幼儿园', color: '#ff9ff3', pixelPattern: 'wood', hasWall: true },
         { id: 'nap', x: 210, y: 5, w: 70, h: 220, label: '静音房', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
@@ -633,9 +624,9 @@ const PLOT_KINDERGARTEN_L: PlotTemplate = {
     ]
 };
 
-// --- 小学 (教室+操场+食堂+厕) ---
+// --- 小学 ---
 const PLOT_SCHOOL_ELEM_S: PlotTemplate = {
-    id: 'school_elem_s', width: 260, height: 300, type: 'public',
+    id: 'school_elem_s', width: 260, height: 300, type: 'elementary_school', // [修复]
     rooms: [
         { id: 'class', x: 5, y: 5, w: 150, h: 290, label: '教学', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
         { id: 'field', x: 160, y: 5, w: 95, h: 290, label: '操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
@@ -652,7 +643,7 @@ const PLOT_SCHOOL_ELEM_S: PlotTemplate = {
 };
 
 const PLOT_SCHOOL_ELEM_M: PlotTemplate = {
-    id: 'school_elem_m', width: 270, height: 305, type: 'public',
+    id: 'school_elem_m', width: 270, height: 305, type: 'elementary_school', // [修复]
     rooms: [
         { id: 'class', x: 5, y: 5, w: 260, h: 180, label: '教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
         { id: 'field', x: 5, y: 190, w: 260, h: 110, label: '操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
@@ -670,7 +661,7 @@ const PLOT_SCHOOL_ELEM_M: PlotTemplate = {
 };
 
 const PLOT_SCHOOL_ELEM_L: PlotTemplate = {
-    id: 'school_elem_l', width: 410, height: 325, type: 'public',
+    id: 'school_elem_l', width: 410, height: 325, type: 'elementary_school', // [修复]
     rooms: [
         { id: 'class', x: 5, y: 5, w: 250, h: 315, label: '综合楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
         { id: 'field', x: 260, y: 5, w: 145, h: 315, label: '大操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
@@ -686,9 +677,9 @@ const PLOT_SCHOOL_ELEM_L: PlotTemplate = {
     ]
 };
 
-// --- 中学 (Small 270*305, Medium 280*425, Large 425*305) ---
+// --- 中学 ---
 const PLOT_SCHOOL_HIGH_S: PlotTemplate = {
-    id: 'school_high_s', width: 270, height: 305, type: 'public',
+    id: 'school_high_s', width: 270, height: 305, type: 'high_school', // [修复]
     rooms: [
         { id: 'class', x: 5, y: 5, w: 260, h: 200, label: '教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
         { id: 'field', x: 5, y: 210, w: 260, h: 90, label: '操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
@@ -705,7 +696,7 @@ const PLOT_SCHOOL_HIGH_S: PlotTemplate = {
 };
 
 const PLOT_SCHOOL_HIGH_M: PlotTemplate = {
-    id: 'school_high_m', width: 280, height: 425, type: 'public',
+    id: 'school_high_m', width: 280, height: 425, type: 'high_school', // [修复]
     rooms: [
         { id: 'class', x: 5, y: 5, w: 270, h: 250, label: '实验楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
         { id: 'field', x: 5, y: 260, w: 270, h: 160, label: '体育场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
@@ -722,7 +713,7 @@ const PLOT_SCHOOL_HIGH_M: PlotTemplate = {
 };
 
 const PLOT_SCHOOL_HIGH_L: PlotTemplate = {
-    id: 'school_high_l', width: 425, height: 305, type: 'public',
+    id: 'school_high_l', width: 425, height: 305, type: 'high_school', // [修复]
     rooms: [
         { id: 'class', x: 5, y: 5, w: 260, h: 295, label: '教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
         { id: 'field', x: 270, y: 5, w: 150, h: 295, label: '大操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
@@ -740,7 +731,7 @@ const PLOT_SCHOOL_HIGH_L: PlotTemplate = {
 
 // --- 医院 (诊+护+病+厕+淋+术) ---
 const PLOT_HOSPITAL_S: PlotTemplate = {
-    id: 'hospital_s', width: 285, height: 230, type: 'public',
+    id: 'hospital_s', width: 285, height: 230, type: 'hospital', // [修复]
     rooms: [
         { id: 'main', x: 5, y: 5, w: 275, h: 220, label: '社区医院', color: '#fff', pixelPattern: 'simple', hasWall: true }
     ],
@@ -755,7 +746,7 @@ const PLOT_HOSPITAL_S: PlotTemplate = {
 };
 
 const PLOT_HOSPITAL_M: PlotTemplate = {
-    id: 'hospital_m', width: 280, height: 425, type: 'public',
+    id: 'hospital_m', width: 280, height: 425, type: 'hospital', // [修复]
     rooms: [
         { id: 'main', x: 5, y: 5, w: 270, h: 415, label: '综合医院', color: '#fff', pixelPattern: 'simple', hasWall: true }
     ],
@@ -771,7 +762,7 @@ const PLOT_HOSPITAL_M: PlotTemplate = {
 };
 
 const PLOT_HOSPITAL_L: PlotTemplate = {
-    id: 'hospital_l', width: 410, height: 325, type: 'public',
+    id: 'hospital_l', width: 410, height: 325, type: 'hospital', // [修复]
     rooms: [
         { id: 'out', x: 5, y: 5, w: 150, h: 315, label: '门诊部', color: '#fff', pixelPattern: 'tile', hasWall: true },
         { id: 'in', x: 160, y: 5, w: 245, h: 315, label: '住院部', color: '#dff9fb', pixelPattern: 'simple', hasWall: true }
@@ -786,9 +777,9 @@ const PLOT_HOSPITAL_L: PlotTemplate = {
     ]
 };
 
-// --- 养老院 (单间+护工+厕+淋+办) ---
+// --- 养老院 (Residential + elder_care unit type, plot type can be elder_care) ---
 const PLOT_ELDER_S: PlotTemplate = {
-    id: 'elder_home_s', width: 280, height: 425, type: 'residential',
+    id: 'elder_home_s', width: 280, height: 425, type: 'elder_care', // [修复]
     housingUnits: [{ id: 'unit', name: '温馨养老', capacity: 6, cost: 1200, type: 'elder_care', area: { x: 5, y: 5, w: 270, h: 415 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 270, h: 415, label: '养老院', color: '#f0fff4', pixelPattern: 'tile', hasWall: true }],
     furniture: [
@@ -801,7 +792,7 @@ const PLOT_ELDER_S: PlotTemplate = {
 };
 
 const PLOT_ELDER_M: PlotTemplate = {
-    id: 'elder_home_m', width: 370, height: 290, type: 'residential',
+    id: 'elder_home_m', width: 370, height: 290, type: 'elder_care', // [修复]
     housingUnits: [{ id: 'unit', name: '安康社区', capacity: 6, cost: 1500, type: 'elder_care', area: { x: 5, y: 5, w: 360, h: 280 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 360, h: 280, label: '康养中心', color: '#f0fff4', pixelPattern: 'tile', hasWall: true }],
     furniture: [
@@ -814,7 +805,7 @@ const PLOT_ELDER_M: PlotTemplate = {
 };
 
 const PLOT_ELDER_L: PlotTemplate = {
-    id: 'elder_home_l', width: 410, height: 325, type: 'residential',
+    id: 'elder_home_l', width: 410, height: 325, type: 'elder_care', // [修复]
     housingUnits: [{ id: 'unit', name: '高端养老', capacity: 8, cost: 1800, type: 'elder_care', area: { x: 5, y: 5, w: 400, h: 315 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 400, h: 315, label: '疗养中心', color: '#f0fff4', pixelPattern: 'tile', hasWall: true }],
     furniture: [
@@ -826,9 +817,9 @@ const PLOT_ELDER_L: PlotTemplate = {
     ]
 };
 
-// --- 图书馆 (书架+管理桌) ---
+// --- 图书馆 ---
 const PLOT_LIBRARY_S: PlotTemplate = {
-    id: 'library_s', width: 200, height: 260, type: 'public',
+    id: 'library_s', width: 200, height: 260, type: 'library', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 190, h: 250, label: '阅览室', color: '#f7f1e3', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'admin', x: 10, y: 210, w: 60, h: 30, color: '#8b4513', label: '管理', utility: 'work', pixelPattern: 'reception', tags: ['desk'] },
@@ -837,7 +828,7 @@ const PLOT_LIBRARY_S: PlotTemplate = {
 };
 
 const PLOT_LIBRARY_M: PlotTemplate = {
-    id: 'library_m', width: 260, height: 300, type: 'public',
+    id: 'library_m', width: 260, height: 300, type: 'library', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 290, label: '图书馆', color: '#f7f1e3', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'admin', x: 20, y: 250, w: 80, h: 30, color: '#8b4513', label: '服务台', utility: 'work', pixelPattern: 'reception', tags: ['desk'] },
@@ -847,7 +838,7 @@ const PLOT_LIBRARY_M: PlotTemplate = {
 };
 
 const PLOT_LIBRARY_L: PlotTemplate = {
-    id: 'library_l', width: 270, height: 305, type: 'public',
+    id: 'library_l', width: 270, height: 305, type: 'library', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 260, h: 295, label: '市图书馆', color: '#f7f1e3', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'admin', x: 20, y: 260, w: 80, h: 30, color: '#8b4513', label: '总服务台', utility: 'work', pixelPattern: 'reception', tags: ['desk'] },
@@ -856,9 +847,9 @@ const PLOT_LIBRARY_L: PlotTemplate = {
     ]
 };
 
-// --- 健身房 (补充) ---
+// --- 健身房 ---
 const PLOT_GYM_S: PlotTemplate = {
-    id: 'gym_s', width: 190, height: 305, type: 'public',
+    id: 'gym_s', width: 190, height: 305, type: 'gym', // [修复]
     rooms: [{ id: 'main', x: 5, y: 5, w: 180, h: 295, label: '健身室', color: '#2f3542', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('run', 20, 20, 2, 2, 60, 90, { w: 40, h: 70, color: '#2d3436', label: '跑机', utility: 'run', pixelPattern: 'treadmill', tags: ['gym'] }),
@@ -867,6 +858,13 @@ const PLOT_GYM_S: PlotTemplate = {
         { id: 'shower', x: 140, y: 200, w: 30, h: 30, color: '#81ecec', label: '淋', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
+
+// [新增] 专门的空地模版，方便玩家自定义时指定类型
+const PLOT_EMPTY_HOSPITAL: PlotTemplate = { id: 'empty_hospital', width: 300, height: 300, type: 'hospital', rooms: [], furniture: [] };
+const PLOT_EMPTY_SCHOOL: PlotTemplate = { id: 'empty_school', width: 300, height: 300, type: 'school', rooms: [], furniture: [] };
+const PLOT_EMPTY_INTERNET: PlotTemplate = { id: 'empty_internet', width: 300, height: 300, type: 'internet', rooms: [], furniture: [] };
+const PLOT_EMPTY_RESTAURANT: PlotTemplate = { id: 'empty_restaurant', width: 300, height: 300, type: 'restaurant', rooms: [], furniture: [] };
+const PLOT_EMPTY_BUSINESS: PlotTemplate = { id: 'empty_business', width: 300, height: 300, type: 'business', rooms: [], furniture: [] };
 
 // 导出所有
 export const PLOTS: Record<string, PlotTemplate> = {
@@ -937,5 +935,14 @@ export const PLOTS: Record<string, PlotTemplate> = {
     'library_m': PLOT_LIBRARY_M,
     'library_l': PLOT_LIBRARY_L,
     'gym_center': PLOT_GYM_S, // Add gym mapping
-    'default_empty': { id: 'default_empty', width: 170, height: 170, type: 'public', rooms: [], furniture: [] }
+    
+    // 基础空地
+    'default_empty': { id: 'default_empty', width: 170, height: 170, type: 'public', rooms: [], furniture: [] },
+    
+    // [新增] 带类型的空地，供自定义使用
+    'empty_hospital': PLOT_EMPTY_HOSPITAL,
+    'empty_school': PLOT_EMPTY_SCHOOL,
+    'empty_internet': PLOT_EMPTY_INTERNET,
+    'empty_restaurant': PLOT_EMPTY_RESTAURANT,
+    'empty_business': PLOT_EMPTY_BUSINESS,
 };
