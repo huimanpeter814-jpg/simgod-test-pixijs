@@ -119,73 +119,87 @@ const CreateSimModal: React.FC<CreateSimModalProps> = ({ onClose }) => {
     };
 
     // === [核心修复] 预加载与重绘机制 ===
+    // 替代原有的加载检查逻辑
     useEffect(() => {
         let isActive = true;
-        const paths = [currentSim?.appearance?.body, currentSim?.appearance?.outfit, currentSim?.appearance?.hair];
-        
-        // 简单轮询检查图片是否加载完成，如果未完成则等待
-        // 配合修复后的 getAsset，这不会造成内存泄漏
-        const checkLoaded = () => {
+        const paths = [
+            currentSim?.appearance?.body, 
+            currentSim?.appearance?.outfit, 
+            currentSim?.appearance?.hair
+        ].filter(Boolean) as string[];
+
+        const checkAndTrigger = () => {
             if (!isActive) return;
-            let allLoaded = true;
-            for (const p of paths) {
-                if (p) {
-                    const img = getAsset(p);
-                    if (!img || !img.complete || img.naturalWidth === 0) allLoaded = false;
-                }
-            }
+            // 检查是否所有图片都已加载完成
+            const allLoaded = paths.every(p => {
+                const img = getAsset(p);
+                return img && img.complete && img.naturalWidth > 0;
+            });
+
             if (allLoaded) {
                 setTick(t => t + 1); // 触发重绘
             } else {
-                requestAnimationFrame(checkLoaded); // 继续等待
+                // 如果没加载完，等待 100ms 再查，而不是用 requestAnimationFrame
+                setTimeout(checkAndTrigger, 100); 
             }
         };
-        checkLoaded();
+
+        checkAndTrigger();
         return () => { isActive = false; };
     }, [currentSim?.appearance]);
 
     // === [核心修复] 绘制全身 ===
+    // === [修改后的核心绘制逻辑] ===
+// 在 CreateSimModal.tsx 中修改渲染逻辑
     useEffect(() => {
         if (!currentSim) return;
         const ctx = canvasRef.current?.getContext('2d');
         if (!ctx) return;
 
+        // 1. 清除画布
         ctx.clearRect(0, 0, 300, 400);
-        ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingEnabled = false; // 保持像素感
 
-        // 参数调整：确保全身显示
-        const centerX = 150;
-        const centerY = 200; 
-        const scale = 6; // 48px * 6 = 288px 高
+        // 2. 设置参数
+        // 画布宽度 300，高度 400
+        // 人物素材 48x48
+        const scale = 6;      // 48 * 6 = 288 像素高
+        const centerX = 150;  // 画布水平中心
+        const groundY = 360;  // 设定“地面”在画布靠下的位置（留 40 像素边距）
 
         ctx.save();
-        ctx.translate(centerX, centerY);
+        
+        // 3. 先平移到地面中心点
+        ctx.translate(centerX, groundY);
+        
+        // 4. 进行缩放
         ctx.scale(scale, scale);
 
         const drawFullBodyLayer = (path: string) => {
             if (!path) return;
             const img = getAsset(path);
             if (img && img.complete && img.naturalWidth > 0) {
-                // 绘制完整的 48x48 图像，不做任何裁剪
-                // 居中绘制：-24, -24
-                ctx.drawImage(img, 0, 0, 48, 48, -24, -24, 48, 48);
+                // 【关键修改】
+                // x: -24 是为了让 48 宽的素材水平居中 (-24 到 +24)
+                // y: -48 是为了让 48 高的素材完全在地面上方 (-48 到 0)
+                ctx.drawImage(img, 0, 0, 48, 48, -24, -48, 48, 48);
             }
         };
 
-        // 按顺序叠加
+        // 5. 按层绘制
         drawFullBodyLayer(currentSim.appearance.body);
         drawFullBodyLayer(currentSim.appearance.outfit);
         drawFullBodyLayer(currentSim.appearance.hair);
 
-        // 脚底阴影
+        // 6. 绘制脚底阴影（直接在原点绘制）
         ctx.globalCompositeOperation = 'destination-over';
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
-        ctx.ellipse(0, 22, 10, 3, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, -2, 12, 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
-    }, [currentSim, tick]); // 依赖 tick 确保加载完成后重绘
+    }, [currentSim, tick]);
 
     // 初始化随机
     useEffect(() => { if (!currentSim.appearance?.body) randomizeVisuals(); }, []);
