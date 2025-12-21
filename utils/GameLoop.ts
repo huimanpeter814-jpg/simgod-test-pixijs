@@ -20,7 +20,7 @@ export const gameLoopStep = (dt: number = 1) => {
     // A. 移动逻辑 (保持流畅)
     // 注意：这里我们让移动速度也稍微适配一下慢节奏，防止人走得太快像瞬移
     // 如果觉得人走得太慢，可以把 * 1.0 改成 * 1.5 或更高
-    GameStore.sims.forEach(s => s.update(dt * GameStore.time.speed * 0.5, false));
+    GameStore.sims.forEach(s => s.update(dt * GameStore.time.speed * 1, false));
 
     // B. 时间流速控制
     GameStore.timeAccumulator += dt * GameStore.time.speed;

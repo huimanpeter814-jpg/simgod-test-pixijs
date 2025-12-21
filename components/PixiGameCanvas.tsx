@@ -7,7 +7,7 @@ import { PixiSimView } from '../utils/render/PixiSimView';
 import { PixiWorldBuilder } from '../utils/render/PixiWorldBuilder';
 import { gameLoopStep } from '../utils/GameLoop';
 
-// 全局设置
+// 全局设置：像素风格缩放 (防止图片模糊)
 TextureStyle.defaultOptions.scaleMode = 'nearest';
 
 const lerp = (start: number, end: number, factor: number) => start + (end - start) * factor;
@@ -32,18 +32,18 @@ const PixiGameCanvasComponent: React.FC = () => {
     const [editorRefresh, setEditorRefresh] = useState(0);
     const lastMapVersion = useRef(GameStore.mapVersion || 0);
 
-    // === A. 重建场景 ===
+    // === A. 重建场景 (仅在地图结构变化时) ===
     const refreshWorld = () => {
         if (!worldContainerRef.current) return;
         const world = worldContainerRef.current;
 
-        // 1. 清理
+        // 1. 清理旧对象
         furnViewsRef.current.forEach(v => { world.removeChild(v); v.destroy({ children: true }); });
         furnViewsRef.current.clear();
         roomViewsRef.current.forEach(v => { world.removeChild(v); v.destroy(); });
         roomViewsRef.current.clear();
 
-        // 2. 地板
+        // 2. 绘制地板
         GameStore.rooms.forEach(room => {
             const g = PixiWorldBuilder.createRoom(room);
             g.zIndex = -100;
@@ -51,7 +51,7 @@ const PixiGameCanvasComponent: React.FC = () => {
             roomViewsRef.current.set(room.id, g);
         });
 
-        // 3. 家具 (使用 PixiWorldBuilder 调用 pixelArt)
+        // 3. 绘制家具
         GameStore.furniture.forEach(furn => {
             const c = PixiWorldBuilder.createFurniture(furn);
             c.zIndex = furn.y + furn.h; 
@@ -60,6 +60,7 @@ const PixiGameCanvasComponent: React.FC = () => {
         });
 
         world.sortChildren();
+        console.log(`✅ 场景更新完成`);
     };
 
     // 监听刷新
@@ -87,8 +88,6 @@ const PixiGameCanvasComponent: React.FC = () => {
             if (isCancelled) { await app.destroy(); return; }
 
             // 安全挂载 Canvas
-            // 注意：这里不要清空 innerHTML，避免破坏 React 的 DOM 结构
-            // 如果容器里已经有 canvas (React 18 双次调用)，先移除旧的
             if (containerRef.current.querySelector('canvas')) {
                 containerRef.current.innerHTML = '';
             }
@@ -102,11 +101,20 @@ const PixiGameCanvasComponent: React.FC = () => {
             app.stage.addChild(worldContainer);
             worldContainerRef.current = worldContainer;
 
-            // 加载资源
-            await loadGameAssets([...ASSET_CONFIG.bg, ...ASSET_CONFIG.bodies]); 
+            // 1. 加载资源 (关键修复：恢复所有资源加载！)
+            console.log("📥 Loading assets...");
+            await loadGameAssets([
+                ...(ASSET_CONFIG.bg || []),
+                ...(ASSET_CONFIG.bodies || []),
+                ...(ASSET_CONFIG.outfits || []), // 👈 衣服回来了
+                ...(ASSET_CONFIG.hairs || []),   // 👈 头发回来了
+                ...(ASSET_CONFIG.face || []),
+                ...(ASSET_CONFIG.clothes || []),
+                ...(ASSET_CONFIG.pants || [])
+            ]);
             setLoading(false);
 
-            // 背景图
+            // 2. 恢复背景图
             const bgPath = ASSET_CONFIG.bg?.[0];
             if (bgPath) {
                 const bg = Sprite.from(bgPath);
@@ -125,7 +133,7 @@ const PixiGameCanvasComponent: React.FC = () => {
                 worldContainer.y = (app.screen.height / 2) - target.y;
             }
 
-            // 游戏循环
+            // 3. 游戏循环
             app.ticker.add((ticker) => {
                 const dt = ticker.deltaTime;
                 gameLoopStep(dt);
@@ -265,7 +273,7 @@ const PixiGameCanvasComponent: React.FC = () => {
                 onWheel={handleWheel}
                 onContextMenu={e => e.preventDefault()}
             />
-            {/* 修复：使用 opacity 控制显隐，而不是条件渲染，防止 React 移除节点导致崩溃 */}
+            {/* 使用 CSS 控制显隐，避免 DOM 报错 */}
             <div className={`absolute inset-0 flex items-center justify-center text-white bg-black/80 z-50 transition-opacity duration-500 ${loading ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                 LOADING...
             </div>

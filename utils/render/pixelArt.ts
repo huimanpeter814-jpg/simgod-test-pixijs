@@ -336,59 +336,58 @@ export function drawAvatarHead(
     y: number, 
     size: number, 
     sim: SimData,
-    renderLayer: 'all' | 'back' | 'front' = 'all'
+    renderLayer: 'all' | 'back' | 'front' = 'all' // 此参数在图片模式下意义不大，保留兼容性
 ) {
-    let s = size;
+    // 基础尺寸是 48x48 (素材尺寸)
+    // size 参数通常是期望的半径或一半大小，我们需要计算缩放比例
+    // 假设目标是绘制一个完整的头像区域
+    
+    const bodyImg = getAsset(sim.appearance.body);
+    const outfitImg = getAsset(sim.appearance.outfit);
     const hairImg = getAsset(sim.appearance.hair);
-    const faceImg = getAsset(sim.appearance.face);
 
-    const hash = sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const styleIndex = hash % 17;
+    // === 核心修改：只截取头部区域 ===
+    // 假设 48x48 素材中，头部位于上方中间
+    // sourceX/Y/W/H: 在原图上裁剪的区域 (头部框)
+    const srcX = 15; 
+    const srcY = 10;  
+    const srcS = 50; // 截取 20x20 像素的头部区域
 
-    // --- 第一层：后发 ---
+    // destX/Y/W/H: 在画布上绘制的区域 (放大显示)
+    const destSize = size * 2.5; // 根据传入的半径 size 放大填充
+    const destX = x - destSize / 2;
+    const destY = y - destSize / 2;
+
+    // 辅助绘制函数
+    const drawLayer = (img: HTMLImageElement | null) => {
+        if (img) {
+            ctx.imageSmoothingEnabled = false; // 保持像素清晰
+            // 参数详解: 图片, 裁剪X, 裁剪Y, 裁剪宽, 裁剪高, 绘制X, 绘制Y, 绘制宽, 绘制高
+            ctx.drawImage(img, srcX, srcY, srcS, srcS, destX, destY, destSize, destSize);
+        }
+    };
+
     if (renderLayer === 'all' || renderLayer === 'back') {
-        if (!hairImg) {
-            drawPixelHair(ctx, x, y, s, sim.hairColor, styleIndex, sim.ageStage, 'back');
-        }
+        drawLayer(bodyImg);
     }
-
-    if (renderLayer === 'back') return;
-
-    // --- 第二层：脸部 ---
-    if (faceImg) {
-        ctx.drawImage(faceImg, x - s, y - s, s * 2, s * 2);
-    } else {
-        ctx.fillStyle = sim.skinColor;
-        // 脸型改为伪圆角矩形
-        drawPseudoRoundRect(ctx, x - s, y - s, s * 2, s * 2, sim.skinColor);
-
-        ctx.fillStyle = '#121212';
-        const eyeSize = Math.max(2, s * 0.15);
-        const eyeOffset = s * 0.45;
-        const eyeyOffset = s * 0.2;
-        ctx.fillRect(x - eyeOffset, y + eyeyOffset, eyeSize, eyeSize);     
-        ctx.fillRect(x + eyeOffset - eyeSize, y + eyeyOffset, eyeSize, eyeSize); 
-        
-        if (sim.ageStage === 'Toddler' || sim.ageStage === 'Child' || sim.gender === 'F') {
-            ctx.fillStyle = 'rgba(255, 100, 100, 0.31)';
-            ctx.fillRect(x - eyeOffset - 2, y + 6, 4, 2);
-            ctx.fillRect(x + eyeOffset - 2, y + 6, 4, 2);
-        }
-        
-        if (sim.ageStage === 'Elder') {
-            ctx.fillStyle = 'rgba(0,0,0,0.1)';
-            ctx.fillRect(x - s + 4, y + 8, 4, 1);
-            ctx.fillRect(x + s - 8, y + 8, 4, 1);
-        }
-    }
-
-    // --- 第三层：前发 ---
+    
     if (renderLayer === 'all' || renderLayer === 'front') {
-        if (hairImg) {
-            ctx.drawImage(hairImg, x - s-(s*0.25), y - s - (s * 0.3), s * 2.5, s * 2.5);
-        } else {
-            drawPixelHair(ctx, x, y, s, sim.hairColor, styleIndex, sim.ageStage, 'front');
-        }
+        drawLayer(outfitImg);
+        drawLayer(hairImg);
+    }
+
+    // 兜底逻辑：如果没有图片，画一个带问号的圆圈
+    if (!bodyImg && !outfitImg && !hairImg) {
+        ctx.fillStyle = sim.skinColor || '#cccccc';
+        ctx.beginPath();
+        ctx.arc(x, y, size * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText("?", x, y);
     }
 }
 
