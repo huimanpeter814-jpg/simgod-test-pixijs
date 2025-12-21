@@ -165,20 +165,41 @@ export class CommutingState extends BaseState {
     phase: 'to_plot' | 'to_station' = 'to_station';
     enter(sim: Sim) {
         sim.path = [];
+        
+        // 1. 尝试找具体的工位（椅子/设备）
         const station = this.findWorkstation(sim);
+        
         if (station) {
             this.phase = 'to_station';
+            // 目标设为椅子前方
             sim.target = { x: station.x + station.w/2, y: station.y + station.h + 5 };
             sim.interactionTarget = { ...station, utility: 'work' };
             sim.say("去工位...", 'act');
-        } else if (sim.workplaceId) {
+        } 
+        else if (sim.workplaceId) {
+            // 2. [重要保底] 找不到工位，但知道公司在哪，就去公司中心发呆
             this.phase = 'to_plot';
             const plot = GameStore.worldLayout.find(p => p.id === sim.workplaceId);
             if (plot) {
-                sim.target = { x: plot.x + (plot.width||300)/2 + (Math.random()-0.5)*50, y: plot.y + (plot.height||300)/2 + (Math.random()-0.5)*50 };
+                // 随机走到地块内部区域
+                sim.target = { 
+                    x: plot.x + (plot.width || 300) / 2 + (Math.random() - 0.5) * 50, 
+                    y: plot.y + (plot.height || 300) / 2 + (Math.random() - 0.5) * 50 
+                };
+                // 既然没有椅子，就不设置 interactionTarget，让他走到后进入 Idle 或 Working 状态
+                sim.interactionTarget = null; 
                 sim.say("去单位...", 'act');
-            } else { sim.say("公司倒闭了?!", 'bad'); sim.changeState(new IdleState()); }
-        } else { sim.say("开始搬砖", 'act'); sim.changeState(new WorkingState()); }
+            } else {
+                // ID失效的情况
+                sim.say("公司好像消失了...", 'bad');
+                sim.changeState(new IdleState());
+            }
+        } 
+        else { 
+            // 3. 彻底没地方去
+            sim.say("不知道去哪上班...", 'bad'); 
+            sim.changeState(new IdleState()); // 或者 WorkingState 原地干活
+        }
     }
     update(sim: Sim, dt: number) {
         super.update(sim, dt);

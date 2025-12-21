@@ -404,7 +404,23 @@ export class GameStore {
             
             this.worldGrid.insert({ id: f.id, x: f.x, y: f.y, w: f.w, h: f.h, type: 'furniture', ref: f });
 
-            const ownerPlot = this.worldLayout.find(p => f.id.startsWith(p.id));
+            // 查找该家具属于哪个地块
+            // 1. 优先尝试 ID 匹配 (性能最快)
+            let ownerPlot = this.worldLayout.find(p => f.id.startsWith(p.id));
+            
+            // 2. 如果 ID 不匹配 (例如是 custom_ 开头的放置物)，则进行【坐标判定】
+            if (!ownerPlot) {
+                // 计算家具中心点
+                const cx = f.x + f.w / 2;
+                const cy = f.y + f.h / 2;
+                
+                ownerPlot = this.worldLayout.find(p => {
+                    const pw = p.width || 300; // 如果未定义宽度，使用默认值
+                    const ph = p.height || 300;
+                    return cx >= p.x && cx < p.x + pw && 
+                        cy >= p.y && cy < p.y + ph;
+                });
+            }
             if (ownerPlot) {
                 if (!this.furnitureByPlot.has(ownerPlot.id)) {
                     this.furnitureByPlot.set(ownerPlot.id, []);

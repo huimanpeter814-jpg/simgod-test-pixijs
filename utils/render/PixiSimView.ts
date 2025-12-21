@@ -71,7 +71,7 @@ export class PixiSimView {
         // 4. 气泡
         this.bubbleContainer = new Container();
         this.bubbleContainer.visible = false; 
-        this.bubbleContainer.y = -60; // 调整气泡高度
+        this.bubbleContainer.y = -80; // 调整气泡高度
         this.bubbleBg = new Graphics();
         this.bubbleContainer.addChild(this.bubbleBg);
         this.bubbleText = new Text({ text: '', style: { fontFamily: 'Arial', fontSize: 16, fill: 0x000000, align: 'center', wordWrap: true, wordWrapWidth: 120 } });
@@ -86,6 +86,12 @@ export class PixiSimView {
         this.updateLayerTexture(this.bodySprite, sim.appearance.body, 'body');
         this.updateLayerTexture(this.outfitSprite, sim.appearance.outfit, 'outfit');
         this.updateLayerTexture(this.hairSprite, sim.appearance.hair, 'hair');
+        // ✨ 核心修改：应用头发颜色
+        if (sim.hairColor) {
+            this.hairSprite.tint = sim.hairColor;
+        } else {
+            this.hairSprite.tint = 0xFFFFFF;
+        }
     }
 
     private updateLayerTexture(sprite: Sprite, path: string, type: 'body' | 'outfit' | 'hair') {

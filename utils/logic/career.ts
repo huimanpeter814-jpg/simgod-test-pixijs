@@ -145,79 +145,104 @@ export const CareerLogic = {
         if (sim.traits.includes('懒惰')) sim.commutePreTime = 5;
         if (sim.traits.includes('洁癖')) sim.commutePreTime += 20;
     },
-
     bindWorkplace(sim: Sim) {
-        let targetPlotTemplateId = 'work';
-        let customNameKeyword = '';
-
+        // 1. 定义：当前职业需要寻找什么类型的地块？
+        // 默认去办公楼 ('work')
+        let targetType = 'work';
+        
+        // 特殊职业的类型映射
         switch (sim.job.companyType) {
-            case JobType.School:
-                if (sim.job.id.includes('high')) targetPlotTemplateId = 'high_school';
-                else if (sim.job.id.includes('elem')) targetPlotTemplateId = 'elementary';
-                else targetPlotTemplateId = 'kindergarten';
-                break;
             case JobType.Hospital:
-                targetPlotTemplateId = 'hospital_l';
+                targetType = 'hospital'; // 只要地块属性是 hospital 即可，不再管是 hospital_l 还是 hospital_s
                 break;
+                
+            case JobType.School:
+                // 学校可能还是需要细分，防止幼儿园老师跑去大学
+                if (sim.job.id.includes('high')) targetType = 'high_school';
+                else if (sim.job.id.includes('elem')) targetType = 'elementary_school';
+                else targetType = 'kindergarten';
+                break;
+
             case JobType.ElderCare:
-                targetPlotTemplateId = 'any'; 
-                customNameKeyword = '养老';
+                targetType = 'elder_care'; // 建议在 constants 或 plots 里统一定义这些类型
                 break;
+
+            case JobType.Library:
+                targetType = 'library';
+                break;
+
             case JobType.Nightlife:
-                targetPlotTemplateId = 'any';
-                customNameKeyword = '夜'; 
+                targetType = 'bar'; // 或者 'nightclub'
                 break;
+
             case JobType.Restaurant:
-            case JobType.Store:
-                targetPlotTemplateId = 'any'; 
+                targetType = 'restaurant';
                 break;
-            default:
-                targetPlotTemplateId = 'work'; 
+
+            case JobType.Store:
+                targetType = 'commercial';
+                break;
+
+            // 互联网、设计、商业等默认去 'work' (办公楼)
+            case JobType.Internet:
+            case JobType.Design:
+            case JobType.Business:
+                targetType = 'work';
                 break;
         }
 
+        // 2. 搜索地块：支持系统默认地块 AND 玩家自定义地块
         const potentialWorkplaces = GameStore.worldLayout.filter(p => {
-            let isMatch = false;
-            
-            // [修复] 优先使用实例的自定义类型，如果未定义，则查找模板定义的类型
-            // 解决默认地图中 plot 实例缺少 customType 导致匹配失败的问题
-            const plotType = p.customType || PLOTS[p.templateId]?.type || 'public';
+            // [关键] 获取地块的最终类型
+            // 优先级：玩家自定义类型 (customType) > 模板默认类型 (PLOTS配置) > 默认为公共场所
+            // 这样玩家只要把地皮属性改为 'hospital'，customType 就会生效
+            const actualPlotType = p.customType || PLOTS[p.templateId]?.type || 'public';
 
-            if (targetPlotTemplateId !== 'any' && targetPlotTemplateId !== 'work') {
-                isMatch = p.templateId === targetPlotTemplateId;
+            // 规则A：精确匹配类型 (例如医生必须去医院)
+            if (actualPlotType === targetType) {
+                return true;
             }
-            else if (customNameKeyword && p.customName && p.customName.includes(customNameKeyword)) {
-                isMatch = true;
+
+            // 规则B：兼容性匹配 (防止因为类型定义太细找不到工作)
+            // 例如：如果是去 'commercial' (商店)，那么 'restaurant' (餐厅) 或 'market' (市场) 可能也凑合
+            if (targetType === 'commercial' && (actualPlotType === 'restaurant' || actualPlotType === 'market')) {
+                return true;
             }
-            else if (targetPlotTemplateId === 'work' || (sim.job.companyType === JobType.Store)) {
-                if (sim.job.companyType === JobType.Internet || sim.job.companyType === JobType.Design || sim.job.companyType === JobType.Business) {
-                    isMatch = plotType === 'work';
-                } else {
-                    isMatch = plotType === 'commercial';
+            
+            // 规则C：办公类职业的宽容匹配
+            // 如果目标是 'work' (办公)，那么去 'tech_park' (科技园) 或 'office' (写字楼) 都可以
+            if (targetType === 'work' && (actualPlotType === 'tech_park' || actualPlotType === 'office')) {
+                return true;
+            }
+
+            return false;
+        });
+
+        // 3. 优选：在符合类型的地块中，优先选有电脑/椅子的
+        // (保持之前的防呆逻辑，确保即使没家具也能分配)
+        if (potentialWorkplaces.length > 0) {
+            let finalCandidates = potentialWorkplaces;
+            const requiredTags = sim.job.requiredTags;
+
+            // 尝试找出设施完善的地块
+            if (requiredTags && requiredTags.length > 0) {
+                const withFurniture = potentialWorkplaces.filter(p => {
+                    const furnitureInPlot = GameStore.furnitureByPlot.get(p.id) || [];
+                    return furnitureInPlot.some(f => hasRequiredTags(f, requiredTags));
+                });
+                if (withFurniture.length > 0) {
+                    finalCandidates = withFurniture;
                 }
             }
 
-            if (!isMatch) return false;
-
-            // [修复] 关键：检查该地皮是否真的有符合岗位需求的家具！
-            // 防止互联网公司分配到没有电脑的办公楼
-            const requiredTags = sim.job.requiredTags;
-            if (requiredTags && requiredTags.length > 0) {
-                const furnitureInPlot = GameStore.furnitureByPlot.get(p.id) || [];
-                const hasValidFurniture = furnitureInPlot.some(f => hasRequiredTags(f, requiredTags));
-                if (!hasValidFurniture) return false; // 地皮没有对应设备，不能作为工作地点
-            }
-
-            return true;
-        });
-
-        if (potentialWorkplaces.length > 0) {
-            const workplace = potentialWorkplaces[Math.floor(Math.random() * potentialWorkplaces.length)];
+            // 随机分配一个
+            const workplace = finalCandidates[Math.floor(Math.random() * finalCandidates.length)];
             sim.workplaceId = workplace.id;
             this.updateColleagues(sim, workplace.id);
+            // console.log(`[Career] ${sim.name} assigned to ${workplace.customName || workplace.templateId} (Type: ${targetType})`);
         } else {
             sim.workplaceId = undefined;
-            // sim.say("公司好像还没建好...", 'bad'); 
+            // sim.say(`找不到 ${targetType} 类型的地方上班...`, 'bad');
         }
     },
 
