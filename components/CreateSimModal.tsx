@@ -178,47 +178,55 @@ useEffect(() => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.imageSmoothingEnabled = false; 
 
-    const scale = 6;      
+    const scale = 4.5;      
     const centerX = canvas.width / 2;
-    const groundY = canvas.height * 0.9; // 底部留出一点空间
+    const groundY = canvas.height; // 底部留出一点空间
 
     // 内部绘制函数：支持染色
     const drawLayer = (path: string, tintColor?: string) => {
-        if (!path) return;
-        const img = getAsset(path);
-        if (!img || !img.complete || img.naturalWidth === 0) return;
+            if (!path) return;
+            const img = getAsset(path);
+            if (!img || !img.complete || img.naturalWidth === 0) return;
 
-        ctx.save();
-        ctx.translate(centerX, groundY);
-        ctx.scale(scale, scale);
+            // 获取图片原始宽高 [修复]
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
 
-        // [修改] 如果颜色是 #ffffff，跳过染色步骤，直接绘制原图
-        if (tintColor && tintColor !== 'transparent' && tintColor.toLowerCase() !== '#ffffff') {
-            const offscreen = document.createElement('canvas');
-            offscreen.width = 48;
-            offscreen.height = 48;
-            const oCtx = offscreen.getContext('2d');
-            if (oCtx) {
-                oCtx.imageSmoothingEnabled = false;
-                // A. 绘制原始素材
-                oCtx.drawImage(img, 0, 0, 48, 48);
-                // B. 使用正片叠底模式染色
-                oCtx.globalCompositeOperation = 'multiply';
-                oCtx.fillStyle = tintColor;
-                oCtx.fillRect(0, 0, 48, 48);
-                // C. 保持原始透明度
-                oCtx.globalCompositeOperation = 'destination-in';
-                oCtx.drawImage(img, 0, 0, 48, 48);
-                
-                // 绘制染色后的结果
-                ctx.drawImage(offscreen, -24, -48, 48, 48);
+            ctx.save();
+            ctx.translate(centerX, groundY);
+            ctx.scale(scale, scale);
+
+            // [修改] 如果颜色是 #ffffff，跳过染色步骤，直接绘制原图
+            if (tintColor && tintColor !== 'transparent' && tintColor.toLowerCase() !== '#ffffff') {
+                const offscreen = document.createElement('canvas');
+                // 动态设置缓冲画布尺寸 [修复]
+                offscreen.width = w;
+                offscreen.height = h;
+                const oCtx = offscreen.getContext('2d');
+                if (oCtx) {
+                    oCtx.imageSmoothingEnabled = false;
+                    // A. 绘制原始素材 (完整绘制，不裁剪) [修复]
+                    oCtx.drawImage(img, 0, 0);
+                    
+                    // B. 使用正片叠底模式染色
+                    oCtx.globalCompositeOperation = 'multiply';
+                    oCtx.fillStyle = tintColor;
+                    oCtx.fillRect(0, 0, w, h);
+                    
+                    // C. 保持原始透明度
+                    oCtx.globalCompositeOperation = 'destination-in';
+                    oCtx.drawImage(img, 0, 0);
+                    
+                    // 绘制染色后的结果 (居中对齐脚底) [修复]
+                    // 假设图片中心线对齐 X 轴，底部对齐 Y 轴
+                    ctx.drawImage(offscreen, -w / 2, -h);
+                }
+            } else {
+                // 无需染色直接绘制原始图片 (完整绘制) [修复]
+                ctx.drawImage(img, -w / 2, -h);
             }
-        } else {
-            // 无需染色直接绘制
-            ctx.drawImage(img, 0, 0, 48, 48, -24, -48, 48, 48);
-        }
-        ctx.restore();
-    };
+            ctx.restore();
+        };
 
     // 2. 绘制脚底阴影
     ctx.save();
