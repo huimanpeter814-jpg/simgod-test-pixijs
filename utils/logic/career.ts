@@ -301,7 +301,36 @@ export const CareerLogic = {
         const isVacationMonth = sim.job.vacationMonths?.includes(currentMonth);
         const isPublicHoliday = holiday && (holiday.type === 'traditional' || holiday.type === 'break');
 
-        if (isPublicHoliday || isVacationMonth) return;
+        // === [新增] 教师寒暑假逻辑 ===
+        let isTeacherBreak = false;
+        if (sim.job.companyType === JobType.School) {
+            // 排除幼儿园老师 (根据职称或ID判断)
+            const isKindergarten = sim.job.id.includes('kindergarten') || sim.job.title.includes('幼') || sim.job.title.includes('保育');
+            
+            if (!isKindergarten) {
+                // 1,2月寒假; 7,8月暑假
+                if ([1, 2, 7, 8].includes(currentMonth)) {
+                    isTeacherBreak = true;
+                    // 5% 概率值班，不放假
+                    if (Math.random() < 0.002) { // 每分钟检测，概率要设极低，或者用 persistent flag (这里简单处理：只要触发一次上班状态就会持续到下班)
+                        // 实际上 checkSchedule 是高频调用的，用随机数做入口控制不太稳。
+                        // 更好的做法是：如果是假期，直接 isTeacherBreak = true。
+                        // 只有当 sim 身上有 "on_duty" buff 时才允许上班。
+                        // 简化版：这里直接强制放假。
+                    }
+                }
+            }
+        }
+        // [优化] 如果是假期，且正在工作，必须强制下班，不能直接 return
+        if (isPublicHoliday || isVacationMonth || isTeacherBreak) {
+            if (sim.action === SimAction.Working || sim.action === SimAction.Commuting) {
+                // 只有非值班状态才下班 (如果有值班逻辑可在此扩展)
+                this.offWork(sim);
+                if (isTeacherBreak) sim.say("寒暑假快乐！🏖️", 'act');
+                else sim.say("放假咯！", 'act');
+            }
+            return;
+        }
 
         const currentHour = GameStore.time.hour + GameStore.time.minute / 60;
         const jobStart = sim.job.startHour;

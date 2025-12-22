@@ -375,36 +375,263 @@ export class CommutingSchoolState extends BaseState {
 // 上学状态
 export class SchoolingState extends BaseState {
     actionName = SimAction.Schooling;
-    wanderTimer = 0;
+    decisionTimer = 0;
+    isInteracting = false;
+
+    enter(sim: Sim) {
+        sim.target = null;
+        sim.path = [];
+        this.decisionTimer = 60;
+    }
+
     update(sim: Sim, dt: number) {
-        sim.needs[NeedType.Fun] -= 0.002 * dt;
-        sim.skills.logic += 0.002 * dt;
+        // 1. 基础数值变化
+        sim.needs[NeedType.Fun] -= 0.001 * dt; 
+        sim.skills.logic += 0.003 * dt; 
+        
+        // 2. 移动中
         if (sim.target) {
             const arrived = sim.moveTowardsTarget(dt);
-            if (arrived && sim.interactionTarget) { sim.actionTimer = 200; sim.target = null; }
-            return;
-        }
-        if (sim.actionTimer > 0) { sim.actionTimer -= dt; return; }
-        this.wanderTimer -= dt;
-        if (this.wanderTimer <= 0) {
-            this.wanderTimer = 300 + Math.random() * 300; 
-            let schoolType = 'high_school';
-            if (sim.ageStage === AgeStage.Child) schoolType = 'elementary';
-            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) schoolType = 'kindergarten';
-            const plot = GameStore.worldLayout.find(p => p.templateId === schoolType);
-            if (plot) {
-                const w = plot.width || 300;
-                const h = plot.height || 300;
-                if (Math.random() > 0.5) {
-                    const area = { minX: plot.x, maxX: plot.x + w, minY: plot.y, maxY: plot.y + h };
-                    SchoolLogic.findObjectInArea(sim, 'play', area); 
-                } else {
-                    const tx = plot.x + 20 + Math.random() * (w - 40);
-                    const ty = plot.y + 20 + Math.random() * (h - 40);
-                    sim.target = { x: tx, y: ty };
+            if (arrived) {
+                sim.target = null;
+                this.isInteracting = true;
+                sim.actionTimer = 300 + Math.random() * 300; 
+                
+                if (sim.interactionTarget) {
+                    // === 差异化互动气泡 ===
+                    if (sim.interactionTarget.type === 'human') {
+                        this.doSocialInteraction(sim, sim.interactionTarget.ref);
+                    } else {
+                        // 玩设施/学习
+                        this.doObjectInteraction(sim, sim.interactionTarget);
+                    }
                 }
             }
+            return;
         }
+
+        // 3. 互动中
+        if (this.isInteracting) {
+            sim.actionTimer -= dt;
+            if (sim.actionTimer <= 0) {
+                this.isInteracting = false;
+                this.decisionTimer = 100 + Math.random() * 100; 
+                sim.interactionTarget = null;
+            }
+            return;
+        }
+
+        // 4. 决策
+        this.decisionTimer -= dt;
+        if (this.decisionTimer <= 0) {
+            this.makeDecision(sim);
+        }
+    }
+
+    private doSocialInteraction(sim: Sim, target: Sim) {
+        let topics: string[] = [];
+        sim.needs[NeedType.Social] += 20;
+
+        if (sim.ageStage === AgeStage.Teen) {
+            topics = ["周末去哪玩？", "听说隔壁班...", "这题太难了", "好困啊...", "那个谁好帅/美", "借我笔记抄抄"];
+            // 中学生社交稍微恢复一点娱乐
+            sim.needs[NeedType.Fun] += 10;
+        } else if (sim.ageStage === AgeStage.Child) {
+            topics = ["作业写完没？", "放学去探险！", "你是笨蛋 😝", "老师来了！", "换卡片吗？"];
+            sim.needs[NeedType.Fun] += 15;
+        } else {
+            // 幼儿园
+            topics = ["老师看我！", "抱抱~", "给你糖", "一起玩！", "我要妈妈..."];
+            sim.needs[NeedType.Fun] += 20;
+        }
+
+        // 如果对象是老师(成年人)，覆盖话题
+        if (target.ageStage >= AgeStage.Adult) {
+            if (sim.ageStage === AgeStage.Teen) topics = ["老师，这题怎么做？", "作业忘带了...", "下次不敢了"];
+            else if (sim.ageStage === AgeStage.Child) topics = ["老师我要上厕所！", "他打我！", "作业本丢了"];
+            else topics = ["老师抱抱~", "肚肚饿...", "我要回家"];
+        }
+
+        sim.say(topics[Math.floor(Math.random() * topics.length)], 'social');
+    }
+
+    private doObjectInteraction(sim: Sim, target: any) {
+        if (sim.ageStage === AgeStage.Teen) {
+            if (target.utility === 'book' || target.label?.includes('书')) {
+                sim.say("突击复习...", 'act');
+                sim.skills.logic += 0.5; // 学习加成
+            } else if (target.utility === 'gym' || target.utility === 'run') {
+                sim.say("挥洒汗水！", 'act');
+                sim.needs[NeedType.Fun] += 20;
+            } else {
+                sim.say("摸鱼中...", 'sys');
+                sim.needs[NeedType.Fun] += 10;
+            }
+        } else {
+            sim.say("好玩！", 'fun');
+            sim.needs[NeedType.Fun] += 30;
+        }
+    }
+
+    private makeDecision(sim: Sim) {
+        // 1. 确定学校类型和地块
+        let schoolType = 'kindergarten';
+        if (sim.ageStage === AgeStage.Child) schoolType = 'elementary';
+        else if (sim.ageStage === AgeStage.Teen) schoolType = 'high_school';
+
+        const plot = GameStore.worldLayout.find(p => p.templateId === schoolType);
+        
+        if (!plot) { this.decisionTimer = 200; return; }
+
+        const area = {
+            minX: plot.x + 20,
+            maxX: plot.x + (plot.width || 300) - 20,
+            minY: plot.y + 20,
+            maxY: plot.y + (plot.height || 300) - 20
+        };
+
+        // 跑出界了就回来
+        if (sim.pos.x < area.minX || sim.pos.x > area.maxX || sim.pos.y < area.minY || sim.pos.y > area.maxY) {
+            sim.target = { x: (area.minX + area.maxX) / 2, y: (area.minY + area.maxY) / 2 };
+            return;
+        }
+
+        // === 差异化行为逻辑 ===
+        if (sim.ageStage === AgeStage.Teen) {
+            this.decideForTeen(sim, plot, area);
+        } else if (sim.ageStage === AgeStage.Child) {
+            this.decideForChild(sim, plot, area);
+        } else {
+            this.decideForKindergarten(sim, plot, area);
+        }
+    }
+
+    // 中学生行为模式
+    private decideForTeen(sim: Sim, plot: any, area: any) {
+        const rand = Math.random();
+        
+        // 40% 社交 (更喜欢找同龄人聊天/早恋)
+        if (rand < 0.4) {
+            if (this.findPeerToInteract(sim, area)) return;
+        }
+        
+        // 30% 学习/休息 (找书架、桌子、长椅、贩卖机)
+        if (rand < 0.7) {
+            const props = GameStore.furnitureByPlot.get(plot.id)?.filter(f => 
+                f.utility === 'book' || f.label.includes('书') || 
+                f.label.includes('桌') || f.label.includes('椅') || 
+                f.utility === 'vending'
+            ) || [];
+            if (props.length > 0) {
+                this.goToObject(sim, props);
+                return;
+            }
+        }
+
+        // 20% 运动 (如果操场有篮球架或跑道)
+        if (rand < 0.9) {
+            const sports = GameStore.furnitureByPlot.get(plot.id)?.filter(f => 
+                f.utility === 'gym' || f.utility === 'run' || f.label.includes('球')
+            ) || [];
+            if (sports.length > 0) {
+                this.goToObject(sim, sports);
+                return;
+            }
+        }
+
+        // 10% 闲逛
+        this.wanderInArea(sim, area);
+    }
+
+    // 小学生行为模式
+    private decideForChild(sim: Sim, plot: any, area: any) {
+        const rand = Math.random();
+
+        // 40% 玩设施 (操场、滑梯)
+        if (rand < 0.4) {
+            const toys = GameStore.furnitureByPlot.get(plot.id)?.filter(f => 
+                f.utility === 'play' || f.utility === 'fun' || f.label.includes('滑梯')
+            ) || [];
+            if (toys.length > 0) {
+                this.goToObject(sim, toys);
+                return;
+            }
+        }
+
+        // 30% 找同学 (打闹)
+        if (rand < 0.7) {
+            if (this.findPeerToInteract(sim, area)) return;
+        }
+
+        // 20% 找老师 (告状/问问题)
+        if (rand < 0.9) {
+            if (this.findAdultToInteract(sim, area)) return;
+        }
+
+        this.wanderInArea(sim, area);
+    }
+
+    // 幼儿园行为模式 (保持之前的逻辑)
+    private decideForKindergarten(sim: Sim, plot: any, area: any) {
+        const rand = Math.random();
+        // 40% 玩
+        if (rand < 0.4) {
+            const toys = GameStore.furnitureByPlot.get(plot.id)?.filter(f => f.utility === 'play' || f.utility === 'fun') || [];
+            if (toys.length > 0) { this.goToObject(sim, toys); return; }
+        }
+        // 30% 找大人 (抱抱)
+        if (rand < 0.7) { if (this.findAdultToInteract(sim, area)) return; }
+        // 20% 找小朋友
+        if (rand < 0.9) { if (this.findPeerToInteract(sim, area)) return; }
+        
+        this.wanderInArea(sim, area);
+    }
+
+    // === 辅助方法 ===
+
+    private goToObject(sim: Sim, candidates: any[]) {
+        const target = candidates[Math.floor(Math.random() * candidates.length)];
+        sim.target = { x: target.x + target.w/2, y: target.y + target.h + 10 };
+        sim.interactionTarget = target;
+    }
+
+    private findPeerToInteract(sim: Sim, area: any): boolean {
+        const peers = GameStore.sims.filter(s => 
+            s.id !== sim.id && 
+            s.ageStage === sim.ageStage && // 同龄人
+            s.pos.x > area.minX && s.pos.x < area.maxX &&
+            s.pos.y > area.minY && s.pos.y < area.maxY
+        );
+        if (peers.length > 0) {
+            const peer = peers[Math.floor(Math.random() * peers.length)];
+            sim.target = { x: peer.pos.x + 20, y: peer.pos.y };
+            sim.interactionTarget = { type: 'human', ref: peer };
+            return true;
+        }
+        return false;
+    }
+
+    private findAdultToInteract(sim: Sim, area: any): boolean {
+        const adults = GameStore.sims.filter(s => 
+            s.id !== sim.id && 
+            s.ageStage >= AgeStage.Adult &&
+            s.pos.x > area.minX && s.pos.x < area.maxX &&
+            s.pos.y > area.minY && s.pos.y < area.maxY
+        );
+        if (adults.length > 0) {
+            const adult = adults[Math.floor(Math.random() * adults.length)];
+            sim.target = { x: adult.pos.x + 15, y: adult.pos.y };
+            sim.interactionTarget = { type: 'human', ref: adult };
+            return true;
+        }
+        return false;
+    }
+
+    private wanderInArea(sim: Sim, area: any) {
+        const tx = area.minX + Math.random() * (area.maxX - area.minX);
+        const ty = area.minY + Math.random() * (area.maxY - area.minY);
+        sim.target = { x: tx, y: ty };
+        this.decisionTimer = 100 + Math.random() * 200;
     }
 }
 
@@ -461,13 +688,26 @@ export class NannyState extends BaseState {
     update(sim: Sim, dt: number) {
         this.workTimer += dt;
 
-        // 家长回来检测
+        // [核心修复] 智能下班判断
+        // 1. 如果家里有家长，且工作时间足够 -> 下班 (保留)
         const parentsHome = GameStore.sims.some(s => s.homeId === sim.homeId && !s.isTemporary && s.ageStage !== AgeStage.Infant && s.ageStage !== AgeStage.Toddler && s.isAtHome());
-        
         if (parentsHome && this.workTimer > 3000) {  
             sim.say("家长回来了，那我下班啦 👋", 'sys');
             GameStore.removeSim(sim.id); 
             return; 
+        }
+        // 2. [新增] 如果家里根本没有需要照顾的孩子 (例如都上学去了)，直接下班，别傻等
+        // 获取该家庭的所有婴幼儿
+        const childrenAtHome = GameStore.sims.filter(s => 
+            s.homeId === sim.homeId && 
+            (s.ageStage === AgeStage.Infant || s.ageStage === AgeStage.Toddler) && 
+            s.isAtHome() // 关键：必须在家
+        );
+        // 如果没有孩子在家，且工作了一小会儿 (避免刚生成就消失)
+        if (childrenAtHome.length === 0 && this.workTimer > 500) {
+            sim.say("家里没人，我先撤了 👋", 'sys');
+            GameStore.removeSim(sim.id);
+            return;
         }
 
         // 🆕 [需求] 保姆必须照顾婴幼儿 (优先扫描)
@@ -525,6 +765,7 @@ export class PickingUpState extends BaseState {
     repathTimer = 0; // [优化] 减少重寻路频率
     
     enter(sim: Sim) {
+        sim.path = [];
         const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
         if (child) {
             sim.target = { x: child.pos.x, y: child.pos.y };
@@ -563,7 +804,7 @@ export class PickingUpState extends BaseState {
         // [核心修复] 判定条件：
         // 1. 距离小于 60px (3600) - 即使隔着婴儿床也能抱到
         // 2. 或者寻路系统认为已经到达 (arrived === true)，说明撞到了障碍物边缘
-        if (distSq <= 3600 || arrived) {
+        if (distSq <= 900 || arrived) {
             // === 成功接到孩子 ===
             sim.say("抓到你了！", 'family');
             
@@ -652,6 +893,7 @@ export class EscortingState extends BaseState {
         }
 
         if (arrived) {
+            let droppedAtSchool = false;
             // 到达目的地，放下孩子
             if (sim.carryingSimId) {
                 const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
@@ -681,9 +923,14 @@ export class EscortingState extends BaseState {
                 sim.carryingSimId = null;
             }
             
-            // 任务完成，家长回归空闲
+            // [核心修复] 如果保姆完成了送学任务（在学校且放下了孩子），直接消失
             if (sim.job.id === 'nanny') {
-                sim.changeState(new NannyState());
+                if (droppedAtSchool) {
+                    sim.say("送达完成，我先走了 👋", 'sys');
+                    GameStore.removeSim(sim.id);
+                } else {
+                    sim.changeState(new NannyState());
+                }
             } else {
                 sim.changeState(new IdleState());
             }

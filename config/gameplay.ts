@@ -122,7 +122,7 @@ export const JOBS: Job[] = [
     // Education (School) (需要黑板或讲台)
     { id: 'teacher_kg_intern', title: '幼教实习', level: 1, salary: 300, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard', 'desk'] },
     { id: 'teacher_kg', title: '幼师', level: 2, salary: 500, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard'] },
-    { id: 'teacher_intern', title: '实习教师', level: 1, salary: 350, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['desk'] },
+    { id: 'teacher_intern', title: '小学实习教师', level: 1, salary: 350, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['desk'] },
     { id: 'teacher_elem', title: '小学教师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard'] },
     { id: 'teacher_pe', title: '体育老师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['sports'] },
     { id: 'teacher_high', title: '中学教师', level: 3, salary: 700, startHour: 7.5, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard', 'desk'] },

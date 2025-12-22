@@ -186,7 +186,10 @@ export const SchoolLogic = {
     checkSchoolSchedule(sim: Sim) {
         if (![AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) return;
 
+        // 1. 确保能获取到配置
         const config = sim.ageStage === AgeStage.Child ? SCHOOL_CONFIG.elementary : SCHOOL_CONFIG.high_school;
+        if (!config) return; // 安全检查
+
         const currentMonth = GameStore.time.month;
         const isWinterBreak = [1, 2].includes(currentMonth);
         const isSummerBreak = [7, 8].includes(currentMonth);
@@ -195,6 +198,7 @@ export const SchoolLogic = {
         if (isSummerBreak) { if (Math.random() < 0.001) sim.say("暑假万岁！🍉", 'act'); return; }
         if (HOLIDAYS[currentMonth]?.type === 'break') return;
 
+        // 2. 确保时间判断包含 "分钟"
         const hour = GameStore.time.hour + GameStore.time.minute/60;
 
         if (hour >= config.startHour && hour < config.endHour) {

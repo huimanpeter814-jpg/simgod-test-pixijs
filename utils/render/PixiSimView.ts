@@ -117,7 +117,12 @@ export class PixiSimView {
     updatePosition(sim: Sim) {
         this.container.x = Math.round(sim.pos.x);
         this.container.y = Math.round(sim.pos.y);
-        this.container.zIndex = sim.pos.y;
+        // [修改后]：如果有被抱起的状态，强制提升层级 (zIndex + 1000)，保证在所有物体最上层
+        if (sim.carriedBySimId) {
+            this.container.zIndex = sim.pos.y + 1000;
+        } else {
+            this.container.zIndex = sim.pos.y;
+        }
 
         // 标记浮动动画
         if (this.selectionArrow.visible) {

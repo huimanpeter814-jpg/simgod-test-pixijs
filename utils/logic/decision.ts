@@ -145,9 +145,11 @@ export const DecisionLogic = {
             // 距离越近越好
             const dist = Math.sqrt(Math.pow(candidate.pos.x - sim.pos.x, 2) + Math.pow(candidate.pos.y - sim.pos.y, 2));
             score -= dist * 0.05; // 加大距离惩罚，优先选身边的父母
+            
+            // 如果父母正在工作，给予极大的负分惩罚，让他们尽量别翘班
+            if (candidate.action === SimAction.Working || candidate.action === SimAction.Commuting) score -= 1000;
 
             if (candidate.action === SimAction.Idle || candidate.action === SimAction.Wandering) score += 30;
-            if (candidate.action === SimAction.Working) score -= 50;
             return { sim: candidate, score };
         });
 
@@ -167,6 +169,22 @@ export const DecisionLogic = {
             sim.changeState(new WaitingState());
             return true;
         }
+
+        // === [新增修复] 紧急保姆召唤逻辑 ===
+        // 如果上面找不到合适的人（父母都在上班，且家里没其他人），自动召唤保姆
+        if (sim.homeId) {
+            // 检查是否已经有保姆在路上了（避免重复召唤）
+            const existingNanny = GameStore.sims.find(s => s.homeId === sim.homeId && s.job.id === 'nanny');
+            
+            if (!existingNanny) {
+                GameStore.spawnNanny(sim.homeId, 'home_care');
+                sim.say("呜呜... (等待保姆)", 'sys');
+                sim.changeState(new WaitingState());
+                return true; // 视为已处理
+            }
+        }
+        // ====================================
+
         return false;
     },
 
