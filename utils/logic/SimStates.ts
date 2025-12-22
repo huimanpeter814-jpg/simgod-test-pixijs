@@ -378,10 +378,17 @@ export class SchoolingState extends BaseState {
     decisionTimer = 0;
     isInteracting = false;
 
+    // [新增 1] 卡死检测变量
+    stuckTimer = 0;
+    lastPos = { x: 0, y: 0 };
+
     enter(sim: Sim) {
         sim.target = null;
         sim.path = [];
         this.decisionTimer = 60;
+        // [新增 1] 初始化卡死检测
+        this.stuckTimer = 0;
+        this.lastPos = { x: sim.pos.x, y: sim.pos.y };
     }
 
     update(sim: Sim, dt: number) {
@@ -390,11 +397,30 @@ export class SchoolingState extends BaseState {
         sim.skills.logic += 0.003 * dt; 
         
         // 2. 移动中
+        // 2. 移动中
         if (sim.target) {
+            // [新增 1] 卡死检测逻辑：如果位置几乎没变，就开始计时
+            const distMoved = (sim.pos.x - this.lastPos.x)**2 + (sim.pos.y - this.lastPos.y)**2;
+            if (distMoved < 0.01) {
+                this.stuckTimer += dt;
+            } else {
+                this.stuckTimer = 0;
+                this.lastPos = { x: sim.pos.x, y: sim.pos.y };
+            }
+
+            // 如果卡住超过 5秒 (约300帧)，放弃当前目标，立即重新决策
+            if (this.stuckTimer > 300) {
+                sim.target = null;
+                this.stuckTimer = 0;
+                this.decisionTimer = 0; // 归零倒计时，下一帧立刻触发 makeDecision
+                sim.say("过不去...", 'sys');
+                return;
+            }
             const arrived = sim.moveTowardsTarget(dt);
             if (arrived) {
                 sim.target = null;
                 this.isInteracting = true;
+                this.stuckTimer = 0; // 到达后重置
                 sim.actionTimer = 300 + Math.random() * 300; 
                 
                 if (sim.interactionTarget) {
@@ -573,15 +599,30 @@ export class SchoolingState extends BaseState {
 
     // 幼儿园行为模式 (保持之前的逻辑)
     private decideForKindergarten(sim: Sim, plot: any, area: any) {
+        // 1. 优先检查精力，如果困了就去睡午觉
+        const hour = GameStore.time.hour;
+        const isNapTime = hour >= 12 && hour <= 14;
+        
+        if (sim.needs[NeedType.Energy] < 40 || isNapTime) {
+            const cribs = GameStore.furnitureByPlot.get(plot.id)?.filter(f => 
+                f.utility === 'nap_crib' || f.tags?.includes('bed')
+            ) || [];
+            if (cribs.length > 0) {
+                const freeCribs = cribs.filter(c => !GameStore.sims.some(s => s.id !== sim.id && s.interactionTarget?.id === c.id));
+                if (freeCribs.length > 0) {
+                    this.goToObject(sim, freeCribs);
+                    return;
+                }
+            }
+        }
+
+        // 原有的随机行为
         const rand = Math.random();
-        // 40% 玩
         if (rand < 0.4) {
             const toys = GameStore.furnitureByPlot.get(plot.id)?.filter(f => f.utility === 'play' || f.utility === 'fun') || [];
             if (toys.length > 0) { this.goToObject(sim, toys); return; }
         }
-        // 30% 找大人 (抱抱)
         if (rand < 0.7) { if (this.findAdultToInteract(sim, area)) return; }
-        // 20% 找小朋友
         if (rand < 0.9) { if (this.findPeerToInteract(sim, area)) return; }
         
         this.wanderInArea(sim, area);
@@ -829,30 +870,34 @@ export class PickingUpState extends BaseState {
                              child.pos.y <= kindergarten.y + (kindergarten.height||300);
             
             let targetPos = { x: 0, y: 0 };
+
+            // [修复开始] 引入时间判断，防止大半夜送孩子上学
+            const currentHour = GameStore.time.hour;
+            // 幼儿园通常是 8点到17点
+            const isSchoolTime = currentHour >= 8 && currentHour < 17;
             
-            if (inSchool) {
+            if (inSchool || !isSchoolTime) {
                 // -> 回家
                 const home = sim.getHomeLocation();
                 if (home) {
                     targetPos = home;
                     sim.say("回家咯~", "family");
                 } else {
-                    // 无家可归，只能原地呆着或者去公园
                     targetPos = { x: sim.pos.x + 50, y: sim.pos.y + 50 }; 
                 }
             } else if (kindergarten) {
-                // -> 去幼儿园 (取中心点)
+                // -> 去幼儿园
                 targetPos = { 
                     x: kindergarten.x + (kindergarten.width||300)/2, 
                     y: kindergarten.y + (kindergarten.height||300)/2 
                 };
                 sim.say("去幼儿园~", "family");
             } else {
-                // 没有幼儿园？！
                 sim.say("没地方去...", "bad");
                 sim.changeState(new IdleState());
                 return;
             }
+            // [修复结束]
 
             // 4. 切换到护送状态
             sim.changeState(new EscortingState(targetPos));
