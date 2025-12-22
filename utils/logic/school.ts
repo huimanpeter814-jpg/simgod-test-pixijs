@@ -5,6 +5,7 @@ import { DecisionLogic } from './decision';
 import { SimAction, AgeStage, NeedType } from '../../types';
 import { SchoolingState, CommutingSchoolState, IdleState, PlayingHomeState, PickingUpState, WaitingState } from './SimStates';
 import { SkillLogic } from './SkillLogic'; // 🆕 引入 SkillLogic
+import { PLOTS } from '../../data/plots'; // [新增] 引入 PLOTS
 
 export const SchoolLogic = {
     findObjectInArea(sim: Sim, utility: string, area: {minX: number, maxX: number, minY: number, maxY: number}) {
@@ -25,12 +26,18 @@ export const SchoolLogic = {
         }
     },
     
-    isInSchoolArea(sim: Sim, type: string): boolean {
-        const plot = GameStore.worldLayout.find(p => p.templateId === type);
-        if (!plot) return false;
-        return (
-            sim.pos.x >= plot.x && sim.pos.x <= plot.x + (plot.width || 300) &&
-            sim.pos.y >= plot.y && sim.pos.y <= plot.y + (plot.height || 300)
+    // [核心修复] 使用 type 字段判断是否在学校区域
+    isInSchoolArea(sim: Sim, targetType: string): boolean {
+        // 1. 找到所有匹配 type 的地块
+        const validPlots = GameStore.worldLayout.filter(p => {
+            const tpl = PLOTS[p.templateId];
+            return tpl && tpl.type === targetType;
+        });
+        
+        // 2. 检查市民坐标是否在任意一个有效地块内
+        return validPlots.some(p => 
+            sim.pos.x >= p.x && sim.pos.x <= p.x + (p.width || 300) &&
+            sim.pos.y >= p.y && sim.pos.y <= p.y + (p.height || 300)
         );
     },
 
@@ -102,8 +109,17 @@ export const SchoolLogic = {
         }
     },
 
-    sendToSchool(sim: Sim, type: string): boolean {
-        const schoolPlot = GameStore.worldLayout.find(p => p.templateId === type);
+    sendToSchool(sim: Sim, schoolType: string): boolean {
+        // [核心修复] 根据 type 查找学校
+        const schoolPlot = GameStore.worldLayout.find(p => {
+            const tpl = PLOTS[p.templateId];
+            // 注意：SchoolSchedule 传进来的 id 是 'elementary'，但 plots 里的 type 是 'elementary_school'
+            // 这里做个简单映射，或者由调用方保证传对
+            if (schoolType === 'elementary') return tpl && tpl.type === 'elementary_school';
+            if (schoolType === 'high_school') return tpl && tpl.type === 'high_school';
+            return tpl && tpl.type === schoolType;
+        });
+
         if (!schoolPlot) return false;
 
         const targetRoom = GameStore.rooms.find(r => r.id.startsWith(`${schoolPlot.id}_`));
@@ -118,36 +134,8 @@ export const SchoolLogic = {
             targetY = schoolPlot.y + h / 2;
         }
 
-        if (type === 'kindergarten') {
-            const parents = GameStore.sims.filter(s => 
-                (s.id === sim.fatherId || s.id === sim.motherId) &&
-                !s.isTemporary &&
-                s.action !== SimAction.Working && 
-                s.action !== SimAction.Commuting &&
-                s.action !== SimAction.Sleeping &&
-                s.action !== SimAction.Escorting &&
-                s.action !== SimAction.PickingUp 
-            );
-
-            const carrier = parents.sort((a, b) => b.mood - a.mood)[0];
-
-            if (carrier) {
-                carrier.target = { x: sim.pos.x, y: sim.pos.y };
-                carrier.carryingSimId = sim.id; 
-                carrier.changeState(new PickingUpState());
-                carrier.say("送宝宝上学去~", 'family');
-            } else {
-                if (sim.homeId) {
-                    GameStore.spawnNanny(sim.homeId, 'drop_off', sim.id);
-                } else {
-                    sim.changeState(new PlayingHomeState());
-                    return false;
-                }
-            }
-
-            sim.say("准备上学...", 'normal');
-            sim.changeState(new WaitingState()); 
-            
+        if (schoolType === 'kindergarten') {
+            this.requestEscort(sim, 'drop_off');
             return true;
         }
 
@@ -162,34 +150,33 @@ export const SchoolLogic = {
         if (![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return;
 
         const currentHour = GameStore.time.hour;
-        // 8点到17点是幼儿园时间
         const isDaycareTime = currentHour >= 8 && currentHour < 17; 
+        
+        // [修正] 传入 type: 'kindergarten'
         const inKindergarten = SchoolLogic.isInSchoolArea(sim, 'kindergarten');
 
         if (isDaycareTime) {
-            // 应该在学校，但不在 -> 呼叫送学
             if (!inKindergarten && 
                 sim.action !== SimAction.BeingEscorted && 
                 sim.action !== SimAction.Schooling &&
-                sim.action !== SimAction.Waiting // 已经在等了就别喊了
+                sim.action !== SimAction.Waiting 
             ) {
                 SchoolLogic.requestEscort(sim, 'drop_off');
             } 
             else if (inKindergarten) {
-                // 已经在学校了，保持学习状态
                 if (sim.action === SimAction.Idle) sim.changeState(new SchoolingState());
-                
-                // 幼儿园福利：自动补满需求
                 if (sim.needs.social < 80) sim.needs.social += 0.5;
                 if (sim.needs.fun < 80) sim.needs.fun += 0.5;
-                if (sim.needs.hunger < 50) sim.needs.hunger = 90; // 老师喂饭
+                if (sim.needs.hunger < 50) sim.needs.hunger = 90; 
             }
         } 
         else {
-            // 放学时间
+            // 放学逻辑 (Pick-up)
             if (inKindergarten) {
-                // 还在学校，且没人接 -> 呼叫放学
-                if (sim.action !== SimAction.BeingEscorted && sim.action !== SimAction.Waiting) {
+                // [核心修复] 
+                // 只要不是正在“被护送”状态，就应该检查是否需要接送。
+                // 即使是 Waiting 状态，如果检测到没人来接(requestEscort内部判断)，也应该重新发起呼叫。
+                if (sim.action !== SimAction.BeingEscorted) {
                     SchoolLogic.requestEscort(sim, 'pick_up');
                 }
             }
@@ -253,7 +240,16 @@ export const SchoolLogic = {
             }
 
             // 发送去学校
-            const schoolPlot = GameStore.worldLayout.find(p => p.templateId === config.id);
+            // [核心修复] 使用 type 查找学校
+            // config.id 是 'elementary' 或 'high_school'
+            // PLOTS 里的 type 是 'elementary_school' 或 'high_school'
+            const targetType = config.id === 'elementary' ? 'elementary_school' : 'high_school';
+            
+            const schoolPlot = GameStore.worldLayout.find(p => {
+                const tpl = PLOTS[p.templateId];
+                return tpl && tpl.type === targetType;
+            });
+            
             if (schoolPlot) {
                 sim.target = { 
                     x: schoolPlot.x + (schoolPlot.width||300)/2, 
@@ -264,7 +260,6 @@ export const SchoolLogic = {
             }
         } 
         else if (hour >= config.endHour && sim.action === SimAction.Schooling) {
-            // 放学
             sim.hasLeftWorkToday = false;
             sim.say("放学啦！", 'act');
             sim.changeState(new IdleState());

@@ -7,6 +7,7 @@ import { SocialLogic } from './social';
 import { SchoolLogic } from './school';
 import { INTERACTIONS, RESTORE_TIMES } from './interactionRegistry';
 import { hasRequiredTags } from '../simulationHelpers';
+import { PLOTS } from '../../data/plots'; // [新增] 引入 PLOTS 用于查表
 
 // === 1. 状态接口定义 ===
 export interface SimState {
@@ -84,16 +85,24 @@ export class IdleState extends BaseState {
         if (sim.decisionTimer > 0) {
             sim.decisionTimer -= dt;
         } else {
-            // [修复] 婴幼儿只有在家里时才触发 DecisionLogic 的有限逻辑
-            // 防止婴儿在大街上乱逛
+            // 婴幼儿逻辑
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
                 if (sim.isAtHome()) {
-                    // 在家可以玩玩具、睡觉，或者通过 DecisionLogic 触发需求
+                    // 在家：正常玩耍/睡觉
                     DecisionLogic.decideAction(sim); 
                 } else {
-                    // 在外面如果没有被护送，就原地等待救援
+                    // [核心修复] 在外面 (包括走出了幼儿园范围)：主动呼叫接送
                     sim.say("我要回家...", 'bad');
-                    sim.changeState(new WaitingState());
+                    
+                    // 尝试呼叫家长/保姆
+                    // arrangePickup 会调用 requestEscort -> 找到人后切换自己为 WaitingState
+                    SchoolLogic.arrangePickup(sim);
+                    
+                    // 如果呼叫失败（例如没找到人），为了防止鬼畜，暂时进入 Waiting
+                    // 但下一轮 checkKindergarten 或 Idle 循环会再次尝试
+                    if (sim.action !== SimAction.Waiting) {
+                        sim.changeState(new WaitingState());
+                    }
                 }
             } else {
                 DecisionLogic.decideAction(sim);
@@ -107,15 +116,24 @@ export class IdleState extends BaseState {
 // --- 等待状态 (重要：用于婴儿等待接送) ---
 export class WaitingState extends BaseState {
     actionName = SimAction.Waiting;
-    
+    timeoutTimer = 0; // [新增] 超时计时器
+
     enter(sim: Sim) {
         sim.target = null;
         sim.path = [];
         sim.say("...", 'sys');
+        this.timeoutTimer = 350; 
     }
-    // 纯等待，不消耗精力，不乱跑
-}
 
+    update(sim: Sim, dt: number) {
+        // [新增] 超时检查
+        this.timeoutTimer -= dt;
+        if (this.timeoutTimer <= 0) {
+            sim.say("没人理我...", 'bad');
+            sim.changeState(new IdleState()); // 回到 Idle，这样下一次 update 就会重新触发 decideAction -> 重新呼叫父母
+        }
+    }
+}
 // --- 移动状态 ---
 export class MovingState extends BaseState {
     actionName: string;
@@ -504,6 +522,7 @@ export class NannyState extends BaseState {
 // 3. 家长去接人 (PickingUp)
 export class PickingUpState extends BaseState {
     actionName = SimAction.PickingUp;
+    repathTimer = 0; // [优化] 减少重寻路频率
     
     enter(sim: Sim) {
         const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
@@ -519,42 +538,82 @@ export class PickingUpState extends BaseState {
         super.update(sim, dt);
         
         const child = GameStore.sims.find(s => s.id === sim.carryingSimId);
-        if (!child) { sim.changeState(new IdleState()); return; }
+        // 如果孩子没了，或者孩子已经被别人接走了（防止多重接送），则放弃
+        if (!child || (child.carriedBySimId && child.carriedBySimId !== sim.id)) { 
+            sim.carryingSimId = null;
+            sim.changeState(new IdleState()); 
+            return; 
+        }
 
-        // 持续更新目标 (以防孩子乱跑，虽然孩子应该是 Waiting)
+        // [优化] 只有当孩子位置发生显著变化时，或者每隔一段时间，才更新目标
+        // 防止每帧重算路径导致性能浪费和鬼畜
+        this.repathTimer -= dt;
+        if (this.repathTimer <= 0) {
+            const distToTarget = sim.target ? (sim.target.x - child.pos.x)**2 + (sim.target.y - child.pos.y)**2 : 9999;
+            if (distToTarget > 100) { // 只有孩子移动了超过 10px 才更新目标
+                sim.target = { x: child.pos.x, y: child.pos.y };
+            }
+            this.repathTimer = 30; // 每 0.5 秒检查一次
+        }
+
+        // 移动逻辑
+        const arrived = sim.moveTowardsTarget(dt);
         const distSq = (sim.pos.x - child.pos.x)**2 + (sim.pos.y - child.pos.y)**2;
         
-        // 如果距离远，继续走
-        if (distSq > 900) { // 30px
-            sim.target = { x: child.pos.x, y: child.pos.y };
-            sim.moveTowardsTarget(dt);
-        } else {
-            // 到达孩子身边，开始护送
+        // [核心修复] 判定条件：
+        // 1. 距离小于 60px (3600) - 即使隔着婴儿床也能抱到
+        // 2. 或者寻路系统认为已经到达 (arrived === true)，说明撞到了障碍物边缘
+        if (distSq <= 3600 || arrived) {
+            // === 成功接到孩子 ===
             sim.say("抓到你了！", 'family');
             
-            // 设置双向绑定
+            // 1. 建立双向绑定
             child.carriedBySimId = sim.id;
+            
+            // 2. 强制打断孩子当前状态，进入被护送状态
             child.changeState(new BeingEscortedState());
             
-            // 切换到护送状态，目标设为学校或家
-            // 这里的目标需要在切换前确定：
-            // 如果是在家里接的 -> 去学校
-            // 如果是在学校接的 -> 去家
-            
-            const kindergarten = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
-            const inSchool = kindergarten && child.pos.x >= kindergarten.x && child.pos.x <= kindergarten.x + (kindergarten.width||300) && child.pos.y >= kindergarten.y && child.pos.y <= kindergarten.y + (kindergarten.height||300);
+            // 3. 计算目的地 (学校 or 家)
+            // [核心修复] 使用 PLOTS[id].type 查找幼儿园
+            const kindergarten = GameStore.worldLayout.find(p => {
+                const tpl = PLOTS[p.templateId];
+                return tpl && tpl.type === 'kindergarten';
+            });
+            // 判断逻辑：如果孩子当前就在幼儿园范围内，说明是接放学，要回家
+            // 否则就是送上学
+            const inSchool = kindergarten && 
+                             child.pos.x >= kindergarten.x && 
+                             child.pos.x <= kindergarten.x + (kindergarten.width||300) &&
+                             child.pos.y >= kindergarten.y && 
+                             child.pos.y <= kindergarten.y + (kindergarten.height||300);
             
             let targetPos = { x: 0, y: 0 };
             
             if (inSchool) {
-                // 回家
+                // -> 回家
                 const home = sim.getHomeLocation();
-                if (home) targetPos = home;
+                if (home) {
+                    targetPos = home;
+                    sim.say("回家咯~", "family");
+                } else {
+                    // 无家可归，只能原地呆着或者去公园
+                    targetPos = { x: sim.pos.x + 50, y: sim.pos.y + 50 }; 
+                }
             } else if (kindergarten) {
-                // 去学校
-                targetPos = { x: kindergarten.x + (kindergarten.width||300)/2, y: kindergarten.y + (kindergarten.height||300)/2 };
+                // -> 去幼儿园 (取中心点)
+                targetPos = { 
+                    x: kindergarten.x + (kindergarten.width||300)/2, 
+                    y: kindergarten.y + (kindergarten.height||300)/2 
+                };
+                sim.say("去幼儿园~", "family");
+            } else {
+                // 没有幼儿园？！
+                sim.say("没地方去...", "bad");
+                sim.changeState(new IdleState());
+                return;
             }
 
+            // 4. 切换到护送状态
             sim.changeState(new EscortingState(targetPos));
         }
     }
@@ -599,9 +658,16 @@ export class EscortingState extends BaseState {
                 if (child) {
                     child.carriedBySimId = null;
                     
-                    // 判断是到学校还是到家
-                    const kindergarten = GameStore.worldLayout.find(p => p.templateId === 'kindergarten');
-                    const inSchool = kindergarten && sim.pos.x >= kindergarten.x && sim.pos.x <= kindergarten.x + (kindergarten.width||300);
+                    // [核心修复] 使用 PLOTS[id].type 判断当前位置是否是幼儿园
+                    const kindergarten = GameStore.worldLayout.find(p => {
+                        const tpl = PLOTS[p.templateId];
+                        return tpl && tpl.type === 'kindergarten';
+                    });
+                    const inSchool = kindergarten && 
+                                     sim.pos.x >= kindergarten.x && 
+                                     sim.pos.x <= kindergarten.x + (kindergarten.width||300) &&
+                                     sim.pos.y >= kindergarten.y && 
+                                     sim.pos.y <= kindergarten.y + (kindergarten.height||300);
                     
                     if (inSchool) {
                         child.changeState(new SchoolingState());
@@ -662,7 +728,7 @@ export class FeedBabyState extends BaseState {
     enter(sim: Sim) {
         const baby = GameStore.sims.find(s => s.id === this.targetBabyId);
         if (baby) {
-            sim.target = { x: baby.pos.x + 15, y: baby.pos.y };
+            sim.target = { x: baby.pos.x + 15, y: baby.pos.y }; // 目标稍作偏移
             sim.say("来喂宝宝了~", 'family');
         } else {
             sim.changeState(new IdleState());
@@ -674,12 +740,19 @@ export class FeedBabyState extends BaseState {
         if (!baby) { sim.changeState(new IdleState()); return; }
 
         if (sim.target) {
-            if (sim.moveTowardsTarget(dt)) {
+            // [修复] 手动计算距离，而不是完全依赖 moveTowardsTarget 的返回值
+            // 只要距离足够近 (例如 < 60px)，就视为到达，防止被婴儿床碰撞体挡住
+            const distSq = (sim.pos.x - sim.target.x)**2 + (sim.pos.y - sim.target.y)**2;
+            const arrived = sim.moveTowardsTarget(dt);
+
+            if (arrived || distSq < 3600) { // 60*60 = 3600
                 // 到达后喂食
                 baby.needs.hunger = 100;
                 sim.say("吃饱了吗？", 'family');
                 baby.say("饱了~", 'love');
-                baby.changeState(new IdleState()); // 婴儿不再等待
+                
+                // [关键] 必须重置婴儿状态，否则婴儿会一直 Waiting
+                baby.changeState(new IdleState()); 
                 
                 if (sim.job.id === 'nanny') sim.changeState(new NannyState());
                 else sim.changeState(new IdleState());

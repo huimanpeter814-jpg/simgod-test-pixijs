@@ -178,95 +178,81 @@ export const CareerLogic = {
             case JobType.Hospital:
                 targetType = 'hospital'; 
                 break;
-                
             case JobType.School:
-                // 学校可能还是需要细分，但下面会做通用兼容
-                if (sim.job.id.includes('high')) targetType = 'high_school';
-                else if (sim.job.id.includes('elem')) targetType = 'elementary_school';
-                else targetType = 'kindergarten';
+                // [核心修复] 根据 Job ID 或 Title 细分去向
+                // 假设你的职业ID命名类似于 'teacher_high', 'teacher_elem', 'teacher_kindergarten'
+                // 或者职位名称包含 '中', '小', '幼'
+                if (sim.job.id.includes('high') || sim.job.title.includes('中') || sim.job.title.includes('高')) {
+                    targetType = 'high_school'; // 对应 plots.ts 中的 type
+                } 
+                else if (sim.job.id.includes('elem') || sim.job.id.includes('primary') || sim.job.title.includes('小')) {
+                    targetType = 'elementary_school';
+                } 
+                else {
+                    // 默认为幼儿园 (kindergarten)
+                    targetType = 'kindergarten';
+                }
                 break;
-
             case JobType.ElderCare:
                 targetType = 'elder_care';
                 break;
-
             case JobType.Library:
                 targetType = 'library';
                 break;
-
             case JobType.Nightlife:
-                targetType = 'bar'; // 默认找酒吧
+                targetType = 'bar'; // data/plots.ts 中夜店的 type 是 'bar'
                 break;
-
             case JobType.Restaurant:
-                targetType = 'restaurant';
+                targetType = 'restaurant'; // data/plots.ts 中 cafe 也是 'restaurant'
                 break;
-
             case JobType.Store:
-                targetType = 'store'; // 统一为 store，兼容 shop, market 等
+                targetType = 'store'; // data/plots.ts 中 convenience, supermarket, clothing 都是 'store'
                 break;
-
-            // 互联网、设计、商业不再默认去 'work'，而是优先找对应公司
             case JobType.Internet:
-                targetType = 'internet';
+                targetType = 'internet'; // data/plots.ts 中是 'internet'
                 break;
             case JobType.Design:
-                targetType = 'design';
+                targetType = 'design'; // data/plots.ts 中是 'design'
                 break;
             case JobType.Business:
-                targetType = 'business';
+                targetType = 'business'; // data/plots.ts 中是 'business'
+                break;
+            default:
+                targetType = 'work'; // 兜底
                 break;
         }
 
-        // 2. 搜索地块：支持系统默认地块 AND 玩家自定义地块
+        // 2. 搜索匹配的地块
         const potentialWorkplaces = GameStore.worldLayout.filter(p => {
-            // [关键] 获取地块的最终类型
-            const rawType = p.customType || PLOTS[p.templateId]?.type || 'public';
-            
-            // [修复] 移除后缀 (_l, _m, _s) 确保 hospital_l 也能匹配 hospital
-            const actualPlotType = rawType.replace(/_[sml]$/, '');
+            // [核心修复] 直接查表获取类型
+            const template = PLOTS[p.templateId];
+            const actualType = p.customType || (template ? template.type : 'public');
 
-            // 规则A：精确匹配类型 (例如医生去 hospital)
-            if (actualPlotType === targetType) {
-                return true;
-            }
+            // 规则 A: 精确匹配
+            if (actualType === targetType) return true;
 
-            // 规则B：学校兼容 (如果只有通用 school，高中老师也能去)
-            if (targetType.includes('school') && actualPlotType === 'school') return true;
-            if (targetType === 'school' && actualPlotType.includes('school')) return true;
-
-            // 规则C：商业/办公类兼容 (如果找不到专属公司，可以去通用地块)
-            
-            // 互联网: internet_company, tech_park, office, work
-            if (targetType === 'internet') {
-                if (['internet_company', 'tech_park', 'office', 'work'].includes(actualPlotType)) return true;
-            }
-            
-            // 设计: studio, art_center, office, work
-            if (targetType === 'design') {
-                if (['studio', 'art_center', 'office', 'work'].includes(actualPlotType)) return true;
-            }
-
-            // 商业: financial_center, office, work
-            if (targetType === 'business') {
-                if (['financial_center', 'office', 'work'].includes(actualPlotType)) return true;
-            }
-
-            // 商店: shop, commercial, market, bookstore
+            // 规则 B: 商店兼容 (书店 bookstore 也可以作为 store 工作地点)
             if (targetType === 'store') {
-                if (['shop', 'commercial', 'market', 'bookstore'].includes(actualPlotType)) return true;
+                if (['store', 'bookstore', 'supermarket', 'commercial'].includes(actualType)) return true;
             }
-            
-            // 夜生活: nightclub, ktv
-            if (targetType === 'bar') {
-                if (['nightclub', 'ktv'].includes(actualPlotType)) return true;
+
+            // 规则 C: 餐饮兼容 (如果只有通用 restaurant，但要去 cafe)
+            if (targetType === 'restaurant') {
+                if (['restaurant', 'cafe'].includes(actualType)) return true;
+            }
+
+            // 规则 D: 通用办公兼容 (找不到 internet 公司时，去 business 或 work 凑合)
+            const officeTypes = ['internet', 'design', 'business'];
+            if (officeTypes.includes(targetType)) {
+                if (actualType === 'work' || actualType === 'office') return true;
+                // 互通性：如果没有专门的互联网公司，去商务中心也可以
+                if (officeTypes.includes(actualType)) return true;
             }
 
             return false;
         });
 
         // 3. 优选：在符合类型的地块中，优先选有电脑/椅子的
-        // (保持之前的防呆逻辑，确保即使没家具也能分配)
         if (potentialWorkplaces.length > 0) {
             let finalCandidates = potentialWorkplaces;
             const requiredTags = sim.job.requiredTags;
@@ -286,10 +272,10 @@ export const CareerLogic = {
             const workplace = finalCandidates[Math.floor(Math.random() * finalCandidates.length)];
             sim.workplaceId = workplace.id;
             this.updateColleagues(sim, workplace.id);
-            // console.log(`[Career] ${sim.name} assigned to ${workplace.customName || workplace.templateId} (Type: ${targetType})`);
+            // console.log(`[Career] ${sim.name} assigned to ${workplace.customName || workplace.templateId}`);
         } else {
             sim.workplaceId = undefined;
-            // sim.say(`找不到 ${targetType} 类型的地方上班...`, 'bad');
+            // console.warn(`[Career] No workplace found for ${sim.name} (Target: ${targetType})`);
         }
     },
 
