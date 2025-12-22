@@ -422,12 +422,29 @@ export const DecisionLogic = {
         const basicNeeds = [NeedType.Hunger, NeedType.Energy, NeedType.Bladder, NeedType.Hygiene];
         let forceHome = false;
 
-        // 只有当有家的时候才强制回家
-        if (sim.homeId && basicNeeds.includes(type as NeedType)) {
+        // 只有当有家的时候才考虑强制回家
+        if (sim.homeId) {
             const currentPlot = GameStore.worldLayout.find(p => sim.pos.x >= p.x && sim.pos.x <= p.x + (p.width||300) && sim.pos.y >= p.y && sim.pos.y <= p.y + (p.height||300));
-            const isAtWork = sim.workplaceId && currentPlot && currentPlot.id === sim.workplaceId;
-            const isAtSchool = currentPlot && ['school','kindergarten'].some(t => currentPlot.templateId.includes(t));
-            if (!isAtWork && !isAtSchool) forceHome = true;
+            
+            // 🆕 [修复] 婴幼儿必须强制在家活动，防止他们为了玩耍（Fun）自己跑去幼儿园
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                // 判断当前是否已经在幼儿园里了（如果是，则允许使用幼儿园设施）
+                const isInKindergarten = currentPlot && (
+                    currentPlot.customType === 'kindergarten' || 
+                    (PLOTS[currentPlot.templateId] && PLOTS[currentPlot.templateId].type === 'kindergarten')
+                );
+                
+                // 如果人不在幼儿园，那么无论什么需求（包括娱乐），都强制只能搜寻家里的物品
+                if (!isInKindergarten) {
+                    forceHome = true;
+                }
+            } 
+            // 儿童及成人：只有基础需求（吃喝睡）才优先回家，娱乐可以在外面
+            else if (basicNeeds.includes(type as NeedType)) {
+                const isAtWork = sim.workplaceId && currentPlot && currentPlot.id === sim.workplaceId;
+                const isAtSchool = currentPlot && ['school','kindergarten'].some(t => currentPlot.templateId.includes(t));
+                if (!isAtWork && !isAtSchool) forceHome = true;
+            }
         }
 
         if (candidates.length) {
