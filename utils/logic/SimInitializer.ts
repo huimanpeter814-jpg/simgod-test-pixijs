@@ -122,7 +122,7 @@ export const SimInitializer = {
         }
         
         // 外观 (支持自定义颜色配置) - 仍然保留颜色字段以备不时之需（例如 UI 文字颜色）
-        sim.skinColor = config.skinColor || CONFIG.COLORS.skin[Math.floor(Math.random() * CONFIG.COLORS.skin.length)];
+        sim.skinColor = config.skinColor || '#ffffff';
         // 🆕 修改：发色初始化逻辑
         if (config.hairColor) {
             sim.hairColor = config.hairColor;
@@ -136,9 +136,10 @@ export const SimInitializer = {
                 sim.hairColor = CONFIG.COLORS.hair[Math.floor(Math.random() * CONFIG.COLORS.hair.length)];
             }
         }
-        sim.clothesColor = config.clothesColor || CONFIG.COLORS.clothes[Math.floor(Math.random() * CONFIG.COLORS.clothes.length)];
-        sim.pantsColor = config.pantsColor || CONFIG.COLORS.pants[Math.floor(Math.random() * CONFIG.COLORS.pants.length)];
-
+        // [修改] 衣服/裤子颜色默认使用白色 #ffffff (即不染色)
+        sim.clothesColor = config.clothesColor || '#ffffff';
+        sim.pantsColor = config.pantsColor || '#ffffff';
+        
         // 🆕 核心修改：初始化三层图片资源
         if (config.appearance) {
             sim.appearance = config.appearance;

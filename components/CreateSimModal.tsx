@@ -27,10 +27,10 @@ const createEmptySimConfig = (isHead: boolean = false): ExtendedSimConfig => ({
     zodiac: ZODIACS[0],
     iq: 50, eq: 50, constitution: 50, appearanceScore: 50, luck: 50, morality: 50, creativity: 50,
     height: 175, weight: 65, money: 2000, hairStyleIndex: 0, traits: [],
-    skinColor: CONFIG.COLORS.skin[0],
+    skinColor: '#ffffff',
     hairColor: CONFIG.COLORS.hair[0],
-    clothesColor: CONFIG.COLORS.clothes[0],
-    pantsColor: CONFIG.COLORS.pants[0],
+    clothesColor: '#ffffff',
+    pantsColor: '#ffffff',
     appearance: {
         body: ASSET_CONFIG.adult.bodies?.[0] || '',
         outfit: ASSET_CONFIG.adult.outfits?.[0] || '',
@@ -102,8 +102,10 @@ const CreateSimModal: React.FC<CreateSimModalProps> = ({ onClose }) => {
                 hair: randomAsset(pool.hairs),
                 face: '', clothes: '', pants: ''
             },
-            skinColor: CONFIG.COLORS.skin[Math.floor(Math.random() * CONFIG.COLORS.skin.length)],
+            skinColor: '#ffffff',
             hairColor: CONFIG.COLORS.hair[Math.floor(Math.random() * CONFIG.COLORS.hair.length)],
+            clothesColor: '#ffffff',
+            pantsColor: '#ffffff'
         });
     };
     // 3. 🆕 新增：监听年龄变化，自动重置外观
@@ -190,8 +192,8 @@ useEffect(() => {
         ctx.translate(centerX, groundY);
         ctx.scale(scale, scale);
 
-        // 如果提供了颜色且不是透明，则进行“正片叠底”染色
-        if (tintColor && tintColor !== 'transparent') {
+        // [修改] 如果颜色是 #ffffff，跳过染色步骤，直接绘制原图
+        if (tintColor && tintColor !== 'transparent' && tintColor.toLowerCase() !== '#ffffff') {
             const offscreen = document.createElement('canvas');
             offscreen.width = 48;
             offscreen.height = 48;
@@ -326,7 +328,7 @@ useEffect(() => {
                         </section>
                         <section className="space-y-3">
                             <h3 className="text-xs font-bold text-accent uppercase mb-2">色彩偏好</h3>
-                            <div className="grid grid-cols-4 gap-2">{renderColorPicker('皮肤', 'skinColor', CONFIG.COLORS.skin)}{renderColorPicker('头发', 'hairColor', CONFIG.COLORS.hair)}</div>
+                            <div className="grid grid-cols-4 gap-2">{renderColorPicker('头发', 'hairColor', CONFIG.COLORS.hair)}</div>
                         </section>
                         <section className="space-y-3">
                             <div className="flex justify-between items-center"><h3 className="text-xs font-bold text-accent uppercase">个性与资产</h3><div className="flex items-center gap-2 bg-black/20 rounded px-2 py-1 border border-white/5"><span className="text-[10px] text-gray-400">💰 初始资金</span><input type="number" value={currentSim.money} onChange={(e) => updateCurrentSim({ money: parseInt(e.target.value) })} className="w-16 bg-transparent text-right text-xs text-warning font-mono outline-none" /></div></div>
