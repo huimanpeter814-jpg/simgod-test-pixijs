@@ -4,39 +4,37 @@ import { AgeStage } from '../../types';
 
 export const MovementLogic = {
     /**
-     * 平滑移动逻辑 (防卡死优化版)
+     * 平滑移动逻辑 (带冷却优化版)
      */
     moveTowardsTarget(sim: Sim, dt: number): boolean {
         if (!sim.target) return true;
 
         // [修复] 防止目标坐标非法
         if (isNaN(sim.target.x) || isNaN(sim.target.y)) {
-            // console.warn(`[Movement] Invalid target for ${sim.name}:`, sim.target);
+            console.warn(`[Movement] Invalid target for ${sim.name}:`, sim.target);
             sim.target = null;
-            return true; // 视为任务结束
+            return true;
         }
 
         // 1. 终点判定 (到达检查)
-        // [优化] 放宽判定范围 (从 4px -> 100px^2 即 10px)，防止在终点附近反复摩擦
         const dx = sim.target.x - sim.pos.x;
         const dy = sim.target.y - sim.pos.y;
         const distSq = dx * dx + dy * dy;
         
-        if (distSq <= 100) { 
+        if (distSq <= 4) { // 15px 范围内视为到达
             sim.pos = { ...sim.target };
             sim.target = null;
             sim.path = [];
             sim.currentPathIndex = 0;
-            return true; // 到达
+            return true;
         }
 
         // 2. 路径生成 (如果当前没有路径)
         if (sim.path.length === 0) {
-            // [优化] 如果之前寻路失败进入了冷却，不要死等，直接放弃本次移动任务
-            // 让 Sim 回到 Idle 状态重新思考，比卡在 Moving 状态更好
+            // [优化] 检查是否处于寻路冷却中，防止每帧都死算
             if (sim.decisionTimer > 0) {
-                sim.target = null;
-                return true; // 放弃移动，视为结束
+                sim.decisionTimer -= dt;
+                return false; // 还在冷却，暂时不动，等待下一帧
             }
 
             // 尝试寻路
@@ -45,16 +43,13 @@ export const MovementLogic = {
 
             // 如果依然找不到路径 (A* 失败/被围住)
             if (sim.path.length === 0) {
-                // 如果距离很近 (150px内)，且中间没有明显大障碍，尝试直线强行移动 (穿墙容错)
-                if (distSq < 22500) { 
+                // 如果距离很近 (100px内)，尝试直线强行移动
+                if (distSq < 10000) { 
                      sim.path.push({ x: sim.target.x, y: sim.target.y });
                 } else {
-                    // [核心修复] 找不到路且距离远：直接放弃任务！
-                    // 不要返回 false (这会让 Sim 留在 Moving 状态直到超时)
-                    // 返回 true 会让 SimStates 认为动作结束，从而切回 Idle
-                    if (Math.random() < 0.05) sim.say("过不去...", "bad");
-                    sim.target = null;
-                    return true; // 放弃，结束移动
+                    // [核心优化] 找不到路，让他发呆 2 秒 (120 ticks) 再试，而不是下一帧马上试
+                    sim.decisionTimer = 120; 
+                    return false; 
                 }
             }
         }
@@ -102,6 +97,6 @@ export const MovementLogic = {
              sim.path = []; 
         }
 
-        return false; // 本次 update 尚未到达终点 (继续下一帧)
+        return false; // 本次 update 尚未到达终点
     }
 };
