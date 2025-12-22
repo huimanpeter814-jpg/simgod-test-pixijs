@@ -18,7 +18,7 @@ import { InteractionSystem } from './logic/InteractionSystem';
 import { 
     SimState, IdleState, WorkingState, MovingState, CommutingState, InteractionState, 
     FollowingState, CommutingSchoolState, SchoolingState, PlayingHomeState, 
-    PickingUpState, EscortingState, BeingEscortedState, NannyState 
+    PickingUpState, EscortingState, BeingEscortedState, NannyState, FeedBabyState 
 } from './logic/SimStates';
 
 export class Sim {
@@ -344,9 +344,16 @@ export class Sim {
             case SimAction.Following: this.state = new FollowingState(); break;
             case SimAction.PlayingHome: this.state = new PlayingHomeState(); break;
             case SimAction.PickingUp: this.state = new PickingUpState(); break;
-            case SimAction.Escorting: this.state = new EscortingState(); break;
+            case SimAction.Escorting: 
+                // [修复] EscortingState 需要 dest 参数。使用 sim.target 或当前位置作为兜底。
+                this.state = new EscortingState(this.target || { x: this.pos.x, y: this.pos.y }); 
+                break;
             case SimAction.BeingEscorted: this.state = new BeingEscortedState(); break;
             case SimAction.NannyWork: this.state = new NannyState(); break; 
+            case SimAction.FeedBaby:
+                // [修复] FeedBabyState 需要 id 参数。恢复时传入空字符串，update() 会自动检测并处理（如果找不到目标会切回 Idle）
+                this.state = new FeedBabyState(""); 
+                break;
             case SimAction.Moving:
             case SimAction.Wandering:
             case SimAction.MovingHome:

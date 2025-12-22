@@ -167,7 +167,7 @@ export const DecisionLogic = {
 
     // 🆕 婴儿饥饿广播系统
     triggerHungerBroadcast(sim: Sim) {
-        if (!sim.homeId) return;
+        if (!sim.homeId) return false;
 
         // 寻找潜在看护人：在同一房子里，且处于清醒/空闲/居家状态的成年人/老人
         const potentialCaregivers = GameStore.sims.filter(s => 
@@ -242,16 +242,45 @@ export const DecisionLogic = {
     },
 
     decideAction(sim: Sim) {
+        // 🚨 1. 婴儿/幼儿特殊保护逻辑
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+            // 如果不在家，什么都不做，等待 PickingUpState (由父母/学校逻辑触发)
+            if (!sim.isAtHome()) {
+                if (sim.action !== SimAction.Waiting && sim.action !== SimAction.BeingEscorted) {
+                    sim.say("我要回家...", 'bad');
+                    sim.changeState(new WaitingState());
+                }
+                return; 
+            }
+
+            // 如果在家，只能做有限的事 (不能自己做饭，不能出门)
+            if (sim.needs[NeedType.Hunger] < 50) {
+                // 尝试呼叫喂食
+                const success = this.triggerHungerBroadcast(sim);
+                if (!success) sim.say("饿饿...🍼", 'bad');
+                return;
+            }
+
+            if (sim.needs[NeedType.Energy] < 30) {
+                // 自己找床睡 (仅限家里的婴儿床)
+                this.findObject(sim, 'nap_crib'); 
+                return;
+            }
+
+            if (sim.needs[NeedType.Fun] < 50) {
+                // 玩积木 (家里)
+                this.findObject(sim, 'play_blocks');
+                return;
+            }
+
+            // 没事做就闲逛一下或者发呆
+            if (Math.random() < 0.5) sim.startWandering();
+            return;
+        }
+
         // 1. 生存危机检查 (优先级最高)
         if (sim.health < 60 || sim.hasBuff('sick')) { DecisionLogic.findObject(sim, 'healing'); return; }
 
-        // 🆕 [修复] 婴儿饥饿处理：不再自己找物体，而是广播
-        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage) && sim.needs[NeedType.Hunger] < 50) {
-            const success = DecisionLogic.triggerHungerBroadcast(sim);
-            if (success) return; 
-            // 如果没人理，尝试自己吃（如果家里有现成食物），或者继续哭
-            // 这里为了防止死循环，如果没人理，允许 fallback 到原来的逻辑 (findObject 只能找到地上的奶瓶)
-        }
 
         let critical = [
             { id: NeedType.Energy, val: sim.needs[NeedType.Energy] },
@@ -479,6 +508,7 @@ export const DecisionLogic = {
     },
 
     findObject(sim: Sim, type: string) {
+        const isBaby = [AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage);
         let utility = type;
         // 映射表：将抽象需求/技能映射到具体的家具 utility
         const simpleMap: Record<string, string> = {
@@ -656,7 +686,7 @@ export const DecisionLogic = {
                 }
             }
         }
-        sim.startWandering();
+        if (!isBaby)sim.startWandering();
     },
 
     findHuman(sim: Sim) {

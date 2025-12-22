@@ -10,7 +10,7 @@ interface Node {
 }
 
 export class PathFinder {
-    grid: number[][]; 
+    grid: Int8Array; // 使用一维数组优化性能
     cellSize: number;
     cols: number;
     rows: number;
@@ -19,14 +19,15 @@ export class PathFinder {
         this.cellSize = cellSize;
         this.cols = Math.ceil(width / cellSize);
         this.rows = Math.ceil(height / cellSize);
-        this.grid = [];
+        this.grid = new Int8Array(this.cols * this.rows);
         this.clear();
     }
 
     clear() {
-        this.grid = Array(this.rows).fill(0).map(() => Array(this.cols).fill(0));
+        this.grid.fill(0);
     }
 
+    // 标记障碍物
     setObstacle(x: number, y: number, w: number, h: number) {
         const startCol = Math.max(0, Math.floor(x / this.cellSize));
         const endCol = Math.min(this.cols - 1, Math.floor((x + w) / this.cellSize));
@@ -35,102 +36,139 @@ export class PathFinder {
 
         for (let r = startRow; r <= endRow; r++) {
             for (let c = startCol; c <= endCol; c++) {
-                this.grid[r][c] = 1;
+                this.grid[r * this.cols + c] = 1;
             }
         }
     }
 
+    // 坐标转换
     toGrid(val: number) { return Math.floor(val / this.cellSize); }
     toWorld(gridIdx: number) { return gridIdx * this.cellSize + this.cellSize / 2; }
+    
+    // 检查网格是否可行走
+    isWalkable(c: number, r: number): boolean {
+        if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) return false;
+        return this.grid[r * this.cols + c] === 0;
+    }
+
+    // 寻找最近的可行走节点 (用于处理起点/终点在障碍物内的情况)
+    findNearestWalkable(x: number, y: number, range: number = 5): { x: number, y: number } | null {
+        if (this.isWalkable(x, y)) return { x, y };
+
+        // 螺旋搜索
+        for (let r = 1; r <= range; r++) {
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    // 只检查边框
+                    if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+                    
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (this.isWalkable(nx, ny)) return { x: nx, y: ny };
+                }
+            }
+        }
+        return null;
+    }
 
     findPath(startX: number, startY: number, endX: number, endY: number): { x: number, y: number }[] {
-        const startNode: Node = { 
-            x: this.toGrid(startX), y: this.toGrid(startY), 
-            g: 0, h: 0, f: 0, parent: null 
-        };
-        const endNode = { x: this.toGrid(endX), y: this.toGrid(endY) };
+        let gridStartX = this.toGrid(startX);
+        let gridStartY = this.toGrid(startY);
+        let gridEndX = this.toGrid(endX);
+        let gridEndY = this.toGrid(endY);
 
-        if (startNode.x < 0 || startNode.x >= this.cols || startNode.y < 0 || startNode.y >= this.rows) return [];
-        if (endNode.x < 0 || endNode.x >= this.cols || endNode.y < 0 || endNode.y >= this.rows) return [];
+        // 1. 修正起点和终点
+        const validStart = this.findNearestWalkable(gridStartX, gridStartY);
+        const validEnd = this.findNearestWalkable(gridEndX, gridEndY);
 
-        if (this.grid[endNode.y][endNode.x] === 1) {
-            let found = false;
-            for (let r = 1; r <= 3; r++) {
-                for (let dy = -r; dy <= r; dy++) {
-                    for (let dx = -r; dx <= r; dx++) {
-                        const nx = endNode.x + dx;
-                        const ny = endNode.y + dy;
-                        if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows && this.grid[ny][nx] === 0) {
-                            endNode.x = nx; endNode.y = ny;
-                            found = true; break;
-                        }
-                    }
-                    if (found) break;
-                }
-                if (found) break;
-            }
-            if (!found) return [];
+        if (!validStart || !validEnd) return []; // 彻底卡死
+
+        gridStartX = validStart.x;
+        gridStartY = validStart.y;
+        gridEndX = validEnd.x;
+        gridEndY = validEnd.y;
+
+        // 如果已经在同一个格子里，直接返回直线
+        if (gridStartX === gridEndX && gridStartY === gridEndY) {
+            return [{ x: endX, y: endY }];
         }
 
-        const openList: Node[] = [startNode];
-        const closedSet = new Int8Array(this.cols * this.rows);
+        // A* 核心数据结构
+        const openList: Node[] = [];
+        const openMap = new Map<number, Node>(); // 快速查找
+        const closedSet = new Set<number>();
+
+        const startNode: Node = { x: gridStartX, y: gridStartY, g: 0, h: 0, f: 0, parent: null };
+        openList.push(startNode);
+        openMap.set(gridStartY * this.cols + gridStartX, startNode);
+
+        // 曼哈顿距离启发函数
+        const heuristic = (n1: {x:number, y:number}, n2: {x:number, y:number}) => {
+            return Math.abs(n1.x - n2.x) + Math.abs(n1.y - n2.y);
+        };
+
+        const MAX_OPS = 2000; // 降低迭代上限，防止掉帧
         let ops = 0;
-        const MAX_OPS = 3000;
 
         let finalNode: Node | null = null;
 
         while (openList.length > 0) {
             ops++;
-            if (ops > MAX_OPS) {
-                // 超时降级
-                return [{x: endX, y: endY}]; 
-            }
+            if (ops > MAX_OPS) return []; // 寻路超时，返回空路径让AI重试
 
-            // O(N) 查找最小值
+            // 简单的优先队列模拟 (寻找 f 最小)
             let lowestIdx = 0;
             for (let i = 1; i < openList.length; i++) {
-                if (openList[i].f < openList[lowestIdx].f) {
-                    lowestIdx = i;
-                }
+                if (openList[i].f < openList[lowestIdx].f) lowestIdx = i;
             }
             
             const current = openList[lowestIdx];
-            openList[lowestIdx] = openList[openList.length - 1];
-            openList.pop();
-
-            const gridIdx = current.y * this.cols + current.x;
-            if (closedSet[gridIdx]) continue;
-            closedSet[gridIdx] = 1;
-
-            if (current.x === endNode.x && current.y === endNode.y) {
+            
+            // 找到终点
+            if (current.x === gridEndX && current.y === gridEndY) {
                 finalNode = current;
-                break; 
+                break;
             }
 
+            // 移出 OpenList，加入 ClosedSet
+            openList.splice(lowestIdx, 1);
+            const currentKey = current.y * this.cols + current.x;
+            openMap.delete(currentKey);
+            closedSet.add(currentKey);
+
+            // 邻居偏移 (八方向)
             const neighbors = [
-                { x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 },
-                { x: -1, y: -1 }, { x: 1, y: -1 }, { x: -1, y: 1 }, { x: 1, y: 1 }
+                { x: 0, y: -1, cost: 1 }, { x: 0, y: 1, cost: 1 }, 
+                { x: -1, y: 0, cost: 1 }, { x: 1, y: 0, cost: 1 },
+                // 对角线代价稍微调高，鼓励走直线 (1.414 -> 1.5)
+                { x: -1, y: -1, cost: 1.5 }, { x: 1, y: -1, cost: 1.5 }, 
+                { x: -1, y: 1, cost: 1.5 }, { x: 1, y: 1, cost: 1.5 }
             ];
 
-            for (let i = 0; i < neighbors.length; i++) {
-                const nx = current.x + neighbors[i].x;
-                const ny = current.y + neighbors[i].y;
+            for (const offset of neighbors) {
+                const nx = current.x + offset.x;
+                const ny = current.y + offset.y;
+                const nKey = ny * this.cols + nx;
 
-                if (nx < 0 || nx >= this.cols || ny < 0 || ny >= this.rows) continue;
-                if (this.grid[ny][nx] === 1) continue;
-                if (closedSet[ny * this.cols + nx]) continue;
+                if (!this.isWalkable(nx, ny)) continue;
+                if (closedSet.has(nKey)) continue;
 
-                const isDiag = neighbors[i].x !== 0 && neighbors[i].y !== 0;
-                if (isDiag) {
-                    if (this.grid[current.y][nx] === 1 || this.grid[ny][current.x] === 1) continue;
+                // 防止穿墙 (如果对角线两边都是障碍物，则不能走对角)
+                if (offset.x !== 0 && offset.y !== 0) {
+                    if (!this.isWalkable(current.x + offset.x, current.y) || 
+                        !this.isWalkable(current.x, current.y + offset.y)) {
+                        continue;
+                    }
                 }
 
-                const gScore = current.g + (isDiag ? 1.414 : 1);
-                const existing = openList.find(n => n.x === nx && n.y === ny);
+                const gScore = current.g + offset.cost;
+                const existing = openMap.get(nKey);
 
                 if (!existing) {
-                    const h = Math.abs(nx - endNode.x) + Math.abs(ny - endNode.y);
-                    openList.push({ x: nx, y: ny, g: gScore, h: h, f: gScore + h, parent: current });
+                    const h = heuristic({x: nx, y: ny}, {x: gridEndX, y: gridEndY});
+                    const newNode: Node = { x: nx, y: ny, g: gScore, h: h, f: gScore + h, parent: current };
+                    openList.push(newNode);
+                    openMap.set(nKey, newNode);
                 } else if (gScore < existing.g) {
                     existing.g = gScore;
                     existing.f = gScore + existing.h;
@@ -141,47 +179,47 @@ export class PathFinder {
 
         if (!finalNode) return [];
 
-        // --- 核心优化：路径平滑 (Path Smoothing) ---
-        // 原始路径包含了每一个经过的格子，导致走起来像机器人
-        // 我们只保留拐点，去掉中间的直线点
-        const rawPath: { x: number, y: number }[] = [];
+        // 回溯路径
+        const path: { x: number, y: number }[] = [];
         let curr: Node | null = finalNode;
         while (curr) {
-            rawPath.push({ x: this.toWorld(curr.x), y: this.toWorld(curr.y) });
+            // 转换为世界坐标中心点
+            path.push({ x: this.toWorld(curr.x), y: this.toWorld(curr.y) });
             curr = curr.parent;
         }
+
+        // 反转并保留终点精确位置
+        path.reverse();
         
-        // 如果路径太短，直接返回
-        if (rawPath.length <= 2) return rawPath.reverse().slice(1);
+        // 将最后一个节点替换为实际的 endX, endY (确保能点对点到达)
+        path[path.length - 1] = { x: endX, y: endY };
 
-        // 简化路径：只保留方向改变的点
-        // 注意：rawPath 是从终点到起点的，所以我们反向处理
-        const smoothPath: { x: number, y: number }[] = [];
-        smoothPath.push(rawPath[0]); // 终点必须保留
+        // 路径平滑 (仅移除共线点，不做激进优化以免穿墙)
+        return this.smoothPath(path);
+    }
 
-        // 从倒数第二个点开始遍历到起点前一个点
-        let lastDirX = rawPath[0].x - rawPath[1].x;
-        let lastDirY = rawPath[0].y - rawPath[1].y;
+    smoothPath(path: { x: number, y: number }[]): { x: number, y: number }[] {
+        if (path.length <= 2) return path;
 
-        for (let i = 1; i < rawPath.length - 1; i++) {
-            const nextNode = rawPath[i+1];
-            const currNode = rawPath[i];
-            
-            const dirX = currNode.x - nextNode.x;
-            const dirY = currNode.y - nextNode.y;
+        const smoothed: { x: number, y: number }[] = [path[0]];
+        let lastDirX = 0;
+        let lastDirY = 0;
 
-            // 如果方向变了，说明这个点是拐点，必须保留
-            // 简单的浮点数比较可能不准，但这里坐标都是整数倍，直接比较即可
-            if (dirX !== lastDirX || dirY !== lastDirY) {
-                smoothPath.push(currNode);
-                lastDirX = dirX;
-                lastDirY = dirY;
+        for (let i = 1; i < path.length; i++) {
+            const dx = path[i].x - path[i-1].x;
+            const dy = path[i].y - path[i-1].y;
+
+            // 简单的方向检查，如果方向改变了，就保留拐点
+            if (i === 1 || Math.abs(dx - lastDirX) > 0.01 || Math.abs(dy - lastDirY) > 0.01) {
+                smoothed.push(path[i-1]); // 保留上一个点作为拐点
             }
+            
+            lastDirX = dx;
+            lastDirY = dy;
         }
+        smoothed.push(path[path.length - 1]);
         
-        // 此时 smoothPath 还是反向的（终点 -> 拐点 -> ...）
-        // 我们不需要把起点加进去，因为 Sim 已经在起点了
-        // 直接反转并返回
-        return smoothPath.reverse();
+        // 去重
+        return smoothed.filter((p, i) => i === 0 || p.x !== smoothed[i-1].x || p.y !== smoothed[i-1].y);
     }
 }

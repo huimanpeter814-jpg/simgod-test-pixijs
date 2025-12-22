@@ -28,14 +28,48 @@ export const SchoolLogic = {
     isInSchoolArea(sim: Sim, type: string): boolean {
         const plot = GameStore.worldLayout.find(p => p.templateId === type);
         if (!plot) return false;
-
-        const w = plot.width || 300;
-        const h = plot.height || 300;
-
         return (
-            sim.pos.x >= plot.x && sim.pos.x <= plot.x + w &&
-            sim.pos.y >= plot.y && sim.pos.y <= plot.y + h
+            sim.pos.x >= plot.x && sim.pos.x <= plot.x + (plot.width || 300) &&
+            sim.pos.y >= plot.y && sim.pos.y <= plot.y + (plot.height || 300)
         );
+    },
+
+    // 呼叫家长/保姆来接
+    requestEscort(sim: Sim, type: 'drop_off' | 'pick_up') {
+        // 如果已经有人在接了，就忽略
+        const existingPicker = GameStore.sims.find(s => s.carryingSimId === sim.id && (s.action === SimAction.PickingUp || s.action === SimAction.Escorting));
+        if (existingPicker) return;
+
+        // 寻找此人的父母
+        const parents = GameStore.sims.filter(s => 
+            (s.id === sim.fatherId || s.id === sim.motherId) &&
+            !s.isTemporary &&
+            // 排除忙碌的父母 (除了睡觉，睡觉可以叫醒)
+            s.action !== SimAction.Working && 
+            s.action !== SimAction.Commuting &&
+            s.action !== SimAction.Escorting &&
+            s.action !== SimAction.PickingUp
+        );
+
+        // 优先选心情好的
+        const carrier = parents.sort((a, b) => b.mood - a.mood)[0];
+
+        if (carrier) {
+            carrier.changeState(new PickingUpState());
+            carrier.carryingSimId = sim.id;
+            carrier.target = null; // 重置目标，让 State 的 enter() 处理
+            carrier.say(type === 'drop_off' ? "送宝宝上学" : "接宝宝放学", 'family');
+            
+            sim.changeState(new WaitingState());
+            sim.say("等爸妈...", 'normal');
+        } else {
+            // 父母都没空，叫保姆
+            if (sim.homeId) {
+                GameStore.spawnNanny(sim.homeId, type, sim.id);
+                sim.changeState(new WaitingState());
+                sim.say("等保姆...", 'normal');
+            }
+        }
     },
 
     arrangePickup(sim: Sim) {
@@ -123,35 +157,40 @@ export const SchoolLogic = {
         return true;
     },
 
+    // 核心调度循环
     checkKindergarten(sim: Sim) {
         if (![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return;
 
         const currentHour = GameStore.time.hour;
-        const isDaycareTime = currentHour >= 8 && currentHour < 18; 
+        // 8点到17点是幼儿园时间
+        const isDaycareTime = currentHour >= 8 && currentHour < 17; 
         const inKindergarten = SchoolLogic.isInSchoolArea(sim, 'kindergarten');
 
         if (isDaycareTime) {
+            // 应该在学校，但不在 -> 呼叫送学
             if (!inKindergarten && 
                 sim.action !== SimAction.BeingEscorted && 
                 sim.action !== SimAction.Schooling &&
-                sim.action !== SimAction.Waiting && 
-                sim.action !== SimAction.PickingUp 
+                sim.action !== SimAction.Waiting // 已经在等了就别喊了
             ) {
-                SchoolLogic.sendToSchool(sim, 'kindergarten');
+                SchoolLogic.requestEscort(sim, 'drop_off');
             } 
             else if (inKindergarten) {
+                // 已经在学校了，保持学习状态
                 if (sim.action === SimAction.Idle) sim.changeState(new SchoolingState());
-                if (sim.needs.social < 80) sim.needs.social += 1; 
-                SchoolLogic.autoReplenishNeeds(sim);
+                
+                // 幼儿园福利：自动补满需求
+                if (sim.needs.social < 80) sim.needs.social += 0.5;
+                if (sim.needs.fun < 80) sim.needs.fun += 0.5;
+                if (sim.needs.hunger < 50) sim.needs.hunger = 90; // 老师喂饭
             }
         } 
         else {
+            // 放学时间
             if (inKindergarten) {
-                if (sim.action !== SimAction.Waiting && sim.action !== SimAction.BeingEscorted) {
-                    sim.changeState(new WaitingState());
-                    SchoolLogic.arrangePickup(sim);
-                } else if (sim.action === SimAction.Waiting) {
-                    if (Math.random() < 0.05) SchoolLogic.arrangePickup(sim);
+                // 还在学校，且没人接 -> 呼叫放学
+                if (sim.action !== SimAction.BeingEscorted && sim.action !== SimAction.Waiting) {
+                    SchoolLogic.requestEscort(sim, 'pick_up');
                 }
             }
         }
@@ -174,7 +213,7 @@ export const SchoolLogic = {
         if (hour >= config.startHour && hour < config.endHour) {
             if (sim.action === SimAction.Schooling) return;
             if (sim.action === SimAction.CommutingSchool) return;
-            if (sim.hasLeftWorkToday) return;
+            if (sim.hasLeftWorkToday) return; // 逃课标志
 
             let skipProb = 0.01; 
             if (sim.mbti.includes('P')) skipProb += 0.02; 
@@ -213,18 +252,21 @@ export const SchoolLogic = {
                 return;
             }
 
-            const success = SchoolLogic.sendToSchool(sim, config.id);
-            if (!success) {
-                sim.hasLeftWorkToday = true; 
-                sim.say("找不到学校...", 'sys');
+            // 发送去学校
+            const schoolPlot = GameStore.worldLayout.find(p => p.templateId === config.id);
+            if (schoolPlot) {
+                sim.target = { 
+                    x: schoolPlot.x + (schoolPlot.width||300)/2, 
+                    y: schoolPlot.y + (schoolPlot.height||300)/2 
+                };
+                sim.changeState(new CommutingSchoolState());
+                sim.say("去学校", 'act');
             }
         } 
         else if (hour >= config.endHour && sim.action === SimAction.Schooling) {
+            // 放学
             sim.hasLeftWorkToday = false;
             sim.say("放学啦！", 'act');
-            sim.needs.fun -= 20;
-            sim.needs.energy -= 30;
-            SchoolLogic.calculateDailyPerformance(sim);
             sim.changeState(new IdleState());
         }
     },

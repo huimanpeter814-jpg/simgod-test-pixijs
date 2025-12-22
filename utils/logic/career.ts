@@ -48,9 +48,20 @@ const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
         return s;
     },
     [JobType.School]: (sim) => {
-        let s = sim.iq * 0.3 + sim.eq * 0.3 + (sim.skills.charisma || 0) * 1;
-        if (sim.mbti.includes('S') && sim.mbti.includes('J')) s += 25;
-        if (sim.lifeGoal.includes('家庭') || sim.lifeGoal.includes('桃李') || sim.lifeGoal.includes('岁月静好')) s += 50;
+        // 基础分给高一点，确保总有人选
+        let s = 50; 
+        
+        // 不需要极高的智商，中等即可
+        s += sim.iq * 0.2; 
+        
+        // 喜欢 S(实感) J(判断) F(情感) 的人都适合
+        if (sim.mbti.includes('S')) s += 15;
+        if (sim.mbti.includes('J')) s += 15;
+        if (sim.mbti.includes('F')) s += 15; // 有爱心
+        
+        // 任何有教书育人倾向的
+        if (sim.lifeGoal.includes('桃李') || sim.lifeGoal.includes('家庭') || sim.lifeGoal.includes('安稳')) s += 60;
+        
         return s;
     },
     [JobType.Nightlife]: (sim) => {
@@ -77,6 +88,7 @@ const JOB_PREFERENCES: Record<JobType, (sim: Sim) => number> = {
 export const CareerLogic = {
     getDynamicJobCapacity(job: Job): number {
         if (job.level >= 4) return 1;
+        if (job.level >= 3) return 3;
         return 20; 
     },
 
@@ -87,7 +99,7 @@ export const CareerLogic = {
             if (type === JobType.Unemployed) return;
             const calculateScore = JOB_PREFERENCES[type];
             let score = calculateScore(sim);
-            score += Math.random() * 15; 
+            score += Math.random() * 20; 
             scores.push({ type, score });
         });
 
@@ -95,23 +107,34 @@ export const CareerLogic = {
 
         let assignedJob: Job | undefined = undefined;
 
+        // 遍历偏好，寻找有空缺的职位
         for (const candidate of scores) {
             const jobType = candidate.type;
-            const validJobs = JOBS.filter(j => {
-                if (j.companyType !== jobType) return false;
+            
+            // 获取该类型下的所有职位定义
+            const validJobs = JOBS.filter(j => j.companyType === jobType);
+            
+            // 检查是否有空缺
+            const availableJobs = validJobs.filter(j => {
                 const cap = this.getDynamicJobCapacity(j);
                 const currentCount = GameStore.sims.filter(s => s.job.id === j.id).length;
                 return currentCount < cap;
             });
 
-            if (validJobs.length > 0) {
+            if (availableJobs.length > 0) {
+                // 优先从 Level 1 或 Level 2 开始分配
+                // 这里的逻辑是加权随机：低级职位权重高
                 const weightedPool: Job[] = [];
-                validJobs.forEach(job => {
+                availableJobs.forEach(job => {
                     let weight = 10;
                     if (job.level === 2) weight = 5;
                     if (job.level >= 3) weight = 1;
+                    // 特殊：如果是学校，大幅增加权重，确保填满
+                    if (jobType === JobType.School) weight += 10;
+                    
                     for(let k=0; k<weight; k++) weightedPool.push(job);
                 });
+                
                 assignedJob = weightedPool[Math.floor(Math.random() * weightedPool.length)];
                 break; 
             }
