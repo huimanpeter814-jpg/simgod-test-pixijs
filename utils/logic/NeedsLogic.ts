@@ -7,6 +7,9 @@ export const NeedsLogic = {
      * 需求自然衰减
      */
     decayNeeds(sim: Sim, dt: number, exclude: NeedType[] = []) {
+        // 🆕 [需求] 如果是NPC或保姆，需求值不衰减
+        if (sim.isNPC || sim.job.id === 'nanny') return;
+
         const f = 0.0008 * dt; // 时间流逝系数
 
         if (!exclude.includes(NeedType.Energy)) 
@@ -90,6 +93,9 @@ export const NeedsLogic = {
      * 极端状态检查 (健康扣除)
      */
     checkHealth(sim: Sim, dt: number) {
+        // NPC 无敌
+        if (sim.isNPC) return;
+
         const f = 0.0008 * dt;
         if (sim.needs[NeedType.Energy] <= 0 || sim.needs[NeedType.Hunger] <= 0) {
             sim.health -= 0.05 * f * 10;

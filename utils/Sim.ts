@@ -23,7 +23,6 @@ import {
 
 export class Sim {
     // === 数据属性 (Data Properties) ===
-    // ⚠️ 使用 ! 断言，因为这些属性在 SimInitializer.initialize 中被确实赋值了
     id!: string;
     familyId!: string;
     homeId: string | null = null;
@@ -136,9 +135,6 @@ export class Sim {
     isNPC: boolean = false;
 
     constructor(config: SimInitConfig = {}) {
-        // 使用工厂初始化数据
-        // 因为 SimInitializer.initialize 实际上填充了上述所有带 ! 的属性
-        // TypeScript 无法跨函数检测，所以需要 ! 断言
         SimInitializer.initialize(this, config);
         
         // 构造后逻辑
@@ -206,23 +202,24 @@ export class Sim {
             if (this.needs[NeedType.Hygiene] < 20 && !this.hasBuff('smelly')) { this.addBuff(BUFFS.smelly); this.say("身上有味了...", 'bad'); }
             
             // [保姆生成逻辑优化]
-        // 只有当家里确实有宝宝，且没有父母在场时才召唤
-        if (this.homeId && [AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage) && this.isAtHome() && !this.carriedBySimId && this.action !== SimAction.Waiting && this.action !== SimAction.BeingEscorted) {
-            const parentsHome = GameStore.sims.some(s => (s.id === this.motherId || s.id === this.fatherId) && s.homeId === this.homeId && s.isAtHome());
-            if (!parentsHome) { 
-                // 检查是否已经有保姆/NPC在服务
-                const hasNanny = GameStore.sims.some(s => s.homeId === this.homeId && (s.isTemporary || s.isNPC)); 
-                if (!hasNanny) GameStore.spawnNanny(this.homeId, 'home_care'); 
+            if (this.homeId && [AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage) && this.isAtHome() && !this.carriedBySimId && this.action !== SimAction.Waiting && this.action !== SimAction.BeingEscorted) {
+                const parentsHome = GameStore.sims.some(s => (s.id === this.motherId || s.id === this.fatherId) && s.homeId === this.homeId && s.isAtHome());
+                if (!parentsHome) { 
+                    // 检查是否已经有保姆/NPC在服务
+                    const hasNanny = GameStore.sims.some(s => s.homeId === this.homeId && (s.isTemporary || s.isNPC)); 
+                    if (!hasNanny) GameStore.spawnNanny(this.homeId, 'home_care'); 
+                }
             }
         }
-    }
 
-        // 高频逻辑 (状态机)
+        // [修改] 移除婴幼儿自动跟随逻辑，响应用户需求 "婴幼儿取消跟随状态"
+        /*
         if ([AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage)) { 
             if (this.action === SimAction.Idle && !this.target && !this.interactionTarget) { 
                 if (this.isAtHome()) { this.changeState(new FollowingState()); } 
             } 
         }
+        */
         
         this.state.update(this, dt);
         
@@ -230,7 +227,6 @@ export class Sim {
     }
 
     // === 委托方法 (Delegate Methods) ===
-    // 将行为委托给对应的 Logic 模块，保持 API 不变
 
     // 移动
     moveTowardsTarget(dt: number): boolean { 

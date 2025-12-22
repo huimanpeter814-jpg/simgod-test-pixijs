@@ -146,12 +146,23 @@ export class MovingState extends BaseState {
             this.lastPos = { x: sim.pos.x, y: sim.pos.y };
         }
 
-        // 只有当“原地踏步”超过一定时间 (比如 500 ticks, 约8-10秒) 才触发强制传送
-        // 卡住超过 500 ticks (约8秒) -> 强制传送
-        if (this.stuckTimer > 500 && sim.target) {
-            console.warn(`[SimStates] ${sim.name} stuck in Moving. Teleporting.`);
-            sim.pos = { ...sim.target };
-            this.handleArrival(sim);
+        // 卡住超过 300 ticks (约3-5秒) -> 强制传送或取消
+        // [修复] 减少卡死判定时间，并且不仅仅是传送，如果长时间不到，可能是路径问题，直接结束移动
+        if (this.stuckTimer > 300) {
+            // 如果离目标很近，强制到达
+            if (sim.target) {
+                const distToTarget = Math.sqrt(Math.pow(sim.target.x - sim.pos.x, 2) + Math.pow(sim.target.y - sim.pos.y, 2));
+                if (distToTarget < 50) {
+                    sim.pos = { ...sim.target };
+                    this.handleArrival(sim);
+                } else {
+                    // 离得太远还卡住，说明寻路失败，放弃任务
+                    sim.say("过不去...", 'sys');
+                    sim.changeState(new IdleState());
+                }
+            } else {
+                sim.changeState(new IdleState());
+            }
             return;
         }
 
@@ -201,8 +212,7 @@ export class CommutingState extends BaseState {
     }
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
-        // 🆕 1. 最大通勤时间限制 (防止跑太远跑不到)
-        // 2500 ticks 约等于 15-20 分钟游戏时间，如果还没到，强制传送
+        
         sim.commuteTimer += dt;
         if (sim.commuteTimer > 2500 && sim.target) {
             sim.pos = { ...sim.target };
@@ -210,7 +220,6 @@ export class CommutingState extends BaseState {
             return;
         }
 
-        // 🆕 2. 原地卡死检测
         const distMoved = Math.sqrt(Math.pow(sim.pos.x - this.lastPos.x, 2) + Math.pow(sim.pos.y - this.lastPos.y, 2));
         if (distMoved < 0.1 * dt) {
             this.stuckTimer += dt;
@@ -219,7 +228,7 @@ export class CommutingState extends BaseState {
             this.lastPos = { x: sim.pos.x, y: sim.pos.y };
         }
 
-        if (this.stuckTimer > 500 && sim.target) {
+        if (this.stuckTimer > 300 && sim.target) {
             sim.pos = { ...sim.target };
             this.handleArrival(sim);
             return;
@@ -239,7 +248,6 @@ export class CommutingState extends BaseState {
                 this.phase = 'to_station';
                 sim.target = { x: station.x + station.w/2, y: station.y + station.h + 5 };
                 sim.interactionTarget = { ...station, utility: 'work' };
-                // 切换目标后重置卡死计时
                 this.stuckTimer = 0;
                 sim.path = [];
             } else { 
@@ -294,8 +302,28 @@ export class CommutingState extends BaseState {
 export class WorkingState extends BaseState {
     actionName = SimAction.Working;
     subStateTimer = 0;
+    
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
+
+        // 🆕 [需求] 工作期间特殊需求处理
+        // 1. 如果饥饿或如厕太低，自动恢复到安全线 (60-80)
+        if (sim.needs[NeedType.Hunger] < 20) {
+            sim.needs[NeedType.Hunger] = 60 + Math.random() * 20;
+            sim.say("偷偷吃点东西...", 'act');
+        }
+        if (sim.needs[NeedType.Bladder] < 20) {
+            sim.needs[NeedType.Bladder] = 80;
+            sim.say("去趟洗手间", 'act');
+        }
+
+        // 2. 如果精力耗尽，提前结束工作并获得对应工资
+        if (sim.needs[NeedType.Energy] <= 0) {
+            sim.say("实在太困了... 撑不住了", 'bad');
+            CareerLogic.leaveWorkEarly(sim);
+            return;
+        }
+
         const rate = 0.005 * dt;
         switch (sim.job.companyType) {
             case JobType.Internet: sim.skills.logic += rate; break;
@@ -339,13 +367,10 @@ export class WorkingState extends BaseState {
 // --- 上学通勤 ---
 export class CommutingSchoolState extends BaseState {
     actionName = SimAction.CommutingSchool;
-    
-    // 🆕 修复：添加卡死检测变量
     stuckTimer: number = 0;
     lastPos: { x: number, y: number } = { x: 0, y: 0 };
 
     enter(sim: Sim) {
-        // 重置计时器
         sim.commuteTimer = 0;
         this.stuckTimer = 0;
         this.lastPos = { x: sim.pos.x, y: sim.pos.y };
@@ -354,7 +379,6 @@ export class CommutingSchoolState extends BaseState {
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
         
-        // 1. 最大通勤时间限制 (统一提高到 2000 ticks，约 30秒)
         sim.commuteTimer += dt;
         if (sim.commuteTimer > 2000 && sim.target) {
             sim.pos = { ...sim.target };
@@ -362,7 +386,6 @@ export class CommutingSchoolState extends BaseState {
             return;
         }
 
-        // 2. 原地卡死检测
         const distMoved = Math.sqrt(Math.pow(sim.pos.x - this.lastPos.x, 2) + Math.pow(sim.pos.y - this.lastPos.y, 2));
         if (distMoved < 0.1 * dt) {
             this.stuckTimer += dt;
@@ -473,17 +496,13 @@ export class FollowingState extends BaseState {
 export class NannyState extends BaseState {
     actionName = SimAction.NannyWork;
     wanderTimer = 0;
-    workTimer = 0; // 记录工作时长 (tick)
+    workTimer = 0; // 记录工作时长
+    
     update(sim: Sim, dt: number) {
         this.workTimer += dt;
 
-        // [优化] 家长回来后，保姆不立即消失，而是检查是否工作了一段时间
-        // 防止家长进出门一瞬间导致保姆闪烁
+        // 家长回来检测
         const parentsHome = GameStore.sims.some(s => s.homeId === sim.homeId && !s.isTemporary && s.ageStage !== AgeStage.Infant && s.ageStage !== AgeStage.Toddler && s.isAtHome());
-        
-        // 至少工作 1 小时 (180 ticks 约 1 小时游戏时间，假设 3 tick/min)
-        // 实际配置中 1 min = 180 ticks? 需参考 GameLoop。这里假设 60 mins 游戏时间。
-        const MIN_WORK_TICKS = 60 * 60; // 假设 60 ticks = 1s，大概工作一会
         
         if (parentsHome && this.workTimer > 3000) {  
             sim.say("家长回来了，那我下班啦 👋", 'sys');
@@ -491,16 +510,41 @@ export class NannyState extends BaseState {
             return; 
         }
 
+        // 🆕 [需求] 保姆必须照顾婴幼儿 (优先扫描)
         const babies = GameStore.sims.filter(s => s.homeId === sim.homeId && (s.ageStage === AgeStage.Infant || s.ageStage === AgeStage.Toddler));
+        
         if (babies.length > 0) {
-            const needyBaby = babies.sort((a, b) => a.mood - b.mood)[0];
-            if (needyBaby.mood < 60) {
+            // 找到最需要照顾的宝宝
+            const needyBaby = babies.sort((a, b) => {
+                const scoreA = (100 - a.needs[NeedType.Hunger]) + (100 - a.needs[NeedType.Social]) + (100 - a.mood);
+                const scoreB = (100 - b.needs[NeedType.Hunger]) + (100 - b.needs[NeedType.Social]) + (100 - b.mood);
+                return scoreB - scoreA;
+            })[0];
+
+            // 只要宝宝有不满，就去照顾，不一定要等到红色警戒
+            if (needyBaby.needs[NeedType.Hunger] < 80) {
+                sim.changeState(new FeedBabyState(needyBaby.id));
+                return;
+            }
+            
+            if (needyBaby.mood < 70) {
                 const dist = Math.sqrt(Math.pow(sim.pos.x - needyBaby.pos.x, 2) + Math.pow(sim.pos.y - needyBaby.pos.y, 2));
-                if (dist > 40) { sim.target = { x: needyBaby.pos.x + 10, y: needyBaby.pos.y }; sim.moveTowardsTarget(dt); } 
-                else { if (Math.random() < 0.01) { sim.say("乖宝宝不哭~", "family"); needyBaby.needs[NeedType.Fun] += 10; needyBaby.needs[NeedType.Social] += 10; needyBaby.needs[NeedType.Hunger] += 10; } }
+                if (dist > 40) { 
+                    sim.target = { x: needyBaby.pos.x + 10, y: needyBaby.pos.y }; 
+                    sim.moveTowardsTarget(dt); 
+                } 
+                else { 
+                    if (Math.random() < 0.05) { 
+                        sim.say("乖宝宝~", "family"); 
+                        needyBaby.needs[NeedType.Fun] += 10; 
+                        needyBaby.needs[NeedType.Social] += 10; 
+                    } 
+                }
                 return;
             }
         }
+
+        // 如果没事做，随机闲逛
         this.wanderTimer -= dt;
         if (this.wanderTimer <= 0) {
             this.wanderTimer = 200 + Math.random() * 200;
@@ -624,6 +668,7 @@ export class FeedBabyState extends BaseState {
             if (!arrived) return;
         }
 
+        // 喂食过程
         if (baby.needs[NeedType.Hunger] < 100) {
             const restoreAmount = 0.5 * dt; 
             baby.needs[NeedType.Hunger] += restoreAmount;
@@ -634,10 +679,17 @@ export class FeedBabyState extends BaseState {
                 baby.say("🍼...", 'normal');
             }
         } else {
+            // 喂饱了，根据身份决定去留
             sim.say("吃饱饱啦！", 'family');
             baby.say("😊", 'love');
-            sim.changeState(new IdleState());
+            
             baby.changeState(new IdleState());
+            
+            if (sim.job.id === 'nanny') {
+                sim.changeState(new NannyState());
+            } else {
+                sim.changeState(new IdleState());
+            }
         }
     }
 }
