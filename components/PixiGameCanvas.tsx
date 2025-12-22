@@ -1,5 +1,6 @@
+
 import React, { useEffect, useRef, useState } from 'react';
-import { Application, Container, Sprite, TextureStyle } from 'pixi.js';
+import { Application, Container, Sprite, TextureStyle, Graphics, Text } from 'pixi.js';
 import { ASSET_CONFIG, CONFIG } from '../constants';
 import { loadGameAssets } from '../utils/assetLoader';
 import { GameStore } from '../utils/GameStore';
@@ -15,7 +16,7 @@ const lerp = (start: number, end: number, factor: number) => start + (end - star
 const PixiGameCanvasComponent: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const worldContainerRef = useRef<Container | null>(null);
-    const simLayerRef = useRef<Container | null>(null); // 【新增】人物专属图层容器
+    const simLayerRef = useRef<Container | null>(null);
     const appRef = useRef<Application | null>(null);
     
     // 实体缓存
@@ -28,6 +29,9 @@ const PixiGameCanvasComponent: React.FC = () => {
     const lastMousePos = useRef({ x: 0, y: 0 });
     const dragStartMousePos = useRef({ x: 0, y: 0 });
     const isCameraLocked = useRef(false);
+    
+    // 鼠标悬停目标 (用于 Tooltip)
+    const hoveredTarget = useRef<any>(null);
 
     const [loading, setLoading] = useState(true);
     const [editorRefresh, setEditorRefresh] = useState(0);
@@ -38,13 +42,13 @@ const PixiGameCanvasComponent: React.FC = () => {
         if (!worldContainerRef.current) return;
         const world = worldContainerRef.current;
 
-        // 1. 清理旧对象 (注意：这里不清理 simLayer，只清理家具和房间)
+        // 1. 清理旧对象
         furnViewsRef.current.forEach(v => { world.removeChild(v); v.destroy({ children: true }); });
         furnViewsRef.current.clear();
         roomViewsRef.current.forEach(v => { world.removeChild(v); v.destroy(); });
         roomViewsRef.current.clear();
 
-        // 2. 绘制地板
+        // 2. 绘制地板 (Room 现在是 Container，内含文字)
         GameStore.rooms.forEach(room => {
             const g = PixiWorldBuilder.createRoom(room);
             g.zIndex = -100;
@@ -55,7 +59,6 @@ const PixiGameCanvasComponent: React.FC = () => {
         // 3. 绘制家具
         GameStore.furniture.forEach(furn => {
             const c = PixiWorldBuilder.createFurniture(furn);
-            // 家具的 zIndex 基于 Y 坐标
             c.zIndex = furn.y + furn.h; 
             world.addChild(c);
             furnViewsRef.current.set(furn.id, c);
@@ -127,37 +130,54 @@ const PixiGameCanvasComponent: React.FC = () => {
             app.stage.addChild(worldContainer);
             worldContainerRef.current = worldContainer;
 
-            // 2. 【核心修改】创建人物专属图层
+            // 2. 人物图层
             const simLayer = new Container();
-            simLayer.sortableChildren = true; // 开启排序，让人物之间根据 Y 轴互相遮挡
-            simLayer.zIndex = 10000;         // 赋予极大的 zIndex，确保永远在家具之上
+            simLayer.sortableChildren = true;
+            simLayer.zIndex = 10000;
             worldContainer.addChild(simLayer);
             simLayerRef.current = simLayer;
 
-            // 3. 加载资源
+            // ✨ 3. UI 图层 (用于悬停提示)
+            const uiLayer = new Container();
+            uiLayer.zIndex = 99999;
+            app.stage.addChild(uiLayer);
+
+            // 创建 Tooltip 组件
+            const tooltipContainer = new Container();
+            tooltipContainer.visible = false;
+            uiLayer.addChild(tooltipContainer);
+
+            const tooltipBg = new Graphics();
+            tooltipContainer.addChild(tooltipBg);
+
+            const tooltipText = new Text({
+                text: '',
+                style: {
+                    fontFamily: '"Microsoft YaHei", sans-serif',
+                    fontSize: 12,
+                    fill: 0xffffff,
+                }
+            });
+            tooltipContainer.addChild(tooltipText);
+
+            // 4. 加载资源
             console.log("📥 Loading assets...");
             await loadGameAssets([
                 ...(ASSET_CONFIG.bg || []),
-                
-                // [修复] 展平加载所有年龄段的资源
                 ...ASSET_CONFIG.adult.bodies,
                 ...ASSET_CONFIG.adult.outfits,
                 ...ASSET_CONFIG.adult.hairs,
-                
                 ...ASSET_CONFIG.child.bodies,
                 ...ASSET_CONFIG.child.outfits,
                 ...ASSET_CONFIG.child.hairs,
-                
                 ...ASSET_CONFIG.infant.bodies,
                 ...ASSET_CONFIG.infant.outfits,
                 ...ASSET_CONFIG.infant.hairs,
-
-                // 兼容旧字段 (如果你的 assets.ts 里还保留了 face，也可以加上)
                 ...(ASSET_CONFIG.face || []),
             ]);
             setLoading(false);
 
-            // 4. 背景图
+            // 5. 背景图
             const bgPath = ASSET_CONFIG.bg?.[0];
             if (bgPath) {
                 const bg = Sprite.from(bgPath);
@@ -175,12 +195,38 @@ const PixiGameCanvasComponent: React.FC = () => {
             worldContainer.x = (app.screen.width / 2) - centerX;
             worldContainer.y = (app.screen.height / 2) - centerY;
 
-            // 5. 渲染循环
+            // 6. 渲染循环
             app.ticker.add(() => {
+                // A. Tooltip 更新逻辑
+                if (hoveredTarget.current && hoveredTarget.current.label) {
+                    tooltipContainer.visible = true;
+                    tooltipText.text = hoveredTarget.current.label;
+                    
+                    // 计算 tooltip 位置 (跟随鼠标)
+                    // 需要将鼠标的 Client 坐标转换为相对于 Canvas 的坐标
+                    const rect = containerRef.current?.getBoundingClientRect();
+                    if (rect) {
+                        // lastMousePos 记录的是 clientX/Y
+                        const mouseX = lastMousePos.current.x - rect.left;
+                        const mouseY = lastMousePos.current.y - rect.top;
+                        
+                        tooltipContainer.x = mouseX + 15;
+                        tooltipContainer.y = mouseY + 15;
+
+                        // 绘制背景框
+                        tooltipBg.clear();
+                        tooltipBg.rect(0, 0, tooltipText.width + 10, tooltipText.height + 6).fill({ color: 0x000000, alpha: 0.7 });
+                        tooltipText.x = 5;
+                        tooltipText.y = 3;
+                    }
+                } else {
+                    tooltipContainer.visible = false;
+                }
+
+                // B. Sim 渲染逻辑
                 const currentSimLayer = simLayerRef.current;
                 if (!currentSimLayer) return;
 
-                // --- 镜头跟随逻辑 ---
                 if (GameStore.selectedSimId && !isDraggingCamera.current && GameStore.editor.mode === 'none') {
                     const sim = GameStore.sims.find(s => s.id === GameStore.selectedSimId);
                     if (sim && !isNaN(sim.pos.x)) {
@@ -192,7 +238,6 @@ const PixiGameCanvasComponent: React.FC = () => {
                     }
                 }
 
-                // --- 【核心修改】Sim 渲染更新 ---
                 const activeIds = new Set<string>();
                 GameStore.sims.forEach(sim => {
                     if (isNaN(sim.pos.x) || isNaN(sim.pos.y)) return;
@@ -202,19 +247,15 @@ const PixiGameCanvasComponent: React.FC = () => {
                     
                     if (!view) {
                         view = new PixiSimView(sim);
-                        // 添加到 simLayer 而不是 worldContainer
                         currentSimLayer.addChild(view.container as any); 
                         simViewsRef.current.set(sim.id, view);
                     }
 
-                    // 设置人物在 layer 内部的排序（根据自身 Y 坐标）
                     (view.container as any).zIndex = sim.pos.y;
-                    
                     view.updatePosition(sim);
                     view.showSelectionRing(GameStore.selectedSimId === sim.id);
                 });
 
-                // 清理销毁的人物
                 if (GameStore.sims.length > 0) {
                     simViewsRef.current.forEach((v, id) => { 
                         if (!activeIds.has(id)) { 
@@ -224,8 +265,6 @@ const PixiGameCanvasComponent: React.FC = () => {
                         }
                     });
                 }
-
-                // 执行图层内排序
                 currentSimLayer.sortChildren();
             });
         };
@@ -248,7 +287,7 @@ const PixiGameCanvasComponent: React.FC = () => {
         return unsub;
     }, []);
 
-    // === 交互事件 (保持不变) ===
+    // === 交互事件 ===
     const handleMouseDown = (e: React.MouseEvent) => {
         if (e.button === 0 && GameStore.editor.mode === 'none') {
             isDraggingCamera.current = true;
@@ -259,21 +298,53 @@ const PixiGameCanvasComponent: React.FC = () => {
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
+        lastMousePos.current = { x: e.clientX, y: e.clientY }; // 始终更新鼠标位置
+
         if (isDraggingCamera.current && worldContainerRef.current) {
-            const dx = e.clientX - lastMousePos.current.x;
-            const dy = e.clientY - lastMousePos.current.y;
-            
+            const dx = e.clientX - lastMousePos.current.x; // 这里有问题，lastMousePos 刚被更新为当前位置，dx 会是 0
+            // 修正：使用上一次的位置
+            // 这里为了简单，我们不使用 lastMousePos 来计算 delta，而是用 React 的 e.movementX (如果有)
+            // 或者修正逻辑：先计算 delta，再更新 lastMousePos
+        }
+    };
+    
+    // 修正后的 MouseMove 逻辑，包含悬停检测
+    const onMouseMove = (e: React.MouseEvent) => {
+        const dx = e.clientX - lastMousePos.current.x;
+        const dy = e.clientY - lastMousePos.current.y;
+        
+        // 1. 镜头拖拽
+        if (isDraggingCamera.current && worldContainerRef.current) {
             if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
                 if (GameStore.selectedSimId) {
                     GameStore.selectedSimId = null;
                     GameStore.notify();
                 }
             }
-
             worldContainerRef.current.x += dx;
             worldContainerRef.current.y += dy;
-            lastMousePos.current = { x: e.clientX, y: e.clientY };
         }
+
+        // 2. ✨ 悬停检测 (Hover Check)
+        if (GameStore.editor.mode === 'none' && worldContainerRef.current && containerRef.current) {
+            const world = worldContainerRef.current;
+            const rect = containerRef.current.getBoundingClientRect();
+            // 将屏幕坐标转换为世界坐标
+            const worldX = (e.clientX - rect.left - world.x) / world.scale.x;
+            const worldY = (e.clientY - rect.top - world.y) / world.scale.y;
+
+            // 使用空间哈希网格查询碰撞
+            const hit = GameStore.worldGrid.queryHit(worldX, worldY);
+            if (hit && hit.type === 'furniture') {
+                hoveredTarget.current = hit.ref;
+                if(containerRef.current) containerRef.current.style.cursor = 'pointer';
+            } else {
+                hoveredTarget.current = null;
+                if(containerRef.current && !isDraggingCamera.current) containerRef.current.style.cursor = 'default';
+            }
+        }
+
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
     };
     
     const handleMouseUp = (e: React.MouseEvent) => {
@@ -328,7 +399,7 @@ const PixiGameCanvasComponent: React.FC = () => {
                 ref={containerRef} 
                 className="w-full h-full"
                 onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
+                onMouseMove={onMouseMove} // 使用修正后的处理函数
                 onMouseUp={handleMouseUp}
                 onWheel={handleWheel}
                 onContextMenu={e => e.preventDefault()}
