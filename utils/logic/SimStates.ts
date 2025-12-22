@@ -118,7 +118,9 @@ export class WaitingState extends BaseState {
 // --- 移动状态 ---
 export class MovingState extends BaseState {
     actionName: string;
-    moveTimeout: number = 0;
+    // 修改变量名，记录“在一个位置卡了多久”而不是“总共走了多久”
+    stuckTimer: number = 0; 
+    lastPos: { x: number, y: number } = { x: 0, y: 0 };
 
     constructor(actionName: string = SimAction.Moving) {
         super();
@@ -127,16 +129,28 @@ export class MovingState extends BaseState {
 
     enter(sim: Sim) {
         super.enter(sim);
-        this.moveTimeout = 0;
+        this.stuckTimer = 0;
+        this.lastPos = { x: sim.pos.x, y: sim.pos.y };
     }
 
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
-        this.moveTimeout += dt;
+        // --- 修复开始：更智能的卡死检测 ---
+        // 计算这一帧移动了多少距离
+        const distMoved = Math.sqrt(Math.pow(sim.pos.x - this.lastPos.x, 2) + Math.pow(sim.pos.y - this.lastPos.y, 2));
         
-        // [修复] 提高超时阈值，防止初始化Lag导致瞬移 (3000 ticks = ~50秒 at 60fps)
-        if (this.moveTimeout > 3000 && sim.target) {
-            console.warn(`[SimStates] ${sim.name} stuck, teleporting to target.`);
+        // 如果几乎没动 (比如被墙挡住，或者寻路死循环)
+        if (distMoved < 0.1 * dt) { 
+            this.stuckTimer += dt;
+        } else {
+            // 如果动了，重置计时器，并更新上一次的位置
+            this.stuckTimer = 0;
+            this.lastPos = { x: sim.pos.x, y: sim.pos.y };
+        }
+
+        // 只有当“原地踏步”超过一定时间 (比如 500 ticks, 约8-10秒) 才触发强制传送
+        if (this.stuckTimer > 500 && sim.target) {
+            console.warn(`[SimStates] ${sim.name} is physically stuck for too long. Teleporting to target.`);
             sim.pos = { ...sim.target };
             this.handleArrival(sim);
             return;
@@ -381,9 +395,24 @@ export class FollowingState extends BaseState {
 export class NannyState extends BaseState {
     actionName = SimAction.NannyWork;
     wanderTimer = 0;
+    workTimer = 0; // 记录工作时长 (tick)
     update(sim: Sim, dt: number) {
+        this.workTimer += dt;
+
+        // [优化] 家长回来后，保姆不立即消失，而是检查是否工作了一段时间
+        // 防止家长进出门一瞬间导致保姆闪烁
         const parentsHome = GameStore.sims.some(s => s.homeId === sim.homeId && !s.isTemporary && s.ageStage !== AgeStage.Infant && s.ageStage !== AgeStage.Toddler && s.isAtHome());
-        if (parentsHome) {  GameStore.removeSim(sim.id); return; }
+        
+        // 至少工作 1 小时 (180 ticks 约 1 小时游戏时间，假设 3 tick/min)
+        // 实际配置中 1 min = 180 ticks? 需参考 GameLoop。这里假设 60 mins 游戏时间。
+        const MIN_WORK_TICKS = 60 * 60; // 假设 60 ticks = 1s，大概工作一会
+        
+        if (parentsHome && this.workTimer > 3000) {  
+            sim.say("家长回来了，那我下班啦 👋", 'sys');
+            GameStore.removeSim(sim.id); 
+            return; 
+        }
+
         const babies = GameStore.sims.filter(s => s.homeId === sim.homeId && (s.ageStage === AgeStage.Infant || s.ageStage === AgeStage.Toddler));
         if (babies.length > 0) {
             const needyBaby = babies.sort((a, b) => a.mood - b.mood)[0];

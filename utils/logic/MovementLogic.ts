@@ -7,13 +7,20 @@ export const MovementLogic = {
      * 平滑移动逻辑 (带冷却优化版)
      */
     moveTowardsTarget(sim: Sim, dt: number): boolean {
-        if (!sim.target) return true;
-
-        // [修复] 防止目标坐标非法
-        if (isNaN(sim.target.x) || isNaN(sim.target.y)) {
-            console.warn(`[Movement] Invalid target for ${sim.name}:`, sim.target);
+        // [修复] 严格检查目标是否存在且合法
+        if (!sim.target || typeof sim.target.x !== 'number' || typeof sim.target.y !== 'number' || isNaN(sim.target.x) || isNaN(sim.target.y)) {
+            // console.warn(`[Movement] Invalid target for ${sim.name}, cancelling move.`);
             sim.target = null;
-            return true;
+            sim.path = [];
+            return true; // 视为到达（停止移动）
+        }
+
+        // [修复] 自身坐标合法性检查
+        if (isNaN(sim.pos.x) || isNaN(sim.pos.y)) {
+             // 如果当前位置坏了，尝试恢复到上一个有效位置，或者重置到目标
+             sim.pos.x = sim.target.x;
+             sim.pos.y = sim.target.y;
+             return true;
         }
 
         // 1. 终点判定 (到达检查)
@@ -21,7 +28,7 @@ export const MovementLogic = {
         const dy = sim.target.y - sim.pos.y;
         const distSq = dx * dx + dy * dy;
         
-        if (distSq <= 4) { // 15px 范围内视为到达
+        if (distSq <= 9) { // 15px 范围内视为到达
             sim.pos = { ...sim.target };
             sim.target = null;
             sim.path = [];
@@ -31,23 +38,21 @@ export const MovementLogic = {
 
         // 2. 路径生成 (如果当前没有路径)
         if (sim.path.length === 0) {
-            // [优化] 检查是否处于寻路冷却中，防止每帧都死算
             if (sim.decisionTimer > 0) {
                 sim.decisionTimer -= dt;
-                return false; // 还在冷却，暂时不动，等待下一帧
+                return false; 
             }
 
             // 尝试寻路
-            sim.path = GameStore.pathFinder.findPath(sim.pos.x, sim.pos.y, sim.target.x, sim.target.y);
+             sim.path = GameStore.pathFinder.findPath(sim.pos.x, sim.pos.y, sim.target.x, sim.target.y);
             sim.currentPathIndex = 0;
 
             // 如果依然找不到路径 (A* 失败/被围住)
-            if (sim.path.length === 0) {
+             if (sim.path.length === 0) {
                 // 如果距离很近 (100px内)，尝试直线强行移动
                 if (distSq < 10000) { 
                      sim.path.push({ x: sim.target.x, y: sim.target.y });
                 } else {
-                    // [核心优化] 找不到路，让他发呆 2 秒 (120 ticks) 再试，而不是下一帧马上试
                     sim.decisionTimer = 120; 
                     return false; 
                 }
@@ -64,9 +69,18 @@ export const MovementLogic = {
         // 计算本帧移动距离
         let distToTravel = sim.speed * speedMod * (dt * 0.15); 
 
-        // 只要还有移动力，就沿着路径点一直走
-        while (distToTravel > 0 && sim.currentPathIndex < sim.path.length) {
+        // [安全锁] 防止单帧移动过大 (例如切后台回来 dt 很大时)
+        if (distToTravel > 20) distToTravel = 20;
+
+         while (distToTravel > 0 && sim.currentPathIndex < sim.path.length) {
             const nextNode = sim.path[sim.currentPathIndex];
+            
+            // [修复] 防止路径点出现 NaN
+            if (isNaN(nextNode.x) || isNaN(nextNode.y)) {
+                sim.path = []; // 路径坏了，丢弃
+                return false;
+            }
+
             const ndx = nextNode.x - sim.pos.x;
             const ndy = nextNode.y - sim.pos.y;
             const distToNext = Math.sqrt(ndx * ndx + ndy * ndy);
@@ -79,12 +93,10 @@ export const MovementLogic = {
             }
 
             if (distToNext <= distToTravel) {
-                // 如果能直接走到下一个节点，就走过去，并扣除移动力
                 sim.pos = { x: nextNode.x, y: nextNode.y }; 
                 distToTravel -= distToNext; 
                 sim.currentPathIndex++;     
             } else {
-                // 只能走到两点之间
                 const ratio = distToTravel / distToNext;
                 sim.pos.x += ndx * ratio;
                 sim.pos.y += ndy * ratio;

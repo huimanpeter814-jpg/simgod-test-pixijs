@@ -24,11 +24,18 @@ export const gameLoopStep = (dt: number = 1) => {
     // 注意：这里我们让移动速度也稍微适配一下慢节奏，防止人走得太快像瞬移
     // 如果觉得人走得太慢，可以把 * 1.0 改成 * 1.5 或更高
     GameStore.sims.forEach(s => {
-        // [防消失] 在更新前检查坐标是否合法
-        if (isNaN(s.pos.x)) s.pos.x = 0;
-        if (isNaN(s.pos.y)) s.pos.y = 0;
-        
+        // [修复] 记录移动前的位置，用于 NaN 恢复
+        const backupX = s.pos.x;
+        const backupY = s.pos.y;
+
         s.update(safeDt * GameStore.time.speed, false);
+
+        // [修复] 如果更新后坐标变成了 NaN，回滚到更新前
+        if (isNaN(s.pos.x) || isNaN(s.pos.y)) {
+            // console.warn(`[GameLoop] Recovered ${s.name} from NaN void.`);
+            s.pos.x = isNaN(backupX) ? 100 : backupX; // 如果连备份都是坏的，才重置到 100
+            s.pos.y = isNaN(backupY) ? 100 : backupY;
+        }
     });
 
     // B. 时间流速控制

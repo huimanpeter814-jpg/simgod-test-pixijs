@@ -130,7 +130,10 @@ export class Sim {
     carryingSimId: string | null = null; 
     carriedBySimId: string | null = null; 
 
+    // [修改] 标记是否为临时角色/NPC
     isTemporary: boolean = false; 
+    // [新增] 明确标记 NPC 身份 (UI层应据此过滤，不显示在居民列表)
+    isNPC: boolean = false;
 
     constructor(config: SimInitConfig = {}) {
         // 使用工厂初始化数据
@@ -202,15 +205,17 @@ export class Sim {
             if (this.needs[NeedType.Fun] < 20 && !this.hasBuff('bored')) { this.addBuff(BUFFS.bored); this.say("无聊透顶...", 'bad'); }
             if (this.needs[NeedType.Hygiene] < 20 && !this.hasBuff('smelly')) { this.addBuff(BUFFS.smelly); this.say("身上有味了...", 'bad'); }
             
-            // 保姆生成逻辑
-            if (this.homeId && [AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage) && this.isAtHome() && !this.carriedBySimId && this.action !== SimAction.Waiting && this.action !== SimAction.BeingEscorted) {
-                const parentsHome = GameStore.sims.some(s => (s.id === this.motherId || s.id === this.fatherId) && s.homeId === this.homeId && s.isAtHome());
-                if (!parentsHome) { 
-                    const hasNanny = GameStore.sims.some(s => s.homeId === this.homeId && s.isTemporary); 
-                    if (!hasNanny) GameStore.spawnNanny(this.homeId, 'home_care'); 
-                }
+            // [保姆生成逻辑优化]
+        // 只有当家里确实有宝宝，且没有父母在场时才召唤
+        if (this.homeId && [AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage) && this.isAtHome() && !this.carriedBySimId && this.action !== SimAction.Waiting && this.action !== SimAction.BeingEscorted) {
+            const parentsHome = GameStore.sims.some(s => (s.id === this.motherId || s.id === this.fatherId) && s.homeId === this.homeId && s.isAtHome());
+            if (!parentsHome) { 
+                // 检查是否已经有保姆/NPC在服务
+                const hasNanny = GameStore.sims.some(s => s.homeId === this.homeId && (s.isTemporary || s.isNPC)); 
+                if (!hasNanny) GameStore.spawnNanny(this.homeId, 'home_care'); 
             }
         }
+    }
 
         // 高频逻辑 (状态机)
         if ([AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage)) { 

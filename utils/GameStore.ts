@@ -73,7 +73,8 @@ export class GameStore {
     }
 
     static spawnNanny(homeId: string, task: 'home_care' | 'drop_off' | 'pick_up' = 'home_care', targetChildId?: string) {
-        let nanny = this.sims.find(s => s.homeId === homeId && s.isTemporary);
+        // [修改] 检查是否已经有 NPC 或 临时工
+        let nanny = this.sims.find(s => s.homeId === homeId && (s.isTemporary || s.isNPC));
         const home = this.housingUnits.find(u => u.id === homeId);
         if (!home) return;
 
@@ -88,7 +89,10 @@ export class GameStore {
                 money: 0
             });
             nanny.name = "家庭保姆";
+            // [新增] 标记为 NPC 和 临时角色
             nanny.isTemporary = true; 
+            nanny.isNPC = true; 
+
             nanny.clothesColor = '#575fcf';
             nanny.job = { id: 'nanny', title: '全职保姆', level: 1, salary: 0, startHour: 0, endHour: 0 };
             
