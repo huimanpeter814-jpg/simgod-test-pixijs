@@ -585,16 +585,21 @@ export class GameStore {
             if (!sim.health) sim.health = 100;
             if (!sim.ageStage) sim.ageStage = AgeStage.Adult;
             if (sim.interactionTarget) sim.interactionTarget = null;
+            // [修复] 自动分配缺失资源 (存档迁移)
+            // 默认使用 adult 资源池作为兜底，或者根据 sData.ageStage 判断
+            const defaultPool = ASSET_CONFIG.adult;
             
             // [关键] 自动分配缺失的服装资源 (存档迁移)
-            if (!sim.appearance.clothes && ASSET_CONFIG.clothes.length > 0) {
-                sim.appearance.clothes = ASSET_CONFIG.clothes[Math.floor(Math.random() * ASSET_CONFIG.clothes.length)];
+            // 重点修复 hair 的检查：
+            if (!sim.appearance.hair && defaultPool.hairs.length > 0) {
+                sim.appearance.hair = defaultPool.hairs[Math.floor(Math.random() * defaultPool.hairs.length)];
             }
-            if (!sim.appearance.pants && ASSET_CONFIG.pants.length > 0) {
-                sim.appearance.pants = ASSET_CONFIG.pants[Math.floor(Math.random() * ASSET_CONFIG.pants.length)];
+            // 如果 body/outfit 也没了，也可以补
+            if (!sim.appearance.body && defaultPool.bodies.length > 0) {
+                sim.appearance.body = defaultPool.bodies[Math.floor(Math.random() * defaultPool.bodies.length)];
             }
-            if (!sim.appearance.hair && ASSET_CONFIG.hairs.length > 0) {
-                sim.appearance.hair = ASSET_CONFIG.hairs[Math.floor(Math.random() * ASSET_CONFIG.hairs.length)];
+            if (!sim.appearance.outfit && defaultPool.outfits.length > 0) {
+                sim.appearance.outfit = defaultPool.outfits[Math.floor(Math.random() * defaultPool.outfits.length)];
             }
 
             const currentJobDefinition = JOBS.find(j => j.id === sim.job.id);
@@ -664,10 +669,12 @@ export class GameStore {
                 homeId: null 
             });
             sim.id = newId; 
+
+            const pool = ASSET_CONFIG.adult; // 简单修复
             
             // 如果外观没有设置，尝试自动分配
-            if (!sim.appearance.hair && ASSET_CONFIG.hairs.length > 0) {
-                sim.appearance.hair = ASSET_CONFIG.hairs[Math.floor(Math.random() * ASSET_CONFIG.hairs.length)];
+            if (!sim.appearance.hair && pool.hairs.length > 0) {
+                sim.appearance.hair = pool.hairs[Math.floor(Math.random() * pool.hairs.length)];
             }
             if (!sim.appearance.clothes && ASSET_CONFIG.clothes.length > 0) {
                 sim.appearance.clothes = ASSET_CONFIG.clothes[Math.floor(Math.random() * ASSET_CONFIG.clothes.length)];

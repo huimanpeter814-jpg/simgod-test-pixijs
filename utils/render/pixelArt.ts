@@ -69,8 +69,7 @@ const drawPixelHair = (
     let effectiveStyle = styleIndex;
 
     if (ageStage === 'Elder') {
-        const greyScale = ['#dcdde1', '#7f8fa6', '#b2bec3'];
-        finalColor = greyScale[styleIndex % greyScale.length];
+        finalColor = color;
         if (styleIndex % 3 === 0) effectiveStyle = 9; // 地中海
     }
 

@@ -4,6 +4,7 @@ import { SimInitConfig } from '../utils/logic/SimInitializer';
 import { CONFIG, ASSET_CONFIG, MBTI_TYPES, LIFE_GOALS, AGE_CONFIG, SURNAMES, GIVEN_NAMES, TRAIT_POOL, ZODIACS, ORIENTATIONS } from '../constants';
 import { AgeStage, SimAppearance } from '../types';
 import { getAsset } from '../utils/assetLoader';
+import { getAssetPool } from '../utils/logic/SimInitializer';
 
 interface CreateSimModalProps {
     onClose: () => void;
@@ -31,9 +32,9 @@ const createEmptySimConfig = (isHead: boolean = false): ExtendedSimConfig => ({
     clothesColor: CONFIG.COLORS.clothes[0],
     pantsColor: CONFIG.COLORS.pants[0],
     appearance: {
-        body: ASSET_CONFIG.bodies?.[0] || '',
-        outfit: ASSET_CONFIG.outfits?.[0] || '',
-        hair: ASSET_CONFIG.hairs?.[0] || '',
+        body: ASSET_CONFIG.adult.bodies?.[0] || '',
+        outfit: ASSET_CONFIG.adult.outfits?.[0] || '',
+        hair: ASSET_CONFIG.adult.hairs?.[0] || '',
         face: '', clothes: '', pants: ''
     }
 });
@@ -67,10 +68,17 @@ const CreateSimModal: React.FC<CreateSimModalProps> = ({ onClose }) => {
         }
     };
 
+    // [修复] cycleAsset: 使用 getAssetPool 获取当前年龄段的列表
     const cycleAsset = (type: 'body' | 'outfit' | 'hair', dir: number) => {
         if (!currentSim) return;
+        
+        // 核心修复：根据当前 Sim 的年龄段获取对应的资源池
+        const pool = getAssetPool(currentSim.ageStage || AgeStage.Adult);
         const configKey = type === 'body' ? 'bodies' : (type === 'outfit' ? 'outfits' : 'hairs');
-        const list = ASSET_CONFIG[configKey];
+        
+        // 从 pool 中读取列表
+        const list = pool[configKey]; 
+        
         if (!list || list.length === 0) return;
         const currentVal = currentSim.appearance ? currentSim.appearance[type] : '';
         let idx = list.indexOf(currentVal || '');
@@ -81,6 +89,7 @@ const CreateSimModal: React.FC<CreateSimModalProps> = ({ onClose }) => {
 
     const randomizeVisuals = () => {
         if (!currentSim) return;
+        const pool = getAssetPool(currentSim.ageStage || AgeStage.Adult);
         const randomAsset = (list: string[]) => list && list.length > 0 ? list[Math.floor(Math.random() * list.length)] : '';
         updateCurrentSim({
             name: SURNAMES[Math.floor(Math.random() * SURNAMES.length)] + GIVEN_NAMES[Math.floor(Math.random() * GIVEN_NAMES.length)],
@@ -88,15 +97,22 @@ const CreateSimModal: React.FC<CreateSimModalProps> = ({ onClose }) => {
             orientation: Math.random() < 0.7 ? 'hetero' : (Math.random() < 0.85 ? 'homo' : 'bi'),
             zodiac: ZODIACS[Math.floor(Math.random() * ZODIACS.length)],
             appearance: {
-                body: randomAsset(ASSET_CONFIG.bodies),
-                outfit: randomAsset(ASSET_CONFIG.outfits),
-                hair: randomAsset(ASSET_CONFIG.hairs),
+                body: randomAsset(pool.bodies),
+                outfit: randomAsset(pool.outfits),
+                hair: randomAsset(pool.hairs),
                 face: '', clothes: '', pants: ''
             },
             skinColor: CONFIG.COLORS.skin[Math.floor(Math.random() * CONFIG.COLORS.skin.length)],
             hairColor: CONFIG.COLORS.hair[Math.floor(Math.random() * CONFIG.COLORS.hair.length)],
         });
     };
+    // 3. 🆕 新增：监听年龄变化，自动重置外观
+    // 当用户在下拉菜单改变年龄段时，如果不重置，可能会出现“成人身体+婴儿头”的错乱
+    useEffect(() => {
+        if (currentSim) {
+            randomizeVisuals();
+        }
+    }, [currentSim?.ageStage]); // 监听 ageStage 变化
 
     const addMember = () => {
         if (familyMembers.length >= 8) return;

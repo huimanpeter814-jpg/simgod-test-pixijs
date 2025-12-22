@@ -138,12 +138,22 @@ const PixiGameCanvasComponent: React.FC = () => {
             console.log("📥 Loading assets...");
             await loadGameAssets([
                 ...(ASSET_CONFIG.bg || []),
-                ...(ASSET_CONFIG.bodies || []),
-                ...(ASSET_CONFIG.outfits || []),
-                ...(ASSET_CONFIG.hairs || []),
+                
+                // [修复] 展平加载所有年龄段的资源
+                ...ASSET_CONFIG.adult.bodies,
+                ...ASSET_CONFIG.adult.outfits,
+                ...ASSET_CONFIG.adult.hairs,
+                
+                ...ASSET_CONFIG.child.bodies,
+                ...ASSET_CONFIG.child.outfits,
+                ...ASSET_CONFIG.child.hairs,
+                
+                ...ASSET_CONFIG.infant.bodies,
+                ...ASSET_CONFIG.infant.outfits,
+                ...ASSET_CONFIG.infant.hairs,
+
+                // 兼容旧字段 (如果你的 assets.ts 里还保留了 face，也可以加上)
                 ...(ASSET_CONFIG.face || []),
-                ...(ASSET_CONFIG.clothes || []),
-                ...(ASSET_CONFIG.pants || [])
             ]);
             setLoading(false);
 

@@ -138,19 +138,18 @@ export class MovingState extends BaseState {
         // --- 修复开始：更智能的卡死检测 ---
         // 计算这一帧移动了多少距离
         const distMoved = Math.sqrt(Math.pow(sim.pos.x - this.lastPos.x, 2) + Math.pow(sim.pos.y - this.lastPos.y, 2));
-        
-        // 如果几乎没动 (比如被墙挡住，或者寻路死循环)
+    
         if (distMoved < 0.1 * dt) { 
             this.stuckTimer += dt;
         } else {
-            // 如果动了，重置计时器，并更新上一次的位置
             this.stuckTimer = 0;
             this.lastPos = { x: sim.pos.x, y: sim.pos.y };
         }
 
         // 只有当“原地踏步”超过一定时间 (比如 500 ticks, 约8-10秒) 才触发强制传送
+        // 卡住超过 500 ticks (约8秒) -> 强制传送
         if (this.stuckTimer > 500 && sim.target) {
-            console.warn(`[SimStates] ${sim.name} is physically stuck for too long. Teleporting to target.`);
+            console.warn(`[SimStates] ${sim.name} stuck in Moving. Teleporting.`);
             sim.pos = { ...sim.target };
             this.handleArrival(sim);
             return;
@@ -177,8 +176,14 @@ export class MovingState extends BaseState {
 export class CommutingState extends BaseState {
     actionName = SimAction.Commuting;
     phase: 'to_plot' | 'to_station' = 'to_station';
+    // 🆕 修复：添加卡死检测变量
+    stuckTimer: number = 0;
+    lastPos: { x: number, y: number } = { x: 0, y: 0 };
     enter(sim: Sim) {
         sim.path = [];
+        sim.commuteTimer = 0;
+        this.stuckTimer = 0;
+        this.lastPos = { x: sim.pos.x, y: sim.pos.y };
         const station = this.findWorkstation(sim);
         if (station) {
             this.phase = 'to_station';
@@ -196,18 +201,53 @@ export class CommutingState extends BaseState {
     }
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
+        // 🆕 1. 最大通勤时间限制 (防止跑太远跑不到)
+        // 2500 ticks 约等于 15-20 分钟游戏时间，如果还没到，强制传送
+        sim.commuteTimer += dt;
+        if (sim.commuteTimer > 2500 && sim.target) {
+            sim.pos = { ...sim.target };
+            this.handleArrival(sim);
+            return;
+        }
+
+        // 🆕 2. 原地卡死检测
+        const distMoved = Math.sqrt(Math.pow(sim.pos.x - this.lastPos.x, 2) + Math.pow(sim.pos.y - this.lastPos.y, 2));
+        if (distMoved < 0.1 * dt) {
+            this.stuckTimer += dt;
+        } else {
+            this.stuckTimer = 0;
+            this.lastPos = { x: sim.pos.x, y: sim.pos.y };
+        }
+
+        if (this.stuckTimer > 500 && sim.target) {
+            sim.pos = { ...sim.target };
+            this.handleArrival(sim);
+            return;
+        }
         const arrived = sim.moveTowardsTarget(dt);
         if (arrived) {
-            if (this.phase === 'to_plot') {
-                sim.lastPunchInTime = GameStore.time.hour + GameStore.time.minute / 60;
-                if (sim.lastPunchInTime > sim.job.startHour + 0.1) { sim.say("迟到了！😱", 'bad'); sim.workPerformance -= 5; } else { sim.say("打卡成功", 'sys'); }
-                const station = this.findWorkstation(sim);
-                if (station) {
-                    this.phase = 'to_station';
-                    sim.target = { x: station.x + station.w/2, y: station.y + station.h + 5 };
-                    sim.interactionTarget = { ...station, utility: 'work' };
-                } else { sim.say("没位置了...", 'bad'); sim.changeState(new WorkingState()); }
-            } else { sim.changeState(new WorkingState()); }
+            this.handleArrival(sim);
+        }
+    }
+    private handleArrival(sim: Sim) {
+        if (this.phase === 'to_plot') {
+            sim.lastPunchInTime = GameStore.time.hour + GameStore.time.minute / 60;
+            if (sim.lastPunchInTime > sim.job.startHour + 0.1) { sim.say("迟到了！😱", 'bad'); sim.workPerformance -= 5; } else { sim.say("打卡成功", 'sys'); }
+            
+            const station = this.findWorkstation(sim);
+            if (station) {
+                this.phase = 'to_station';
+                sim.target = { x: station.x + station.w/2, y: station.y + station.h + 5 };
+                sim.interactionTarget = { ...station, utility: 'work' };
+                // 切换目标后重置卡死计时
+                this.stuckTimer = 0;
+                sim.path = [];
+            } else { 
+                sim.say("没位置了...", 'bad'); 
+                sim.changeState(new WorkingState()); 
+            }
+        } else { 
+            sim.changeState(new WorkingState()); 
         }
     }
     private findWorkstation(sim: Sim): Furniture | null {
@@ -299,17 +339,53 @@ export class WorkingState extends BaseState {
 // --- 上学通勤 ---
 export class CommutingSchoolState extends BaseState {
     actionName = SimAction.CommutingSchool;
+    
+    // 🆕 修复：添加卡死检测变量
+    stuckTimer: number = 0;
+    lastPos: { x: number, y: number } = { x: 0, y: 0 };
+
+    enter(sim: Sim) {
+        // 重置计时器
+        sim.commuteTimer = 0;
+        this.stuckTimer = 0;
+        this.lastPos = { x: sim.pos.x, y: sim.pos.y };
+    }
+
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
+        
+        // 1. 最大通勤时间限制 (统一提高到 2000 ticks，约 30秒)
         sim.commuteTimer += dt;
-        if (sim.commuteTimer > 1200 && sim.target) {
+        if (sim.commuteTimer > 2000 && sim.target) {
             sim.pos = { ...sim.target };
-            sim.changeState(new SchoolingState());
-            sim.say("上课中...", 'act');
+            this.handleArrival(sim);
             return;
         }
+
+        // 2. 原地卡死检测
+        const distMoved = Math.sqrt(Math.pow(sim.pos.x - this.lastPos.x, 2) + Math.pow(sim.pos.y - this.lastPos.y, 2));
+        if (distMoved < 0.1 * dt) {
+            this.stuckTimer += dt;
+        } else {
+            this.stuckTimer = 0;
+            this.lastPos = { x: sim.pos.x, y: sim.pos.y };
+        }
+
+        if (this.stuckTimer > 500 && sim.target) {
+             sim.pos = { ...sim.target };
+             this.handleArrival(sim);
+             return;
+        }
+
         const arrived = sim.moveTowardsTarget(dt);
-        if (arrived) { sim.changeState(new SchoolingState()); sim.say("乖乖上学", 'act'); }
+        if (arrived) { 
+            this.handleArrival(sim); 
+        }
+    }
+
+    private handleArrival(sim: Sim) {
+        sim.changeState(new SchoolingState());
+        sim.say("乖乖上学", 'act');
     }
 }
 
@@ -334,12 +410,14 @@ export class SchoolingState extends BaseState {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) schoolType = 'kindergarten';
             const plot = GameStore.worldLayout.find(p => p.templateId === schoolType);
             if (plot) {
+                const w = plot.width || 300;
+                const h = plot.height || 300;
                 if (Math.random() > 0.5) {
-                    const area = { minX: plot.x, maxX: plot.x + (plot.width||300), minY: plot.y, maxY: plot.y + (plot.height||300) };
+                    const area = { minX: plot.x, maxX: plot.x + w, minY: plot.y, maxY: plot.y + h };
                     SchoolLogic.findObjectInArea(sim, 'play', area); 
                 } else {
-                    const tx = plot.x + 20 + Math.random() * ((plot.width||300) - 40);
-                    const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
+                    const tx = plot.x + 20 + Math.random() * (w - 40);
+                    const ty = plot.y + 20 + Math.random() * (h - 40);
                     sim.target = { x: tx, y: ty };
                 }
             }

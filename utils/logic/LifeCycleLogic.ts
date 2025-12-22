@@ -4,6 +4,7 @@ import { AGE_CONFIG, JOBS, BUFFS, SURNAMES, MBTI_TYPES } from '../../constants';
 import { SocialLogic } from './social';
 import { CareerLogic } from './career';
 import { AgeStage } from '../../types';
+import { getAssetPool } from './SimInitializer';
 
 // 🧬 遗传算法辅助函数
 export const mixTrait = (val1: number, val2: number, mutationRange: number = 15) => {
@@ -33,11 +34,32 @@ export const LifeCycleLogic = {
         if (sim.age > currentStageConf.max) {
             const stages: AgeStage[] = [AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen, AgeStage.Adult, AgeStage.MiddleAged, AgeStage.Elder];
             const idx = stages.indexOf(sim.ageStage);
+            
             if (idx < stages.length - 1) {
-                sim.ageStage = stages[idx + 1];
-                sim.say(`我长大了！变成 ${AGE_CONFIG[sim.ageStage].label} 了`, 'sys');
-                sim.addMemory(`在这个月，我成长为了 ${AGE_CONFIG[sim.ageStage].label}。`, 'life');
+                const oldStage = sim.ageStage;
+                const newStage = stages[idx + 1];
                 
+                sim.ageStage = newStage;
+                sim.say(`我长大了！(${AGE_CONFIG[newStage].label})`, 'sys');
+                sim.addMemory(`成长为了 ${AGE_CONFIG[newStage].label}。`, 'life');
+
+                // 🆕 关键修改：检测是否跨越了资源组（例如 婴儿->幼儿，儿童->青少年）
+                // 1. Infant -> Toddler (换 Child 资源)
+                // 2. Child -> Teen (换 Adult 资源)
+                const isInfantToChild = oldStage === AgeStage.Infant && newStage === AgeStage.Toddler;
+                const isChildToAdult = oldStage === AgeStage.Child && newStage === AgeStage.Teen;
+
+                if (isInfantToChild || isChildToAdult) {
+                    const pool = getAssetPool(newStage);
+                    const pick = (list: string[]) => list.length > 0 ? list[Math.floor(Math.random() * list.length)] : '';
+                    
+                    // 重新随机分配对应年龄段的外观
+                    sim.appearance.body = pick(pool.bodies);
+                    sim.appearance.outfit = pick(pool.outfits);
+                    sim.appearance.hair = pick(pool.hairs);
+                    
+                    // 如果有需要，这里也可以根据性别做更细致的筛选（如果你的文件名包含 gender 标记）
+                }
                 if (sim.ageStage === AgeStage.Toddler) { sim.height += 30; sim.weight += 7; }
                 else if (sim.ageStage === AgeStage.Child) { sim.height += 30; sim.weight += 15; }
                 else if (sim.ageStage === AgeStage.Teen) { sim.height += 30; sim.weight += 20; }
@@ -46,6 +68,14 @@ export const LifeCycleLogic = {
                 if (sim.ageStage === AgeStage.Adult && sim.job.id === 'unemployed') {
                     CareerLogic.assignJob(sim);
                     sim.say("该找份工作养活自己了！", 'sys');
+                }
+                // 🆕 新增：步入老年，发色变白
+                if (sim.ageStage === AgeStage.Elder) {
+                    const greyTones = ['#dcdde1', '#b2bec3', '#7f8fa6', '#f5f6fa', '#dfe4ea'];
+                    sim.hairColor = greyTones[Math.floor(Math.random() * greyTones.length)];
+                    
+                    sim.say("头发变白了...", 'sys');
+                    sim.addMemory("发现自己头发全白了，不得不感叹岁月的流逝。", "life");
                 }
             }
         }

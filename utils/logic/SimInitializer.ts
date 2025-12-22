@@ -2,6 +2,13 @@ import { Sim } from '../Sim';
 import { SimData, AgeStage, NeedType, SimAppearance } from '../../types';
 import { CONFIG, AGE_CONFIG, SURNAMES, GIVEN_NAMES, ASSET_CONFIG, MBTI_TYPES, ZODIACS, LIFE_GOALS, JOBS, BASE_DECAY } from '../../constants';
 
+// 🆕 辅助函数：根据年龄获取资源池
+export const getAssetPool = (stage: AgeStage) => {
+    if (stage === AgeStage.Infant) return ASSET_CONFIG.infant;
+    if (stage === AgeStage.Toddler || stage === AgeStage.Child) return ASSET_CONFIG.child;
+    return ASSET_CONFIG.adult; // Teen, Adult, Elder
+};
+
 // [修改] 扩充配置接口，支持属性传入（用于遗传和自定义捏人）
 export interface SimInitConfig {
     x?: number;
@@ -116,7 +123,19 @@ export const SimInitializer = {
         
         // 外观 (支持自定义颜色配置) - 仍然保留颜色字段以备不时之需（例如 UI 文字颜色）
         sim.skinColor = config.skinColor || CONFIG.COLORS.skin[Math.floor(Math.random() * CONFIG.COLORS.skin.length)];
-        sim.hairColor = config.hairColor || CONFIG.COLORS.hair[Math.floor(Math.random() * CONFIG.COLORS.hair.length)];
+        // 🆕 修改：发色初始化逻辑
+        if (config.hairColor) {
+            sim.hairColor = config.hairColor;
+        } else {
+            if (sim.ageStage === AgeStage.Elder) {
+                // 老年人强制灰白发系
+                const greyTones = ['#dcdde1', '#b2bec3', '#7f8fa6', '#f5f6fa', '#dfe4ea'];
+                sim.hairColor = greyTones[Math.floor(Math.random() * greyTones.length)];
+            } else {
+                // 其他年龄段随机
+                sim.hairColor = CONFIG.COLORS.hair[Math.floor(Math.random() * CONFIG.COLORS.hair.length)];
+            }
+        }
         sim.clothesColor = config.clothesColor || CONFIG.COLORS.clothes[Math.floor(Math.random() * CONFIG.COLORS.clothes.length)];
         sim.pantsColor = config.pantsColor || CONFIG.COLORS.pants[Math.floor(Math.random() * CONFIG.COLORS.pants.length)];
 
@@ -124,18 +143,16 @@ export const SimInitializer = {
         if (config.appearance) {
             sim.appearance = config.appearance;
         } else {
-            // 从 ASSET_CONFIG 中随机挑选
-            // 简单逻辑：随机选一个。如果有性别区分需求，可以根据文件名判断 (但这里先全随机)
+            // 根据年龄获取对应的资源池
+            const pool = getAssetPool(sim.ageStage);
+            
             const pick = (list: string[]) => list.length > 0 ? list[Math.floor(Math.random() * list.length)] : '';
             
             sim.appearance = {
-                body: pick(ASSET_CONFIG.bodies),
-                outfit: pick(ASSET_CONFIG.outfits),
-                hair: pick(ASSET_CONFIG.hairs),
-                // 兼容字段
-                face: '',
-                clothes: '',
-                pants: ''
+                body: pick(pool.bodies),
+                outfit: pick(pool.outfits),
+                hair: pick(pool.hairs),
+                face: '', clothes: '', pants: ''
             };
         }
 
