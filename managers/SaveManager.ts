@@ -10,6 +10,7 @@ export interface GameSaveData {
     worldLayout: WorldPlot[];
     rooms: RoomDef[];
     customFurniture: Furniture[];
+    furniture?: Furniture[]; // [新增] 全量家具数据
 }
 
 // 定义地图导出数据结构
@@ -18,7 +19,8 @@ export interface MapData {
     timestamp: number;
     worldLayout: WorldPlot[];
     rooms: RoomDef[];
-    customFurniture: Furniture[];
+    customFurniture?: Furniture[]; // 兼容旧版
+    furniture?: Furniture[]; // [新增] 全量家具数据
 }
 
 export class SaveManager {
@@ -34,7 +36,6 @@ export class SaveManager {
                 const json = localStorage.getItem(`${this.STORAGE_PREFIX}${i}`);
                 if (json) {
                     const data = JSON.parse(json);
-                    // 简单的完整性检查
                     if (data.timestamp && data.time) {
                         slots.push({
                             slot: i,
@@ -74,13 +75,11 @@ export class SaveManager {
 
     /**
      * 从指定槽位加载游戏数据
-     * @returns 解析后的数据对象，如果失败则返回 null
      */
     static loadFromSlot(slotIndex: number): GameSaveData | null {
         try {
             const json = localStorage.getItem(`${this.STORAGE_PREFIX}${slotIndex}`);
             if (!json) return null;
-            
             const data = JSON.parse(json) as GameSaveData;
             
             // 基础数据校验
@@ -88,7 +87,6 @@ export class SaveManager {
                 console.error("[SaveManager] Save file is corrupted (missing critical fields)");
                 return null;
             }
-
             return data;
         } catch (e) {
             console.error("[SaveManager] Load failed:", e);
@@ -107,7 +105,6 @@ export class SaveManager {
      * 验证并解析导入的地图数据
      */
     static parseMapData(json: any): MapData | null {
-        // 宽松检查：只要有 worldLayout 数组即可视为有效
         if (!json || typeof json !== 'object' || !Array.isArray(json.worldLayout)) {
             console.error("[SaveManager] Invalid map data format");
             return null;
@@ -118,7 +115,8 @@ export class SaveManager {
             timestamp: json.timestamp || Date.now(),
             worldLayout: json.worldLayout,
             rooms: Array.isArray(json.rooms) ? json.rooms : [],
-            customFurniture: Array.isArray(json.customFurniture) ? json.customFurniture : []
+            customFurniture: Array.isArray(json.customFurniture) ? json.customFurniture : [],
+            furniture: Array.isArray(json.furniture) ? json.furniture : [] // 支持全量导入
         };
     }
 }

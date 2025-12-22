@@ -19,37 +19,14 @@ export class EditorManager implements EditorState {
     interactionState: 'idle' | 'carrying' | 'resizing' | 'drawing' = 'idle';
     resizeHandle: 'nw' | 'ne' | 'sw' | 'se' | null = null;
     
-    drawingPlot: {
-        startX: number;
-        startY: number;
-        currX: number;
-        currY: number;
-        templateId: string;
-    } | null = null;
-
-    drawingFloor: {
-        startX: number;
-        startY: number;
-        currX: number;
-        currY: number;
-        pattern: string;
-        color: string;
-        label: string;
-        hasWall: boolean;
-    } | null = null;
-
+    drawingPlot: any = null;
+    drawingFloor: any = null;
     previewPos: { x: number, y: number } | null = null;
 
     history: EditorAction[] = [];
     redoStack: EditorAction[] = [];
     
-    snapshot: {
-        worldLayout: WorldPlot[];
-        furniture: Furniture[];
-        rooms: RoomDef[]; 
-    } | null = null;
-
-    // === 核心逻辑 ===
+    snapshot: any = null;
 
     enterEditorMode() {
         this.mode = 'plot'; 
@@ -61,7 +38,7 @@ export class EditorManager implements EditorState {
         this.history = [];
         this.redoStack = [];
         this.interactionState = 'idle';
-        GameStore.time.speed = 0; // 暂停游戏
+        GameStore.time.speed = 0; 
         GameStore.notify();
     }
 
@@ -77,16 +54,51 @@ export class EditorManager implements EditorState {
     cancelChanges() {
         if (this.snapshot) {
             GameStore.worldLayout = this.snapshot.worldLayout;
-            const snapshotCustom = this.snapshot.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_'));
-            GameStore.furniture = [...GameStore.furniture.filter(f => !f.id.startsWith('custom_')), ...snapshotCustom];
-            const existingSystemRooms = GameStore.rooms.filter(r => !r.isCustom);
-            GameStore.rooms = [...existingSystemRooms, ...this.snapshot.rooms];
-            GameStore.rebuildWorld(false); 
+            // [修复] 恢复旧逻辑：因为 rebuildWorld(false) 只处理自定义家具
+            // 如果我们之前是全量加载，这里需要特别处理，或者简单地全量恢复
+            GameStore.furniture = this.snapshot.furniture;
+            
+            // 房间需要区分：系统生成 vs 自定义
+            // 简单策略：重建世界以恢复系统房间，然后追加快照里的自定义房间
+            // 但因为我们之前修改了 GameStore.furniture 指向了快照，rebuildWorld 会清空它
+            // 所以正确的顺序是：
+            
+            // 1. 恢复 Layout
+            GameStore.worldLayout = this.snapshot.worldLayout;
+            
+            // 2. 重建系统默认对象
+            // 注意：rebuildWorld(false) 在 GameStore 中被定义为只保留自定义物品
+            // 这里我们需要的是“恢复到进入编辑模式前的状态”
+            // 既然 snapshot.furniture 存的是当时的所有家具，直接赋值即可
+            
+            GameStore.furniture = this.snapshot.furniture;
+            
+            // 房间同理，但因为房间有 template 生成的，比较复杂
+            // 最稳妥的方法：重新从 layout 生成系统房间，然后覆盖自定义属性？
+            // 为了简化，我们假设用户不想撤销对默认家具的移动（如果太复杂），
+            // 但为了体验，还是全量恢复比较好。
+            // 鉴于 rebuildWorld 逻辑比较死板，我们这里手动恢复：
+            
+            // 恢复房间：快照里只存了 isCustom 的房间？
+            // 在 enterEditorMode 里：rooms: JSON.parse(JSON.stringify(GameStore.rooms.filter(r => r.isCustom))) 
+            // 这意味着非 custom 的房间没存快照。
+            // 所以我们需要重新生成非 custom 房间
+            
+            const customRooms = this.snapshot.rooms;
+            GameStore.rebuildWorld(true); // 生成默认房间和家具
+            
+            // 现在的 GameStore.furniture 是默认的。我们需要用快照覆盖它吗？
+            // 快照里的是进入编辑模式时的所有家具（包括已移动的默认家具）
+            GameStore.furniture = this.snapshot.furniture;
+            
+            // 房间：合并
+            const defaultRooms = GameStore.rooms.filter(r => !r.isCustom);
+            GameStore.rooms = [...defaultRooms, ...customRooms];
         }
         this.snapshot = null;
         this.resetState();
         GameStore.time.speed = 1;
-        GameStore.notify();
+        GameStore.triggerMapUpdate();
     }
 
     setTool(tool: 'camera' | 'select') {
@@ -119,10 +131,8 @@ export class EditorManager implements EditorState {
         GameStore.rooms = [];
         GameStore.housingUnits = [];
         GameStore.initIndex();
-        GameStore.triggerMapUpdate(); // 强制重绘
+        GameStore.triggerMapUpdate(); 
     }
-
-    // === 操作 ===
 
     startPlacingPlot(templateId: string) {
         this.mode = 'plot';
@@ -202,8 +212,8 @@ export class EditorManager implements EditorState {
                 const temp = f.w;
                 f.w = f.h;
                 f.h = temp;
-                GameStore.initIndex(); // 重建索引以更新碰撞体
-                GameStore.triggerMapUpdate(); // 旋转后需要重绘
+                GameStore.initIndex(); 
+                GameStore.triggerMapUpdate(); 
             }
         }
     }
@@ -268,30 +278,23 @@ export class EditorManager implements EditorState {
         GameStore.triggerMapUpdate();
     }
 
-    // [新增修复] 添加缺失的方法：切换地块模板
     changePlotTemplate(plotId: string, templateId: string) {
         const plot = GameStore.worldLayout.find(p => p.id === plotId);
         if (plot) {
-            // 1. 清理旧数据：移除该地块原有的房间、家具、住户单元
-            // 假设 ID 命名规则是 `${plotId}_${itemId}`
+            // 清理旧数据
             GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`));
             GameStore.furniture = GameStore.furniture.filter(f => !f.id.startsWith(`${plotId}_`));
             GameStore.housingUnits = GameStore.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
 
-            // 2. 更新模板 ID
             plot.templateId = templateId;
-            
-            // 3. 重新实例化地块内容 (使用 GameStore 的静态方法)
             GameStore.instantiatePlot(plot);
-
-            // 4. 重建索引并刷新
             GameStore.initIndex();
             GameStore.refreshFurnitureOwnership();
             GameStore.triggerMapUpdate();
         }
     }
 
-    removePlot(plotId: string, record = true) {
+    removePlot(plotId: string) {
         GameStore.worldLayout = GameStore.worldLayout.filter(p => p.id !== plotId);
         GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`)); 
         this.selectedPlotId = null;
@@ -299,14 +302,14 @@ export class EditorManager implements EditorState {
         GameStore.triggerMapUpdate();
     }
 
-    removeFurniture(id: string, record = true) {
+    removeFurniture(id: string) {
         GameStore.furniture = GameStore.furniture.filter(f => f.id !== id);
         this.selectedFurnitureId = null;
         GameStore.initIndex();
         GameStore.triggerMapUpdate();
     }
 
-    removeRoom(roomId: string, record = true) {
+    removeRoom(roomId: string) {
         GameStore.rooms = GameStore.rooms.filter(r => r.id !== roomId);
         this.selectedRoomId = null;
         GameStore.initIndex();
@@ -321,7 +324,6 @@ export class EditorManager implements EditorState {
                 plot.y = newRect.y;
                 plot.width = Math.max(50, newRect.w);
                 plot.height = Math.max(50, newRect.h);
-                // 缩放 Plot 时，如果是自定义空地，同步缩放其 Base Room
                 if (plot.templateId === 'default_empty' || plot.id.startsWith('plot_custom')) {
                      const baseRoom = GameStore.rooms.find(r => r.id === `${plot.id}_base`);
                      if (baseRoom) {
@@ -342,16 +344,9 @@ export class EditorManager implements EditorState {
             }
         }
         GameStore.initIndex(); 
-        GameStore.triggerMapUpdate(); // 实时触发地图重绘
+        GameStore.triggerMapUpdate();
     }
     
-    finalizeResize(type: 'plot'|'room', id: string, prevRect: {x:number,y:number,w:number,h:number}, newRect: {x:number,y:number,w:number,h:number}) {
-        this.resizeHandle = null;
-        this.interactionState = 'idle';
-        // 撤销/重做逻辑省略，为了性能直接确认
-        GameStore.notify();
-    }
-
     finalizeMove(entityType: 'plot' | 'furniture' | 'room', id: string, startPos: {x:number, y:number}) {
         if (!this.previewPos) return;
         const { x, y } = this.previewPos;
@@ -363,7 +358,6 @@ export class EditorManager implements EditorState {
                 const dx = x - plot.x;
                 const dy = y - plot.y;
                 plot.x = x; plot.y = y; 
-                // 移动关联的房间和家具
                 GameStore.rooms.forEach(r => { if(r.id.startsWith(`${id}_`)) { r.x += dx; r.y += dy; } });
                 GameStore.furniture.forEach(f => { if(f.id.startsWith(`${id}_`)) { f.x += dx; f.y += dy; } });
                 GameStore.housingUnits.forEach(u => { 
@@ -382,7 +376,7 @@ export class EditorManager implements EditorState {
         if (hasChange) {
             GameStore.initIndex();
             GameStore.refreshFurnitureOwnership();
-            GameStore.triggerMapUpdate(); // 触发重绘
+            GameStore.triggerMapUpdate();
         }
         
         this.isDragging = false;
@@ -391,7 +385,6 @@ export class EditorManager implements EditorState {
         GameStore.notify();
     }
     
-    // (Undo/Redo implementation omitted for brevity, logic remains similar but triggers triggerMapUpdate)
     recordAction(action: EditorAction) {}
     undo() {}
     redo() {}

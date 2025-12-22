@@ -186,27 +186,28 @@ export class GameStore {
             this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
         }
 
+        // [重要] 初始化时清空，或者重置时清空
         if (initial) {
             this.rooms = [];
-        } else {
-            this.rooms = this.rooms.filter(r => r.isCustom);
-        }
-        
-        this.housingUnits = [];
-        
-        if (initial) {
             this.furniture = [];
+            this.housingUnits = [];
+            
+            // 只有在完全初始化时才加载默认街道物品
             // @ts-ignore
             this.furniture.push(...STREET_PROPS);
         } else {
+            // [修复] 非初始化重构（例如撤销/取消编辑），保留自定义物品
+            // 但如果是在 Import 流程中，通常我们会先调 rebuildWorld(true)
+            // 所以这里主要是为了 Editor 的 Cancel 逻辑服务
+            this.rooms = this.rooms.filter(r => r.isCustom);
             this.furniture = this.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_'));
+            this.housingUnits = [];
         }
 
         this.worldLayout.forEach(plot => {
             GameStore.instantiatePlot(plot);
         });
 
-        // [修复] 重建后必须强制更新索引，否则寻路和查询会失效
         this.triggerMapUpdate();
     }
 
@@ -321,30 +322,31 @@ export class GameStore {
 
     static refreshFurnitureOwnership() {
         this.furniture.forEach(f => {
-            if (f.id.startsWith('custom_')) {
-                const cx = f.x + f.w / 2;
-                const cy = f.y + f.h / 2;
-                const ownerUnit = this.housingUnits.find(u => {
-                    const maxX = u.maxX ?? (u.x + u.area.w);
-                    const maxY = u.maxY ?? (u.y + u.area.h);
-                    return cx >= u.x && cx < maxX && cy >= u.y && cy < maxY;
-                });
-                if (ownerUnit) f.homeId = ownerUnit.id;
-                else delete f.homeId;
-            }
+            // [修改] 对所有家具都尝试刷新归属权，不仅是 custom_
+            const cx = f.x + f.w / 2;
+            const cy = f.y + f.h / 2;
+            const ownerUnit = this.housingUnits.find(u => {
+                const maxX = u.maxX ?? (u.x + u.area.w);
+                const maxY = u.maxY ?? (u.y + u.area.h);
+                return cx >= u.x && cx < maxX && cy >= u.y && cy < maxY;
+            });
+            if (ownerUnit) f.homeId = ownerUnit.id;
+            else if (f.id.startsWith('custom_')) delete f.homeId; // 只有自定义家具在移出区域后会失去归属
         });
     }
 
+    // [核心修复] 导出全量数据，包括所有已编辑、移动的默认家具和房间
     static getMapData() {
         return {
-            version: "1.0",
+            version: "2.0", // 升级版本号
             timestamp: Date.now(),
             worldLayout: this.worldLayout,
-            rooms: this.rooms.filter(r => r.isCustom),
-            customFurniture: this.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_'))
+            rooms: this.rooms, // 导出所有房间 (包括模版自带但可能被修改的)
+            furniture: this.furniture // 导出所有家具
         };
     }
 
+    // [核心修复] 导入全量数据
     static importMapData(rawJson: any) {
         const validData = SaveManager.parseMapData(rawJson);
         if (!validData) {
@@ -353,9 +355,24 @@ export class GameStore {
         }
         try {
             this.worldLayout = validData.worldLayout;
+            
+            // 1. 重建基础结构 (主要是为了生成 HousingUnits 和确保 Plot 结构完整)
+            // 这会生成默认的房间和家具
             this.rebuildWorld(true);
-            if (validData.rooms) this.rooms = [...this.rooms, ...validData.rooms];
-            if (validData.customFurniture) this.furniture = [...this.furniture, ...validData.customFurniture];
+            
+            // 2. [关键] 如果存档包含全量数据，使用存档数据覆盖默认生成的数据
+            // 这样可以保留用户对默认家具的移动/旋转操作
+            if (validData.furniture && validData.furniture.length > 0) {
+                this.rooms = validData.rooms || this.rooms; // 如果存档有房间数据则覆盖
+                this.furniture = validData.furniture; // 覆盖家具
+                
+                // 3. 重新计算归属权，确保家具与房屋关联正确
+                this.refreshFurnitureOwnership();
+            } else {
+                // 兼容旧版存档 (只存了 customFurniture)
+                if (validData.rooms) this.rooms = [...this.rooms, ...validData.rooms]; // 追加自定义房间
+                if (validData.customFurniture) this.furniture = [...this.furniture, ...validData.customFurniture]; // 追加自定义家具
+            }
             
             this.triggerMapUpdate();
             this.showToast("✅ 地图导入成功！");
@@ -364,6 +381,7 @@ export class GameStore {
             this.showToast("❌ 导入过程出错，请重试");
         }
     }
+
 
     static get history() { return this.editor.history; } 
     static get redoStack() { return this.editor.redoStack; }
@@ -408,21 +426,14 @@ export class GameStore {
             
             this.worldGrid.insert({ id: f.id, x: f.x, y: f.y, w: f.w, h: f.h, type: 'furniture', ref: f });
 
-            // 查找该家具属于哪个地块
-            // 1. 优先尝试 ID 匹配 (性能最快)
             let ownerPlot = this.worldLayout.find(p => f.id.startsWith(p.id));
-            
-            // 2. 如果 ID 不匹配 (例如是 custom_ 开头的放置物)，则进行【坐标判定】
             if (!ownerPlot) {
-                // 计算家具中心点
                 const cx = f.x + f.w / 2;
                 const cy = f.y + f.h / 2;
-                
                 ownerPlot = this.worldLayout.find(p => {
-                    const pw = p.width || 300; // 如果未定义宽度，使用默认值
+                    const pw = p.width || 300; 
                     const ph = p.height || 300;
-                    return cx >= p.x && cx < p.x + pw && 
-                        cy >= p.y && cy < p.y + ph;
+                    return cx >= p.x && cx < p.x + pw && cy >= p.y && cy < p.y + ph;
                 });
             }
             if (ownerPlot) {
@@ -440,9 +451,8 @@ export class GameStore {
         });
 
         this.rooms.forEach(r => {
-            if (r.isCustom) {
-                this.worldGrid.insert({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h, type: 'room', ref: r });
-            }
+            // [修改] 现在所有房间都加入网格，以便在 Floor Mode 选中
+            this.worldGrid.insert({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h, type: 'room', ref: r });
         });
     }
 
@@ -504,6 +514,7 @@ export class GameStore {
             return s;
         });
 
+        // [修改] 存档时保存所有对象状态，确保位置修改被记录
         const saveData: GameSaveData = {
             version: 3.2, 
             timestamp: Date.now(),
@@ -511,8 +522,8 @@ export class GameStore {
             logs: this.logs,
             sims: safeSims,
             worldLayout: this.worldLayout,
-            rooms: this.rooms.filter(r => r.isCustom),
-            customFurniture: this.furniture.filter(f => f.id.startsWith('custom_') || f.id.startsWith('vending_') || f.id.startsWith('trash_') || f.id.startsWith('hydrant_')) 
+            rooms: this.rooms, 
+            customFurniture: this.furniture 
         };
 
         const success = SaveManager.saveToSlot(slotIndex, saveData);
@@ -526,29 +537,31 @@ export class GameStore {
 
     static loadGame(slotIndex: number = 1, silent: boolean = false): boolean {
         const data = SaveManager.loadFromSlot(slotIndex);
-        
         if (!data) {
-            if (!silent) {
-                this.showToast(`❌ 读取存档失败`);
-            }
+            if (!silent) this.showToast(`❌ 读取存档失败`);
             return false;
         }
 
         try {
-            // [修复] 增加对 worldLayout 数据的校验
             if (data.worldLayout && Array.isArray(data.worldLayout) && data.worldLayout.length > 0) {
                 this.worldLayout = data.worldLayout;
             } else {
-                console.warn("[GameStore] Corrupted world layout in save, using default.");
                 this.worldLayout = JSON.parse(JSON.stringify(WORLD_LAYOUT));
             }
 
+            // [核心修复] 读取逻辑：如果有全量数据则直接使用，否则走旧版逻辑
             this.rebuildWorld(true); 
 
-            if (data.rooms) this.rooms = [...this.rooms, ...data.rooms];
-            if (data.customFurniture) {
-                const staticFurniture = this.furniture; 
-                this.furniture = [...staticFurniture, ...data.customFurniture];
+            if (data.furniture && data.furniture.length > 0) {
+                this.rooms = data.rooms || this.rooms;
+                this.furniture = data.furniture;
+            } else {
+                // 兼容旧存档
+                if (data.rooms) this.rooms = [...this.rooms, ...data.rooms];
+                if (data.customFurniture) {
+                    const staticFurniture = this.furniture; 
+                    this.furniture = [...staticFurniture, ...data.customFurniture];
+                }
             }
 
             this.time = { ...data.time, speed: 1 };
@@ -558,9 +571,7 @@ export class GameStore {
 
             this.triggerMapUpdate(); 
             
-            if (!silent) {
-                this.showToast(`📂 读取存档 ${slotIndex} 成功！`);
-            }
+            if (!silent) this.showToast(`📂 读取存档 ${slotIndex} 成功！`);
             return true;
         } catch (e) {
             console.error("[GameStore] Hydration failed:", e);
