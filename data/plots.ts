@@ -741,7 +741,9 @@ const PLOT_HOSPITAL_S: PlotTemplate = {
         ...createGrid('bed', 80, 10, 2, 2, 60, 80, { w: 50, h: 70, color: '#fff', label: '病床', utility: 'healing', pixelPattern: 'medical_bed', tags: ['medical_bed', 'bed'] }),
         { id: 'op', x: 200, y: 10, w: 60, h: 80, color: '#b2bec3', label: '手术室', utility: 'none', pixelPattern: 'scanner', tags: ['medical_device'] },
         { id: 'toilet', x: 230, y: 130, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-        { id: 'shower', x: 230, y: 170, w: 30, h: 30, color: '#81ecec', label: '淋', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] }
+        { id: 'shower', x: 230, y: 170, w: 30, h: 30, color: '#81ecec', label: '淋', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] },
+        // [新增] 公共救助婴儿床
+        { id: 'crib_public', x: 10, y: 150, w: 40, h: 40, color: '#ff9ff3', label: '爱心床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby', 'public'] }
     ]
 };
 
@@ -757,7 +759,10 @@ const PLOT_HOSPITAL_M: PlotTemplate = {
         ...createGrid('bed', 20, 150, 2, 3, 70, 90, { w: 50, h: 80, color: '#fff', label: '病床', utility: 'healing', pixelPattern: 'medical_bed', tags: ['medical_bed', 'bed'] }),
         { id: 'op', x: 180, y: 20, w: 80, h: 80, color: '#b2bec3', label: '手术室', utility: 'none', pixelPattern: 'scanner', tags: ['medical_device'] },
         { id: 'toilet', x: 200, y: 380, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-        { id: 'shower', x: 240, y: 380, w: 30, h: 30, color: '#81ecec', label: '淋', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] }
+        { id: 'shower', x: 240, y: 380, w: 30, h: 30, color: '#81ecec', label: '淋', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] },
+    // [新增] 公共救助婴儿床 (放两个)
+        { id: 'crib_public1', x: 150, y: 300, w: 40, h: 40, color: '#ff9ff3', label: '爱心床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby', 'public'] },
+        { id: 'crib_public2', x: 200, y: 300, w: 40, h: 40, color: '#ff9ff3', label: '爱心床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby', 'public'] }
     ]
 };
 
@@ -773,7 +778,10 @@ const PLOT_HOSPITAL_L: PlotTemplate = {
         { id: 'op', x: 20, y: 230, w: 80, h: 70, color: '#b2bec3', label: '手术室', utility: 'none', pixelPattern: 'scanner', tags: ['medical_device'] },
         ...createGrid('bed', 180, 20, 3, 2, 70, 90, { w: 50, h: 80, color: '#fff', label: '病床', utility: 'healing', pixelPattern: 'medical_bed', tags: ['medical_bed', 'bed'] }),
         { id: 'toilet', x: 360, y: 220, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-        { id: 'shower', x: 360, y: 260, w: 30, h: 30, color: '#81ecec', label: '淋', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] }
+        { id: 'shower', x: 360, y: 260, w: 30, h: 30, color: '#81ecec', label: '淋', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] },
+        // [新增] 公共救助婴儿床 (放两个)
+        { id: 'crib_public1', x: 180, y: 250, w: 40, h: 40, color: '#ff9ff3', label: '爱心床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby', 'public'] },
+        { id: 'crib_public2', x: 220, y: 250, w: 40, h: 40, color: '#ff9ff3', label: '爱心床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby', 'public'] }
     ]
 };
 

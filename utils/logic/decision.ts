@@ -66,7 +66,7 @@ export const DecisionLogic = {
             }
         }
 
-        // 3. 私宅归属权检查
+        // 3. 私宅归属权检查 (关键修改：确保流浪汉不闯民宅，但可以用公共设施)
         let homeId: string | undefined;
         if ('homeId' in target && (target as Furniture).homeId) {
             homeId = (target as Furniture).homeId;
@@ -82,6 +82,7 @@ export const DecisionLogic = {
         if (homeId) {
             if (sim.homeId === homeId) return false;
             if (sim.isTemporary && sim.job.id === 'nanny' && sim.homeId === homeId) return false;
+            // 只要是有主的房子，外人（包括无家可归者）都不能随便用
             const isOccupied = GameStore.sims.some(s => s.homeId === homeId);
             if (isOccupied) return true;
         }
@@ -120,29 +121,41 @@ export const DecisionLogic = {
     },
 
     triggerHungerBroadcast(sim: Sim) {
-        if (!sim.homeId) return false;
         const potentialCaregivers = GameStore.sims.filter(s => 
-            s.id !== sim.id && s.homeId === sim.homeId && s.isAtHome() && 
-            (s.ageStage === AgeStage.Adult || s.ageStage === AgeStage.MiddleAged || s.ageStage === AgeStage.Elder) &&
-            s.action !== SimAction.FeedBaby && s.health > 20
+            s.id !== sim.id && 
+            s.action !== SimAction.FeedBaby && 
+            s.health > 20 &&
+            (
+                // 1. 父母 (无视地点，只要活着且不是婴儿/幼儿)
+                ((s.id === sim.fatherId || s.id === sim.motherId) && ![AgeStage.Infant, AgeStage.Toddler].includes(s.ageStage)) ||
+                
+                // 2. 保姆 (必须在家且同住址 - 依然受限)
+                (sim.homeId && s.homeId === sim.homeId && s.isAtHome() && s.job.id === 'nanny') ||
+                
+                // 3. 同住成年亲属 (必须在家)
+                (sim.homeId && s.homeId === sim.homeId && s.isAtHome() && s.ageStage >= AgeStage.Adult && s.familyId === sim.familyId)
+            )
         );
 
         const candidates = potentialCaregivers.map(candidate => {
             let score = 0;
             if (candidate.isTemporary && candidate.job.id === 'nanny') score += 100;
             if (candidate.id === sim.fatherId || candidate.id === sim.motherId) score += 50;
-            if (candidate.ageStage === AgeStage.Elder && candidate.familyId === sim.familyId) score += 40;
+            
+            // 距离越近越好
             const dist = Math.sqrt(Math.pow(candidate.pos.x - sim.pos.x, 2) + Math.pow(candidate.pos.y - sim.pos.y, 2));
-            score -= dist * 0.01;
+            score -= dist * 0.05; // 加大距离惩罚，优先选身边的父母
+
             if (candidate.action === SimAction.Idle || candidate.action === SimAction.Wandering) score += 30;
             if (candidate.action === SimAction.Working) score -= 50;
             return { sim: candidate, score };
         });
 
-        candidates.sort((a, b) => b.score - a.score);
+        // 过滤掉太远或太忙的 (负分)
+        const validCandidates = candidates.filter(c => c.score > -50).sort((a, b) => b.score - a.score);
 
-        const best = candidates[0];
-        if (best && best.score > 0) {
+        const best = validCandidates[0];
+        if (best) {
             const caregiver = best.sim;
             caregiver.finishAction();
             caregiver.interactionTarget = null;
@@ -161,18 +174,26 @@ export const DecisionLogic = {
     decideAction(sim: Sim) {
         // 1. 婴幼儿特殊逻辑
         if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-            if (!sim.isAtHome()) {
+            // [修改] 如果无家可归，不再强行要求回家，而是允许尝试满足需求
+            if (!sim.isAtHome() && sim.homeId) {
                 if (sim.action !== SimAction.Waiting && sim.action !== SimAction.BeingEscorted) {
                     sim.say("我要回家...", 'bad');
                     sim.changeState(new WaitingState());
                 }
                 return; 
             }
+            // 无家可归的婴儿直接进入需求判断逻辑
+            
             if (sim.needs[NeedType.Hunger] < 50) {
                 if (this.triggerHungerBroadcast(sim)) return;
                 sim.say("饿饿...🍼", 'bad');
             } else if (sim.needs[NeedType.Energy] < 30) {
                 if (this.findObject(sim, 'nap_crib')) return;
+                // [新增] 如果找不到床，且非常困，允许通过“等待”状态回血 (模拟被抱着睡)
+                if (sim.needs[NeedType.Energy] < 10) {
+                    sim.say("困困...💤", 'bad');
+                    sim.needs[NeedType.Energy] += 0.05; // 极慢恢复
+                }
             } else if (sim.needs[NeedType.Fun] < 50) {
                 if (this.findObject(sim, 'play_blocks')) return;
             }
@@ -359,6 +380,7 @@ export const DecisionLogic = {
         else if (type === NeedType.Hunger) {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
                 candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []);
+                // [新增] 婴儿也可以尝试奶瓶/厨房 (逻辑在 interactionRegistry 细化，这里先扩大搜索范围)
             } else {
                 candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []); 
                 candidates = candidates.concat(GameStore.furnitureIndex.get('eat_out') || []); 
@@ -378,9 +400,11 @@ export const DecisionLogic = {
             candidates = GameStore.furnitureIndex.get(utility) || [];
         }
 
-        // [新增] 优先回家逻辑
+        // [核心修改] 优先回家逻辑 & 流浪汉处理
         const basicNeeds = [NeedType.Hunger, NeedType.Energy, NeedType.Bladder, NeedType.Hygiene];
         let forceHome = false;
+
+        // 只有当有家的时候才强制回家
         if (sim.homeId && basicNeeds.includes(type as NeedType)) {
             const currentPlot = GameStore.worldLayout.find(p => sim.pos.x >= p.x && sim.pos.x <= p.x + (p.width||300) && sim.pos.y >= p.y && sim.pos.y <= p.y + (p.height||300));
             const isAtWork = sim.workplaceId && currentPlot && currentPlot.id === sim.workplaceId;
@@ -390,10 +414,19 @@ export const DecisionLogic = {
 
         if (candidates.length) {
             let validCandidates = candidates.filter((f: Furniture)=> {
-                // 1. 权限
+                // 1. 权限 (调用修改后的 isRestricted)
                 if (DecisionLogic.isRestricted(sim, f)) return false;
-                // 2. 回家优先
+                
+                // 2. 回家优先 (仅当有家时生效)
                 if (forceHome && f.homeId !== sim.homeId) return false;
+                
+                // [新增] 流浪汉逻辑：如果没有家，且是基础需求，优先找公共设施 (无 homeId 的家具)
+                if (!sim.homeId && basicNeeds.includes(type as NeedType)) {
+                    // 如果家具有主，流浪汉不能用 (避免闯入别人家)
+                    // 注意：isRestricted 已经处理了大部分“私宅”判断，这里是双重保险
+                    if (f.homeId) return false;
+                }
+
                 // 3. 经济
                 if (type === NeedType.Hunger && sim.money < 20 && f.cost && f.cost > 0) return false;
                 if (f.cost && f.cost > sim.money) return false;
@@ -403,11 +436,15 @@ export const DecisionLogic = {
                     const isOccupied = GameStore.sims.some(s => s.id !== sim.id && s.interactionTarget?.id === f.id);
                     if (isOccupied) return false;
                 }
-                // 5. 婴幼儿
+                
+                // 5. 婴幼儿允许项
                 if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
                     const allowed = ['energy', 'nap_crib', 'play', 'play_blocks', 'hunger', 'bladder', 'hygiene'];
                     if (!allowed.includes(f.utility) && !f.tags?.includes('baby')) return false;
                     if (f.tags?.includes('stove') || f.tags?.includes('gym') || f.tags?.includes('computer')) return false;
+                    
+                    // [关键修改] 如果无家可归，允许使用公共 crib
+                    if (!sim.homeId && f.utility === 'nap_crib' && !f.homeId) return true;
                 }
                 return true;
             });
