@@ -134,14 +134,17 @@ export class MovingState extends BaseState {
         super.update(sim, dt);
         this.moveTimeout += dt;
         
-        // [修复] 提高超时阈值，防止初始化Lag导致瞬移 (3000 ticks = ~50秒 at 60fps)
-        if (this.moveTimeout > 3000 && sim.target) {
-            console.warn(`[SimStates] ${sim.name} stuck, teleporting to target.`);
+        // [修复] 再次提高超时阈值，防止倍速模式下误判
+        // 6000 ticks ≈ 1.6分钟(游戏内) 或 30秒(正常倍速)
+        if (this.moveTimeout > 6000 && sim.target) {
+            // 只有在极度超时的情况下才瞬移，作为最后的防线
+            // console.warn(`[SimStates] ${sim.name} stuck, teleporting.`);
             sim.pos = { ...sim.target };
             this.handleArrival(sim);
             return;
         }
 
+        // 调用 MovementLogic，如果返回 true (到达或放弃)，则处理到达逻辑
         const arrived = sim.moveTowardsTarget(dt);
         if (arrived) {
             this.handleArrival(sim);

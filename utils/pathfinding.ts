@@ -43,6 +43,44 @@ export class PathFinder {
     toGrid(val: number) { return Math.floor(val / this.cellSize); }
     toWorld(gridIdx: number) { return gridIdx * this.cellSize + this.cellSize / 2; }
 
+    // Bresenham-based Line of Sight check
+    // 检测两点之间是否有障碍物，用于路径平滑 (String Pulling)
+    isLineClear(x0: number, y0: number, x1: number, y1: number): boolean {
+        let dx = Math.abs(x1 - x0);
+        let dy = Math.abs(y1 - y0);
+        let sx = (x0 < x1) ? 1 : -1;
+        let sy = (y0 < y1) ? 1 : -1;
+        let err = dx - dy;
+
+        let x = x0;
+        let y = y0;
+
+        let loops = 0;
+        const maxLoops = 1000; // 防止极端情况死循环
+
+        while (true) {
+            if (loops++ > maxLoops) return false;
+
+            // 检查当前格子是否是障碍物
+            if (x < 0 || x >= this.cols || y < 0 || y >= this.rows || this.grid[y][x] === 1) {
+                return false;
+            }
+
+            if (x === x1 && y === y1) break;
+
+            let e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                x += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y += sy;
+            }
+        }
+        return true;
+    }
+
     findPath(startX: number, startY: number, endX: number, endY: number): { x: number, y: number }[] {
         const startNode: Node = { 
             x: this.toGrid(startX), y: this.toGrid(startY), 
@@ -51,11 +89,15 @@ export class PathFinder {
         const endNode = { x: this.toGrid(endX), y: this.toGrid(endY) };
 
         if (startNode.x < 0 || startNode.x >= this.cols || startNode.y < 0 || startNode.y >= this.rows) return [];
-        if (endNode.x < 0 || endNode.x >= this.cols || endNode.y < 0 || endNode.y >= this.rows) return [];
+        
+        // 钳制终点到地图范围内
+        endNode.x = Math.max(0, Math.min(this.cols - 1, endNode.x));
+        endNode.y = Math.max(0, Math.min(this.rows - 1, endNode.y));
 
+        // 如果终点是障碍物，搜索附近的可用点
         if (this.grid[endNode.y][endNode.x] === 1) {
             let found = false;
-            for (let r = 1; r <= 3; r++) {
+            for (let r = 1; r <= 5; r++) {
                 for (let dy = -r; dy <= r; dy++) {
                     for (let dx = -r; dx <= r; dx++) {
                         const nx = endNode.x + dx;
@@ -69,24 +111,21 @@ export class PathFinder {
                 }
                 if (found) break;
             }
-            if (!found) return [];
+            if (!found) return []; 
         }
 
         const openList: Node[] = [startNode];
         const closedSet = new Int8Array(this.cols * this.rows);
         let ops = 0;
-        const MAX_OPS = 3000;
+        const MAX_OPS = 5000;
 
         let finalNode: Node | null = null;
 
         while (openList.length > 0) {
             ops++;
-            if (ops > MAX_OPS) {
-                // 超时降级
-                return [{x: endX, y: endY}]; 
-            }
+            if (ops > MAX_OPS) return []; 
 
-            // O(N) 查找最小值
+            // 简单的优先队列查找
             let lowestIdx = 0;
             for (let i = 1; i < openList.length; i++) {
                 if (openList[i].f < openList[lowestIdx].f) {
@@ -120,6 +159,7 @@ export class PathFinder {
                 if (this.grid[ny][nx] === 1) continue;
                 if (closedSet[ny * this.cols + nx]) continue;
 
+                // 避免穿墙 (斜向移动时，如果两侧都是墙则不能通过)
                 const isDiag = neighbors[i].x !== 0 && neighbors[i].y !== 0;
                 if (isDiag) {
                     if (this.grid[current.y][nx] === 1 || this.grid[ny][current.x] === 1) continue;
@@ -141,47 +181,55 @@ export class PathFinder {
 
         if (!finalNode) return [];
 
-        // --- 核心优化：路径平滑 (Path Smoothing) ---
-        // 原始路径包含了每一个经过的格子，导致走起来像机器人
-        // 我们只保留拐点，去掉中间的直线点
-        const rawPath: { x: number, y: number }[] = [];
+        // === 核心优化：基于视线的路径平滑 (String Pulling / Line-of-Sight Smoothing) ===
+        // 1. 重构完整路径 (Grid Nodes)
+        const fullGridPath: Node[] = [];
         let curr: Node | null = finalNode;
         while (curr) {
-            rawPath.push({ x: this.toWorld(curr.x), y: this.toWorld(curr.y) });
+            fullGridPath.push(curr);
             curr = curr.parent;
         }
-        
-        // 如果路径太短，直接返回
-        if (rawPath.length <= 2) return rawPath.reverse().slice(1);
+        fullGridPath.reverse(); // Start -> Goal
 
-        // 简化路径：只保留方向改变的点
-        // 注意：rawPath 是从终点到起点的，所以我们反向处理
-        const smoothPath: { x: number, y: number }[] = [];
-        smoothPath.push(rawPath[0]); // 终点必须保留
-
-        // 从倒数第二个点开始遍历到起点前一个点
-        let lastDirX = rawPath[0].x - rawPath[1].x;
-        let lastDirY = rawPath[0].y - rawPath[1].y;
-
-        for (let i = 1; i < rawPath.length - 1; i++) {
-            const nextNode = rawPath[i+1];
-            const currNode = rawPath[i];
-            
-            const dirX = currNode.x - nextNode.x;
-            const dirY = currNode.y - nextNode.y;
-
-            // 如果方向变了，说明这个点是拐点，必须保留
-            // 简单的浮点数比较可能不准，但这里坐标都是整数倍，直接比较即可
-            if (dirX !== lastDirX || dirY !== lastDirY) {
-                smoothPath.push(currNode);
-                lastDirX = dirX;
-                lastDirY = dirY;
-            }
+        if (fullGridPath.length <= 2) {
+            return [{ x: this.toWorld(fullGridPath[fullGridPath.length-1].x), y: this.toWorld(fullGridPath[fullGridPath.length-1].y) }];
         }
-        
-        // 此时 smoothPath 还是反向的（终点 -> 拐点 -> ...）
-        // 我们不需要把起点加进去，因为 Sim 已经在起点了
-        // 直接反转并返回
-        return smoothPath.reverse();
+
+        // 2. 视线检查平滑 (Greedy String Pulling)
+        const smoothedGridNodes: Node[] = [fullGridPath[0]];
+        let checkNode = fullGridPath[0];
+        let currentIdx = 0;
+
+        // 贪心算法：从当前点开始，尽量连接到最远的可见点
+        while (currentIdx < fullGridPath.length - 1) {
+            let furthestVisibleIdx = currentIdx + 1;
+            
+            // 向后查找最远可见节点
+            for (let i = currentIdx + 2; i < fullGridPath.length; i++) {
+                const targetNode = fullGridPath[i];
+                // 如果两点之间无障碍，则可以直达
+                if (this.isLineClear(checkNode.x, checkNode.y, targetNode.x, targetNode.y)) {
+                    furthestVisibleIdx = i;
+                } else {
+                    // 一旦被阻挡，后面的即使在直线上也没用（因为中间有断点）
+                    // 除非路径绕回来了，但简单贪心通常只看连续性
+                    // 对于网格路径，一旦视线被挡，就可以停止向后搜索了
+                    break;
+                }
+            }
+
+            const nextNode = fullGridPath[furthestVisibleIdx];
+            smoothedGridNodes.push(nextNode);
+            
+            checkNode = nextNode;
+            currentIdx = furthestVisibleIdx;
+        }
+
+        // 3. 转换为世界坐标 (去掉起点，因为 Sim 已经在起点)
+        // 返回的是剩下的路径点队列
+        return smoothedGridNodes.slice(1).map(n => ({
+            x: this.toWorld(n.x),
+            y: this.toWorld(n.y)
+        }));
     }
 }
