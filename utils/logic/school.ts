@@ -155,27 +155,16 @@ export const SchoolLogic = {
         // [修正] 传入 type: 'kindergarten'
         const inKindergarten = SchoolLogic.isInSchoolArea(sim, 'kindergarten');
 
-        if (isDaycareTime) {
-            if (!inKindergarten && 
-                sim.action !== SimAction.BeingEscorted && 
-                sim.action !== SimAction.Schooling &&
-                sim.action !== SimAction.Waiting 
-            ) {
-                SchoolLogic.requestEscort(sim, 'drop_off');
-            } 
-            else if (inKindergarten) {
+        if (inKindergarten) {
+            if (isDaycareTime) {
+                // 上学时间：维持在校状态，补充需求
                 if (sim.action === SimAction.Idle) sim.changeState(new SchoolingState());
                 if (sim.needs.social < 80) sim.needs.social += 0.5;
                 if (sim.needs.fun < 80) sim.needs.fun += 0.5;
                 if (sim.needs.hunger < 50) sim.needs.hunger = 90; 
-            }
-        } 
-        else {
-            // 放学逻辑 (Pick-up)
-            if (inKindergarten) {
-                // [核心修复] 
-                // 只要不是正在“被护送”状态，就应该检查是否需要接送。
-                // 即使是 Waiting 状态，如果检测到没人来接(requestEscort内部判断)，也应该重新发起呼叫。
+            } else {
+                // 放学时间：叫家长接回家 (Pick-up)
+                // 只要不是正在“被护送”状态，就检查是否需要接送。
                 if (sim.action !== SimAction.BeingEscorted) {
                     SchoolLogic.requestEscort(sim, 'pick_up');
                 }
