@@ -1,7 +1,7 @@
 import { Sim } from '../Sim';
 import { GameStore } from '../simulation';
 import { JOBS, BUFFS, HOLIDAYS } from '../../constants';
-import { Furniture, JobType, SimAction, AgeStage, Job } from '../../types';
+import { Furniture, JobType, SimAction, AgeStage, Job,NeedType } from '../../types';
 import { CommutingState, IdleState, WorkingState } from './SimStates';
 import { SocialLogic } from './social';
 import { SkillLogic } from './SkillLogic'; 
@@ -92,79 +92,126 @@ export const CareerLogic = {
         return 20; 
     },
 
+    /**
+     * 🟢 [重构] 智能入职分配
+     * 不再随机盲选，而是基于市民的年龄、能力分和职位空缺进行"人岗匹配"
+     */
     assignJob(sim: Sim) {
+        // 1. 计算所有职业类型的匹配分 (Preferences & Competence)
         const scores: { type: JobType, score: number }[] = [];
         
         (Object.keys(JOB_PREFERENCES) as JobType[]).forEach(type => {
             if (type === JobType.Unemployed) return;
             const calculateScore = JOB_PREFERENCES[type];
             let score = calculateScore(sim);
-            score += Math.random() * 20; 
+            // [优化] 移除大幅度的随机扰动，改用微小浮动，保证高能力者稳定排在前面
+            // 我们希望市民优先选择他真正擅长和喜欢的行业
+            score += Math.random() * 5; 
             scores.push({ type, score });
         });
 
+        // 按分数从高到低排序 (优先考虑最匹配的行业)
         scores.sort((a, b) => b.score - a.score);
 
         let assignedJob: Job | undefined = undefined;
 
-        // 遍历偏好，寻找有空缺的职位
+        // 2. 遍历偏好列表，寻找最合适的职位
         for (const candidate of scores) {
             const jobType = candidate.type;
+            const capabilityScore = candidate.score; // 这个分数通常在 40(普通) ~ 150(天才+梦想) 之间
             
             // 获取该类型下的所有职位定义
-            const validJobs = JOBS.filter(j => j.companyType === jobType);
+            const allJobs = JOBS.filter(j => j.companyType === jobType);
             
-            // 检查是否有空缺
-            const availableJobs = validJobs.filter(j => {
+            // 3. [核心优化] 计算该市民在此行业的"胜任等级上限" (Max Competent Level)
+            // 避免 40岁大牛去当实习生，也避免 20岁菜鸟空降CEO
+            let maxLevel = 1; // 默认为实习生
+            
+            // A. 能力硬门槛 (基于 JobPreferences 计算出的分数)
+            if (capabilityScore > 50) maxLevel = 2;  // 胜任中级 (熟手)
+            if (capabilityScore > 90) maxLevel = 3;  // 胜任高级 (专家/经理)
+            if (capabilityScore > 130) maxLevel = 4; // 胜任顶级 (合伙人/高管)
+
+            // B. 年龄/阅历修正 (Age Ceiling)
+            if (sim.ageStage === AgeStage.Teen) {
+                // 青少年只能做兼职/实习 (Level 1)
+                maxLevel = Math.min(maxLevel, 1); 
+            } else if (sim.ageStage === AgeStage.Adult) {
+                // 刚成年的(20-30岁)，除非绝世天才(score>130)，否则很难直接当CEO(Lvl 4)
+                if (capabilityScore < 130) maxLevel = Math.min(maxLevel, 3);
+            }
+            // MiddleAged(中年) 和 Elder(老年) 不设上限，允许凭能力空降 Level 4
+
+            // 4. 筛选出【有空缺】且【符合胜任等级】的职位
+            const availableJobs = allJobs.filter(j => {
+                // 排除超纲的职位
+                if (j.level > maxLevel) return false;
+
+                // 检查坑位容量
                 const cap = this.getDynamicJobCapacity(j);
                 const currentCount = GameStore.sims.filter(s => s.job.id === j.id).length;
                 return currentCount < cap;
             });
 
             if (availableJobs.length > 0) {
-                // 优先从 Level 1 或 Level 2 开始分配
-                // 这里的逻辑是加权随机：低级职位权重高
+                // 5. [优化] 加权选择：优先选择"人尽其才"的职位
+                // 之前的逻辑是 heavily 偏向 Level 1，现在我们要偏向 maxLevel
                 const weightedPool: Job[] = [];
                 availableJobs.forEach(job => {
-                    let weight = 10;
-                    if (job.level === 2) weight = 5;
-                    if (job.level >= 3) weight = 1;
-                    // 特殊：如果是学校，大幅增加权重，确保填满
-                    if (jobType === JobType.School) weight += 10;
+                    let weight = 1;
+                    
+                    // 如果职位等级正好是胜任等级，权重最高 (最匹配)
+                    // 例如：能力够当经理，就优先分经理的活，而不是分实习生的活
+                    if (job.level === maxLevel) weight += 30;
+                    // 降一级也行 (屈就)
+                    else if (job.level === maxLevel - 1) weight += 10;
+                    // 再次之
+                    else weight += 2;
+
+                    // 特殊行业修正：学校总是缺人，稍微增加权重
+                    if (jobType === JobType.School) weight += 5;
                     
                     for(let k=0; k<weight; k++) weightedPool.push(job);
                 });
                 
                 assignedJob = weightedPool[Math.floor(Math.random() * weightedPool.length)];
+                
+                // 找到了最优解，停止遍历
                 break; 
             }
         }
 
+        // 6. 最终处理
         if (!assignedJob) {
+            // 真的找不到工作 (极少情况，除非所有坑都满了)
             assignedJob = JOBS.find(j => j.id === 'unemployed');
-            sim.say("找不到合适的工作...", 'bad');
+            // 只有找了很久没找到才抱怨，避免刷屏
+            if (Math.random() > 0.7) sim.say("行情不好，找不到工作...", 'bad');
         } else {
-            if (scores[0].type === assignedJob.companyType) {
-                sim.addBuff(BUFFS.promoted); 
-                sim.say("这是我的梦想职业！", 'act');
+            // 入职成功
+            const isDreamJob = scores[0].type === assignedJob.companyType;
+            if (isDreamJob) {
+                sim.addBuff(BUFFS.promoted); // 获得入职Buff
+                sim.say(`入职了！目标：${assignedJob.title}`, 'act');
             } else {
-                sim.say("先干着这份工吧...", 'normal');
+                sim.say(`新工作：${assignedJob.title}`, 'normal');
             }
         }
 
         sim.job = assignedJob!;
         
+        // 绑定办公地点等后续逻辑 (保持不变)
         if (sim.job.id !== 'unemployed') {
             this.bindWorkplace(sim);
         } else {
             sim.workplaceId = undefined;
         }
 
+        // 通勤时间计算 (保持不变)
         const isJ = sim.mbti.includes('J');
         const basePre = isJ ? 60 : 30;
         const variance = Math.random() * 30;
         sim.commutePreTime = Math.floor(isJ ? basePre + variance : basePre - variance);
-        
         if (sim.traits.includes('懒惰')) sim.commutePreTime = 5;
         if (sim.traits.includes('洁癖')) sim.commutePreTime += 20;
     },
@@ -396,60 +443,167 @@ export const CareerLogic = {
         sim.changeState(new IdleState());
     },
 
+    /**
+     * 🟢 [重构] 每日绩效结算
+     * 核心逻辑：绩效不再是随机数，而是由 "状态 + 能力 + 态度" 共同决定
+     */
     updatePerformance(sim: Sim) {
-        let dailyPerf = 0;
-        
-        if (sim.job.companyType === JobType.Internet && sim.iq > 70) dailyPerf += 3;
-        if (sim.job.companyType === JobType.Business && (sim.eq > 70 || (sim.skills.charisma || 0) > 20)) dailyPerf += 3;
-        if (sim.job.companyType === JobType.Hospital && sim.constitution > 70) dailyPerf += 3;
-        
-        if (sim.mood > 80) dailyPerf += 5;
-        else if (sim.mood < 40) dailyPerf -= 5;
+        let delta = 0;
 
-        dailyPerf += Math.floor(Math.random() * 10) - 4; 
+        // 1. 状态基础分 (Mood & Needs)
+        // 只有身心愉悦，才能高效产出
+        if (sim.mood > 80) delta += 3;
+        else if (sim.mood < 40) delta -= 3;
 
-        sim.workPerformance += dailyPerf;
+        // 精力是打工人的电池
+        if (sim.needs[NeedType.Energy] > 80) delta += 2;
+        if (sim.needs[NeedType.Energy] < 30) delta -= 5; // 累了会严重影响产出
+
+        // 2. 核心胜任力 (Competence): 你的能力是否配得上这个职位？
+        // 职位等级越高，对能力数值要求越高 (L1:25, L2:50, L3:75, L4:100)
+        const requiredStat = sim.job.level * 25; 
+        let myStat = 0;
+        
+        // 根据职业类型，考核不同的核心属性
+        switch(sim.job.companyType) {
+            case JobType.Internet: 
+            case JobType.Hospital:
+            case JobType.School:
+                // 脑力密集型：看智商和逻辑
+                myStat = Math.max(sim.iq, sim.skills.logic);
+                break;
+            case JobType.Business:
+            case JobType.Store:
+            case JobType.Nightlife:
+                // 社交密集型：看情商和魅力
+                myStat = Math.max(sim.eq, sim.skills.charisma || 0);
+                break;
+            case JobType.Design:
+                // 创意密集型
+                myStat = Math.max(sim.creativity, sim.skills.creativity || 0);
+                break;
+            case JobType.Restaurant:
+                myStat = sim.skills.cooking;
+                break;
+            case JobType.ElderCare:
+                myStat = Math.max(sim.constitution, sim.eq);
+                break;
+            default:
+                myStat = 50; // 兜底
+        }
+
+        // 胜任力判定
+        if (myStat > requiredStat + 30) delta += 5;      // 降维打击 (大材小用，业绩起飞)
+        else if (myStat > requiredStat + 10) delta += 3; // 游刃有余
+        else if (myStat > requiredStat - 10) delta += 1; // 勉强胜任
+        else delta -= 4;                                 // 德不配位 (能力不足，业绩下滑)
+
+        // 3. 态度与特质 (Attitude)
+        if (sim.traits.includes('勤奋') || sim.traits.includes('工作狂')) delta += 3;
+        if (sim.traits.includes('懒惰')) delta -= 3;
+        if (sim.traits.includes('完美主义')) delta += (Math.random() > 0.5 ? 4 : -1); // 纠结细节，要么神作要么延期
+
+        // 4. Buff 修正
+        if (sim.hasBuff('well_rested')) delta += 2;
+        if (sim.hasBuff('stressed')) delta -= 2;
+        if (sim.hasBuff('promoted')) delta += 5; // 新官上任三把火
+        
+        // 5. 随机波动 (职场意外)
+        delta += Math.floor(Math.random() * 6) - 2; // -2 ~ +3
+
+        // === 结算 ===
+        sim.workPerformance += delta;
         sim.workPerformance = Math.max(-100, Math.min(200, sim.workPerformance));
 
-        if (sim.workPerformance > 100 && sim.job.level < 4) {
+        // 触发升职检查 (只有绩效非常优秀时才尝试)
+        if (sim.workPerformance > 100) {
             this.promote(sim);
-            sim.workPerformance = 50; 
         }
     },
 
+    /**
+     * 🟢 [重构] 升职判定
+     * 引入"软技能"考核和更严格的竞争机制
+     */
     promote(sim: Sim) {
-        const nextLevel = JOBS.find(j => {
-             if (j.companyType !== sim.job.companyType) return false;
-             if (j.level !== sim.job.level + 1) return false;
-             
-             if (sim.job.companyType === JobType.School || sim.job.companyType === JobType.Hospital) {
-                 const kw = sim.job.title.substring(0, 1); 
-                 if (!j.title.includes(kw)) return false; 
-             }
-             return true;
-        });
+        const currentLevel = sim.job.level;
+        if (currentLevel >= 4) return; // 已到天花板
 
-        if (!nextLevel) return;
+        // 1. 动态门槛 (Threshold)
+        // 越往上越难升：L1->2 (100分), L2->3 (130分), L3->4 (160分)
+        // 防止平庸之辈轻易混入高层
+        const threshold = 100 + (currentLevel - 1) * 30;
+        if (sim.workPerformance < threshold) return;
 
-        const cap = this.getDynamicJobCapacity(nextLevel);
-        const currentHolders = GameStore.sims.filter(s => s.job.id === nextLevel.id);
+        // 2. 寻找下一级职位
+        // 必须是同公司类型的上一级
+        let nextJob = JOBS.find(j => 
+            j.companyType === sim.job.companyType && 
+            j.level === currentLevel + 1
+        );
         
-        if (currentHolders.length < cap) {
-            sim.job = nextLevel;
-            sim.money += 1000;
-            GameStore.addLog(sim, `升职了！现在是 ${nextLevel.title}`, 'sys');
-            sim.say("升职啦! 🚀", 'act');
-            sim.addBuff(BUFFS.promoted);
-        } else {
-            const victim = currentHolders.sort((a, b) => a.workPerformance - b.workPerformance)[0];
-            if (sim.workPerformance > victim.workPerformance + 20) {
-                const oldJob = sim.job;
-                sim.job = nextLevel;
-                victim.job = oldJob; 
-                victim.addBuff(BUFFS.demoted);
-                GameStore.addLog(sim, `PK 成功！取代 ${victim.name} 晋升。`, 'sys');
+        // [特殊修复] 允许教师/医生跨头衔晋升 (如 小学老师 -> 中学老师 -> 校长)
+        // 只要是同类型且Level+1即可，不再强制检查 title 字面量
+        if (!nextJob) return;
+
+        // 3. 管理岗位的"软技能"硬性考核 (Soft Skills Check)
+        // 想升管理层 (Level 3+)，情商或魅力必须及格，否则业务再好也不能带团队
+        if (nextJob.level >= 3) {
+            const softSkill = Math.max(sim.eq, sim.skills.charisma || 0);
+            if (softSkill < 40) {
+                 // 只有小概率提示，避免刷屏
+                 if (Math.random() < 0.05) sim.say("业务能力强，但管理能力还差点...", 'sys');
+                 return;
             }
         }
+
+        // 4. 坑位竞争 (Vacancy & Competition)
+        const cap = this.getDynamicJobCapacity(nextJob);
+        const holders = GameStore.sims.filter(s => s.job.id === nextJob.id);
+        
+        if (holders.length < cap) {
+            // 有空缺，直接晋升
+            this.executePromotion(sim, nextJob);
+        } else {
+            // 没空缺，触发 PK 机制
+            // 找出占着茅坑表现最差的人
+            const victim = holders.sort((a, b) => a.workPerformance - b.workPerformance)[0];
+            
+            // 挑战者必须比受害者高出一大截 (30分) 才能挤掉，防止频繁换血
+            const pkThreshold = 30; 
+            
+            if (sim.workPerformance > victim.workPerformance + pkThreshold) {
+                // 晋升挑战者
+                this.executePromotion(sim, nextJob);
+                
+                // 降职受害者
+                const oldJob = JOBS.find(j => j.companyType === sim.job.companyType && j.level === currentLevel); // 降回挑战者原来的等级
+                if (oldJob) {
+                    victim.job = oldJob;
+                    victim.workPerformance = 70; // 降职后保留及格分
+                    victim.addBuff(BUFFS.demoted);
+                    GameStore.addLog(victim, `在与 ${sim.name} 的职场竞争中落败，惨遭降职。`, 'career');
+                    victim.say("可恶...被新人挤下去了...", 'bad');
+                }
+            } else {
+                 // 没挤掉
+                 if (Math.random() < 0.05) sim.say("上面没坑位了，升不上去...", 'bad');
+            }
+        }
+    },
+
+    /**
+     * 🟢 [新增] 执行升职的原子操作
+     */
+    executePromotion(sim: Sim, newJob: Job) {
+        sim.job = newJob;
+        // 升职后绩效重置到中等偏上 (50)，而不是清零，保留一点"余威"
+        sim.workPerformance = 50; 
+        sim.money += 1000; // 升职奖金
+        sim.addBuff(BUFFS.promoted);
+        
+        sim.say(`耶！晋升为 ${newJob.title} ！`, 'act');
+        GameStore.addLog(sim, `凭杰出表现晋升为 【${newJob.title}】`, 'career');
     },
 
     leaveWorkEarly(sim: Sim) {
