@@ -2,8 +2,26 @@ export interface Vector2 {
   x: number;
   y: number;
 }
+// 高层意图，决定了一连串的行为
+export enum SimIntent {
+    IDLE = 'idle',               // 无所事事
+    SATISFY_HUNGER = 'hunger',   // 找吃的
+    SLEEP = 'sleep',             // 去睡觉
+    WORK = 'work',               // 去工作
+    SOCIALIZE = 'socialize',     // 去社交
+    FUN = 'fun',                 // 找乐子
+    WANDER = 'wander'            // 瞎逛
+}
+// 队列中的单个动作单元
+export interface QueuedAction {
+    type: 'WALK' | 'INTERACT' | 'WAIT' | 'USE_ITEM'; // 动作类型
+    targetPos?: Vector2;       // 走到哪里去
+    targetId?: string;         // 对谁/对什么东西操作
+    interactionKey?: string;   // 具体的交互名 (比如 "eat_sandwich")
+    duration?: number;         // 持续多久 (毫秒)
+    desc?: string;             // 调试用的描述，比如 "走向冰箱"
+}
 
-// 1. 定义核心 Enums 以替换 Magic Strings
 export enum SimAction {
     Idle = 'idle',
     Working = 'working',
@@ -353,6 +371,10 @@ export interface SimData {
   carriedBySimId?: string | null;
 
   isTemporary?: boolean; 
+
+  // [新增] 存档数据结构
+  currentIntent?: SimIntent; 
+  actionQueue?: QueuedAction[];
 }
 
 export interface LogEntry {

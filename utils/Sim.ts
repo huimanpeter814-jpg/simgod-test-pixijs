@@ -2,6 +2,7 @@
 import { Vector2, Job, Buff, SimAppearance, Memory, Relationship, AgeStage, SimAction, JobType, NeedType } from '../types';
 import { GameStore } from './simulation'; 
 import { minutes } from './simulationHelpers';
+import { SimIntent, QueuedAction } from '../types';
 
 // 逻辑模块导入
 import { SocialLogic } from './logic/social';
@@ -132,6 +133,10 @@ export class Sim {
     commuteTimer: number = 0;
     decisionTimer: number = 0; 
 
+    // 🟢 [新增] 行为队列系统
+    currentIntent: SimIntent = SimIntent.IDLE; // 当前的高层意图
+    actionQueue: QueuedAction[] = [];          // 待执行的动作列表
+
     carryingSimId: string | null = null; 
     carriedBySimId: string | null = null; 
 
@@ -152,6 +157,48 @@ export class Sim {
         // 初始状态
         this.state = new IdleState();
         this.action = SimAction.Idle;
+    }
+
+    // === 🟢 [新增] 行为队列管理方法 ===
+
+    /**
+     * 设置一个新的高层意图，并覆盖当前的行动队列
+     * @param intent 高层目标 (例如: 饿了)
+     * @param actions 为了完成目标的一系列步骤 (例如: [走到冰箱, 打开冰箱, 吃])
+     */
+    setPlan(intent: SimIntent, actions: QueuedAction[]) {
+        this.currentIntent = intent;
+        this.actionQueue = actions;
+        // 可以在这里打个log: console.log(`${this.name} 决定: ${intent}`, actions);
+    }
+
+    /**
+     * 往当前队列末尾追加动作（用于突发的小任务，或者连续动作）
+     */
+    addToQueue(action: QueuedAction) {
+        this.actionQueue.push(action);
+    }
+
+    /**
+     * 清空当前所有计划（用于被打断，比如着火了、极度疲劳晕倒）
+     */
+    clearPlan() {
+        this.actionQueue = [];
+        this.currentIntent = SimIntent.IDLE;
+    }
+
+    /**
+     * 检查是否还有待办事项
+     */
+    hasPlan(): boolean {
+        return this.actionQueue.length > 0;
+    }
+
+    /**
+     * 取出队列里的下一个动作
+     */
+    popNextAction(): QueuedAction | undefined {
+        return this.actionQueue.shift();
     }
 
     // === 核心生命周期 (Lifecycle) ===
