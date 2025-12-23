@@ -25,7 +25,8 @@ const PLOT_APT_CHEAP_S: PlotTemplate = {
     furniture: [
         { id: 'bed', x: 10, y: 10, w: 60, h: 80, color: '#74b9ff', label: '床', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'sleep'] },
         { id: 'toilet', x: 130, y: 10, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-        { id: 'stove', x: 10, y: 130, w: 50, h: 30, color: '#b2bec3', label: '灶', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] }
+        { id: 'stove', x: 10, y: 130, w: 50, h: 30, color: '#b2bec3', label: '灶', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
+        { id: 'shower', x: 100, y: 10, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -36,7 +37,8 @@ const PLOT_APT_CHEAP_M: PlotTemplate = {
     furniture: [
         { id: 'bed', x: 10, y: 10, w: 70, h: 90, color: '#74b9ff', label: '双人床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
         { id: 'toilet', x: 110, y: 10, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-        { id: 'stove', x: 10, y: 150, w: 60, h: 30, color: '#b2bec3', label: '灶', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] }
+        { id: 'stove', x: 10, y: 150, w: 60, h: 30, color: '#b2bec3', label: '灶', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
+        { id: 'shower', x: 130, y: 10, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -48,7 +50,8 @@ const PLOT_APT_CHEAP_L: PlotTemplate = {
         { id: 'bed', x: 10, y: 10, w: 80, h: 90, color: '#74b9ff', label: '大床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
         { id: 'sofa', x: 10, y: 120, w: 60, h: 40, color: '#a29bfe', label: '沙发', utility: 'comfort', pixelPattern: 'sofa_pixel', tags: ['sofa'] },
         { id: 'toilet', x: 150, y: 10, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-        { id: 'stove', x: 100, y: 130, w: 60, h: 30, color: '#b2bec3', label: '厨', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] }
+        { id: 'stove', x: 100, y: 130, w: 60, h: 30, color: '#b2bec3', label: '厨', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
+        { id: 'shower', x: 150, y: 10, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -64,7 +67,8 @@ const PLOT_APT_LUXURY_S: PlotTemplate = {
         { id: 'kitchen', x: 10, y: 170, w: 80, h: 30, color: '#b2bec3', label: '厨', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
         { id: 'bed1', x: 120, y: 10, w: 70, h: 80, color: '#ff7675', label: '主卧', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
         { id: 'bed2', x: 120, y: 100, w: 50, h: 70, color: '#74b9ff', label: '次卧', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed'] },
-        { id: 'toilet', x: 180, y: 180, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] }
+        { id: 'toilet', x: 180, y: 180, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        { id: 'shower', x: 130, y: 180, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -77,7 +81,8 @@ const PLOT_APT_LUXURY_M: PlotTemplate = {
         { id: 'bed2', x: 160, y: 110, w: 60, h: 80, color: '#74b9ff', label: '次卧', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed'] },
         { id: 'sofa', x: 20, y: 20, w: 100, h: 40, color: '#a29bfe', label: '沙发', utility: 'comfort', pixelPattern: 'sofa_pixel', tags: ['sofa'] },
         { id: 'kitchen', x: 20, y: 170, w: 100, h: 30, color: '#b2bec3', label: '厨', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
-        { id: 'toilet', x: 220, y: 180, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] }
+        { id: 'toilet', x: 220, y: 180, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        { id: 'shower', x: 20, y: 100, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -90,7 +95,8 @@ const PLOT_APT_LUXURY_L: PlotTemplate = {
         { id: 'bed2', x: 160, y: 110, w: 70, h: 80, color: '#74b9ff', label: '次卧', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed'] },
         { id: 'sofa', x: 20, y: 20, w: 120, h: 50, color: '#a29bfe', label: '大沙发', utility: 'comfort', pixelPattern: 'sofa_vip', tags: ['sofa'] },
         { id: 'kitchen', x: 20, y: 180, w: 100, h: 30, color: '#b2bec3', label: '整体厨房', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
-        { id: 'toilet', x: 220, y: 200, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] }
+        { id: 'toilet', x: 220, y: 200, w: 20, h: 20, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        { id: 'shower', x: 20, y: 100, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -109,7 +115,8 @@ const PLOT_VILLA_S: PlotTemplate = {
         { id: 'sofa', x: 30, y: 140, w: 100, h: 50, color: '#a29bfe', label: '厅', utility: 'comfort', pixelPattern: 'sofa_vip', tags: ['sofa'] },
         { id: 'kitchen', x: 150, y: 140, w: 100, h: 40, color: '#b2bec3', label: '厨', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
         { id: 'toilet', x: 180, y: 200, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-        { id: 'plant', x: 300, y: 200, w: 40, h: 40, color: '#2ecc71', label: '花', utility: 'gardening', pixelPattern: 'bush', tags: ['plant'] }
+        { id: 'plant', x: 300, y: 200, w: 40, h: 40, color: '#2ecc71', label: '花', utility: 'gardening', pixelPattern: 'bush', tags: ['plant'] },
+        { id: 'shower', x: 150, y: 220, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -127,7 +134,8 @@ const PLOT_VILLA_M: PlotTemplate = {
         { id: 'desk', x: 320, y: 30, w: 60, h: 40, color: '#a29bfe', label: '书桌', utility: 'work', pixelPattern: 'desk_pixel', tags: ['desk', 'computer'] },
         { id: 'sofa', x: 30, y: 150, w: 100, h: 50, color: '#a29bfe', label: '大厅', utility: 'comfort', pixelPattern: 'sofa_vip', tags: ['sofa'] },
         { id: 'kitchen', x: 160, y: 150, w: 100, h: 40, color: '#b2bec3', label: '厨房', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
-        { id: 'toilet', x: 220, y: 210, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] }
+        { id: 'toilet', x: 220, y: 210, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        { id: 'shower', x: 150, y: 220, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -145,7 +153,8 @@ const PLOT_VILLA_L: PlotTemplate = {
         { id: 'sofa', x: 30, y: 160, w: 120, h: 60, color: '#a29bfe', label: '真皮沙发', utility: 'comfort', pixelPattern: 'sofa_vip', tags: ['sofa'] },
         { id: 'kitchen', x: 180, y: 160, w: 100, h: 40, color: '#b2bec3', label: '开放厨房', utility: 'cooking', pixelPattern: 'kitchen', tags: ['stove'] },
         { id: 'desk', x: 340, y: 160, w: 60, h: 40, color: '#8b4513', label: '老板桌', utility: 'work', pixelPattern: 'desk_wood', tags: ['desk', 'computer'] },
-        { id: 'toilet', x: 240, y: 30, w: 40, h: 40, color: '#fff', label: '豪华卫', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] }
+        { id: 'toilet', x: 240, y: 30, w: 40, h: 40, color: '#fff', label: '豪华卫', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        { id: 'shower', x: 150, y: 180, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -590,7 +599,8 @@ const PLOT_KINDERGARTEN_S: PlotTemplate = {
         ...createGrid('crib', 160, 20, 1, 3, 0, 50, { w: 40, h: 40, color: '#fab1a0', label: '床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby'] }),
         { id: 'toy', x: 20, y: 20, w: 60, h: 60, color: '#fdcb6e', label: '积木', utility: 'play_blocks', pixelPattern: 'rug_art', tags: ['play'] },
         { id: 'teacher', x: 20, y: 150, w: 60, h: 30, color: '#a29bfe', label: '讲台', utility: 'work', pixelPattern: 'desk_simple', tags: ['desk'] },
-        { id: 'toilet', x: 100, y: 150, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] }
+        { id: 'toilet', x: 100, y: 150, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        { id: 'shower', x: 150, y: 180, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -605,7 +615,8 @@ const PLOT_KINDERGARTEN_M: PlotTemplate = {
         { id: 'slide', x: 100, y: 20, w: 60, h: 70, color: '#ff7675', label: '滑梯', utility: 'play', pixelPattern: 'treadmill', tags: ['play'] },
         { id: 'toys', x: 20, y: 20, w: 60, h: 60, color: '#fdcb6e', label: '玩具', utility: 'play_blocks', pixelPattern: 'rug_art', tags: ['play'] },
         { id: 'teacher', x: 20, y: 150, w: 60, h: 30, color: '#a29bfe', label: '老师', utility: 'work', pixelPattern: 'desk_simple', tags: ['desk'] },
-        { id: 'toilet', x: 140, y: 170, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] }
+        { id: 'toilet', x: 140, y: 170, w: 30, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        { id: 'shower', x: 100, y: 150, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
@@ -620,7 +631,8 @@ const PLOT_KINDERGARTEN_L: PlotTemplate = {
         { id: 'slide', x: 120, y: 20, w: 70, h: 80, color: '#ff7675', label: '大滑梯', utility: 'play', pixelPattern: 'treadmill', tags: ['play'] },
         { id: 'toys', x: 20, y: 20, w: 80, h: 80, color: '#fdcb6e', label: '积木城', utility: 'play_blocks', pixelPattern: 'rug_art', tags: ['play'] },
         { id: 'teacher', x: 20, y: 160, w: 70, h: 40, color: '#a29bfe', label: '教案桌', utility: 'work', pixelPattern: 'desk_simple', tags: ['desk'] },
-        { id: 'toilet', x: 150, y: 180, w: 40, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] }
+        { id: 'toilet', x: 150, y: 180, w: 40, h: 30, color: '#fff', label: '厕', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
+        { id: 'shower', x: 110, y: 180, w: 30, h: 30, color: '#81ecec', label: '淋浴', utility: 'shower', pixelPattern: 'shower_stall', tags: ['shower'] }
     ]
 };
 
