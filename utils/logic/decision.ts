@@ -209,7 +209,7 @@ export const DecisionLogic = {
         // --- 3. 生理需求 (Needs) ---
         
         // A. 饥饿
-        if (sim.needs[NeedType.Hunger] < 70) {
+        if (sim.needs[NeedType.Hunger] < 60) {
             let hungerScore = (100 - sim.needs[NeedType.Hunger]) * 2.5;
             let reasonParts = [`饥饿值(${Math.floor(sim.needs[NeedType.Hunger])})`];
             
@@ -223,7 +223,7 @@ export const DecisionLogic = {
             }
             
             // 穷人忍耐
-            if (sim.money < 50 && sim.needs[NeedType.Hunger] > 40 && !sim.traits.includes('吃货')) {
+            if (sim.money < 50 && sim.needs[NeedType.Hunger] > 30 && !sim.traits.includes('吃货')) {
                 hungerScore *= 0.5;
                 reasonParts.push("没钱忍耐中");
             }
@@ -232,7 +232,7 @@ export const DecisionLogic = {
         }
 
         // B. 困倦
-        if (sim.needs[NeedType.Energy] < 60 || (isNight && sim.needs[NeedType.Energy] < 90)) {
+        if (sim.needs[NeedType.Energy] < 40 || (isNight && sim.needs[NeedType.Energy] < 70)) {
             let sleepScore = (100 - sim.needs[NeedType.Energy]) * 2.0;
             let reasonParts = [`精力值(${Math.floor(sim.needs[NeedType.Energy])})`];
 
@@ -259,7 +259,7 @@ export const DecisionLogic = {
         }
 
         // C. 卫生
-        if (sim.needs[NeedType.Bladder] < 60) {
+        if (sim.needs[NeedType.Bladder] < 40) {
             scores.push({ 
                 intent: SimIntent.FULFILL_NEED, 
                 score: (100 - sim.needs[NeedType.Bladder]) * 3.5, 
@@ -267,7 +267,7 @@ export const DecisionLogic = {
                 reason: `内急 (${Math.floor(sim.needs[NeedType.Bladder])})` 
             });
         }
-        if (sim.needs[NeedType.Hygiene] < 60) {
+        if (sim.needs[NeedType.Hygiene] < 30) {
             let hygieneScore = (100 - sim.needs[NeedType.Hygiene]) * 2.0;
             let reasonStr = `卫生差 (${Math.floor(sim.needs[NeedType.Hygiene])})`;
             
@@ -286,7 +286,7 @@ export const DecisionLogic = {
         // --- 4. 欲望与自我实现 (Desires) ---
 
         // A. 社交
-        if (sim.needs[NeedType.Social] < 80) {
+        if (sim.needs[NeedType.Social] < 50) {
             let socialScore = (100 - sim.needs[NeedType.Social]);
             let reasonStr = `社交需求 (${Math.floor(sim.needs[NeedType.Social])})`;
             
@@ -325,7 +325,7 @@ export const DecisionLogic = {
         }
 
         // B. 娱乐与成长
-        if (sim.needs[NeedType.Fun] < 75) {
+        if (sim.needs[NeedType.Fun] < 40) {
             let funScore = (100 - sim.needs[NeedType.Fun]);
             let baseReason = `无聊 (${Math.floor(sim.needs[NeedType.Fun])})`;
 
@@ -575,8 +575,8 @@ export const DecisionLogic = {
                     sim.currentPlanDescription = "雷达扫描：寻找单身异性 💕";
                     candidates = candidates.filter(target => {
                         let match = true;
-                        if (sim.orientation === 'Hetero') match = target.gender !== sim.gender;
-                        else if (sim.orientation === 'Homo') match = target.gender === sim.gender;
+                        if (sim.orientation === 'hetero') match = target.gender !== sim.gender;
+                        else if (sim.orientation === 'homo') match = target.gender === sim.gender;
                         const ageDiff = Math.abs(target.age - sim.age);
                         const isAdult = target.ageStage >= AgeStage.Teen;
                         const notFamily = target.familyId !== sim.familyId;
@@ -904,10 +904,10 @@ export const DecisionLogic = {
         // 1. 婴幼儿特殊保护逻辑 (保持你原有的修复，优先级最高)
         if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
              // 检查紧急需求，如果需要呼救，直接打断所有计划
-             if (sim.needs[NeedType.Hunger] < 40) {
+             if (sim.needs[NeedType.Hunger] < 30) {
                  if (this.triggerHungerBroadcast(sim)) { sim.clearPlan(); return; }
              }
-             if (sim.needs[NeedType.Hygiene] < 40) {
+             if (sim.needs[NeedType.Hygiene] < 30) {
                  if (this.triggerHygieneBroadcast(sim)) { sim.clearPlan(); return; }
              }
              // 防止幼儿离家出走

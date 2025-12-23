@@ -19,6 +19,7 @@ export interface SimInitConfig {
     ageStage?: AgeStage;
     gender?: 'M' | 'F';
     partnerId?: string;
+    partnerGender?: 'M' | 'F'; // 🆕 [新增] 传入配偶性别，用于辅助生成正确的性取向
     fatherId?: string;
     motherId?: string;
     orientation?: string;
@@ -171,9 +172,32 @@ export const SimInitializer = {
         sim.fatherId = config.fatherId || null;
         sim.motherId = config.motherId || null;
 
-        if (config.orientation) { sim.orientation = config.orientation; } 
-        else { const r = Math.random(); sim.orientation = r < 0.7 ? 'hetero' : (r < 0.85 ? 'homo' : 'bi'); }
-
+        // 🔴 [修改] 智能性取向初始化逻辑
+        if (config.orientation) { 
+            sim.orientation = config.orientation; 
+        } else {
+            // 情况 A: 明确知道配偶的性别
+            if (config.partnerGender) {
+                if (config.partnerGender === sim.gender) {
+                    // 配偶是同性 -> 设为 同性恋(80%) 或 双性恋(20%)
+                    sim.orientation = Math.random() > 0.2 ? 'homo' : 'bi';
+                } else {
+                    // 配偶是异性 -> 设为 异性恋(90%) 或 双性恋(10%)
+                    sim.orientation = Math.random() > 0.1 ? 'hetero' : 'bi';
+                }
+            }
+            // 情况 B: 只有配偶ID，但不知道性别 (盲婚哑嫁)
+            // 为了防止逻辑崩坏（如直男被分配了男朋友），强制设为 'bi' (双性恋)，这样跟谁都能兼容
+            else if (config.partnerId) {
+                sim.orientation = 'bi'; 
+            }
+            // 情况 C: 单身狗，完全随机
+            else {
+                const r = Math.random(); 
+                sim.orientation = r < 0.7 ? 'hetero' : (r < 0.85 ? 'homo' : 'bi'); 
+            }
+        }
+        
         let baseFaith = sim.mbti.includes('J') ? 70 : 40;
         sim.faithfulness = Math.min(100, Math.max(0, baseFaith + (Math.random() * 40 - 20)));
 
