@@ -550,7 +550,27 @@ export const DecisionLogic = {
                 // ... (复用之前的代码) ...
                 const socialType = sim['socialIntentMeta'] || 'chat';
                 let candidates = GameStore.sims.filter(s => s.id !== sim.id && !s.isTemporary && !['sleeping', 'working', 'schooling', 'commuting'].includes(s.action as string));
+                // 🆕 [新增] 婴幼儿社交限制：只允许找家里人或身边的人
+                if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                    candidates = candidates.filter(target => {
+                        // 1. 同住址且对方也在家
+                        if (sim.homeId && target.homeId === sim.homeId && target.isAtHome()) return true;
+                        
+                        // 2. 或者距离非常近 (例如都在幼儿园房间里，或者父母抱着)
+                        const dist = Math.hypot(target.pos.x - sim.pos.x, target.pos.y - sim.pos.y);
+                        if (dist < 300) return true; // 300像素范围内
 
+                        return false;
+                    });
+
+                    // 如果没找到合适的人，强制发呆，防止乱跑
+                    if (candidates.length === 0) {
+                        sim.say("没人陪我玩...", 'sys');
+                        sim.currentPlanDescription = "孤单地发呆";
+                        queue.push({ type: 'WAIT', duration: 3000 });
+                        return queue;
+                    }
+                }
                 if (socialType === 'seek_romance') {
                     sim.currentPlanDescription = "雷达扫描：寻找单身异性 💕";
                     candidates = candidates.filter(target => {
@@ -630,16 +650,29 @@ export const DecisionLogic = {
 
                     addInteractSequence(funObj, funVerb, '娱乐');
                 } else {
-                    queue.push({ type: 'WALK', desc: '散步' }); 
-                    sim.currentPlanDescription = "没东西玩，散散步";
+                    // [核心修复] 婴幼儿找不到乐子时，原地玩耍/哭闹，严禁乱跑
+                    if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                        queue.push({ type: 'WAIT', duration: 5000, desc: '发呆' });
+                        sim.currentPlanDescription = "好无聊... (发呆)";
+                        if (Math.random() > 0.7) sim.say("咿呀...", 'sys');
+                    } else {
+                        queue.push({ type: 'WALK', desc: '散步' }); 
+                        sim.currentPlanDescription = "没东西玩，散散步";
+                    }
                 }
                 break;
 
             case SimIntent.WANDER:
-            default:
-                queue.push({ type: 'WALK', desc: '闲逛' });
-                sim.currentPlanDescription = "四处游荡";
-                break;
+                default:
+                    // [核心修复] 婴幼儿禁止闲逛
+                    if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                         queue.push({ type: 'WAIT', duration: 5000, desc: '发呆' });
+                         sim.currentPlanDescription = "发呆";
+                    } else {
+                        queue.push({ type: 'WALK', desc: '闲逛' });
+                        sim.currentPlanDescription = "四处游荡";
+                    }
+                    break;
         }
 
         return queue;
@@ -924,6 +957,8 @@ export const DecisionLogic = {
 
     // [修复] 返回 boolean 表示是否成功找到并开始执行
     findSideHustle(sim: Sim): boolean {
+        // 🆕 [新增] 婴幼儿禁止搞副业
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return false;
         let options: { type: string; target: Furniture }[] = [];
 
         if (sim.skills.logic > 5 || sim.skills.creativity > 5) {
@@ -1130,18 +1165,25 @@ export const DecisionLogic = {
                     const isOccupied = GameStore.sims.some(s => s.id !== sim.id && s.interactionTarget?.id === f.id);
                     if (isOccupied) return false;
                 }
-                
-                // 5. 婴幼儿允许项
+                // [新增] 婴幼儿强制居家逻辑 (防止独自外出找乐子)
                 if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                    // [优化] 增加 'fun' (通用娱乐) 和 'comfort' (沙发)，防止家里没玩具时宝宝无聊死
-                    const allowed = ['energy', 'nap_crib', 'play', 'play_blocks', 'hunger', 'bladder', 'hygiene', 'fun', 'comfort'];
-                    if (!allowed.includes(f.utility) && !f.tags?.includes('baby')) return false;
-                    if (f.tags?.includes('stove') || f.tags?.includes('gym') || f.tags?.includes('computer')) return false;
-                    
-                    // [关键修改] 如果无家可归，允许使用公共 crib
-                    if (!sim.homeId && f.utility === 'nap_crib' && !f.homeId) return true;
+                    // 如果宝宝有家，只允许找家里的 (防止跑去邻居家或公园)
+                    if (sim.homeId) {
+                        if (f.homeId !== sim.homeId) {
+                            // 如果已经在幼儿园(或外面)，且东西就在身边(距离<500)，允许使用
+                            // 否则一律只许用家里的
+                            const dist = Math.hypot(f.x - sim.pos.x, f.y - sim.pos.y);
+                            if (!f.homeId && dist < 500) return true; // 公共设施且很近 -> 允许
+                            return false; 
+                        }
+                    } else {
+                        // 无家可归的宝宝：只允许找身边的，不准跨图跑
+                        const dist = Math.hypot(f.x - sim.pos.x, f.y - sim.pos.y);
+                        if (dist > 500) return false;
+                    }
                 }
-                return true;
+            
+            return true;
             });
 
             // 兜底：如果强制回家导致没找到，尝试公共设施
@@ -1185,6 +1227,14 @@ export const DecisionLogic = {
     // [修复] 返回 boolean
     findHuman(sim: Sim): boolean {
         let others = GameStore.sims.filter(s => s.id !== sim.id && s.action !== SimAction.Sleeping && s.action !== SimAction.Working);
+        // 🆕 [新增] 婴幼儿寻人限制
+        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+            others = others.filter(target => {
+                if (sim.homeId && target.homeId === sim.homeId && target.isAtHome()) return true;
+                const dist = Math.hypot(target.pos.x - sim.pos.x, target.pos.y - sim.pos.y);
+                return dist < 300;
+            });
+        }
         others.sort(() => Math.random() - 0.5); 
         
         others.sort((a, b) => {
