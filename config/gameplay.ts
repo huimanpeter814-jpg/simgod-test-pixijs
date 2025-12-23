@@ -61,19 +61,19 @@ export const HAIR_STYLE_NAMES = [
 ];
 
 export const ITEMS = [
-    { id: 'drink', label: '冰美式', cost: 15, needs: { [NeedType.Hunger]: 2, [NeedType.Fun]: 5 }, trigger: 'street' },
-    { id: 'book', label: '设计年鉴', cost: 60, needs: { [NeedType.Fun]: 10 }, skill: 'logic', skillVal: 5, attribute: 'iq', attrVal: 2, trigger: 'smart' },
-    { id: 'cinema_2d', label: '文艺片票', cost: 30, needs: { [NeedType.Fun]: 40 }, trigger: 'bored' },
-    { id: 'cinema_3d', label: 'IMAX大片', cost: 60, needs: { [NeedType.Fun]: 60 }, trigger: 'rich' },
-    { id: 'museum_ticket', label: '特展门票', cost: 50, buff: 'art_inspired', needs: { [NeedType.Fun]: 50 }, attribute: 'creativity', attrVal: 3, trigger: 'smart' },
-    { id: 'gym_pass', label: '私教课', cost: 100, needs: { [NeedType.Energy]: -20 }, skill: 'athletics', skillVal: 5, attribute: 'constitution', attrVal: 4, trigger: 'active' },
-    { id: 'medicine', label: '急救包', cost: 100, buff: 'healing', trigger: 'sick' },
-    { id: 'game_coin', label: '代币', cost: 5, needs: { [NeedType.Fun]: 20 }, trigger: 'bored' },
-    { id: 'cosmetic_set', label: '高级美妆', cost: 150, needs: { [NeedType.Fun]: 20 }, attribute: 'appearanceScore', attrVal: 5, trigger: 'beauty' },
-    { id: 'protein_powder', label: '蛋白粉', cost: 80, needs: { [NeedType.Hunger]: 10 }, attribute: 'constitution', attrVal: 3, trigger: 'active' },
-    { id: 'puzzle_game', label: '益智模型', cost: 50, needs: { [NeedType.Fun]: 20 }, attribute: 'iq', attrVal: 2, trigger: 'smart' },
-    { id: 'fashion_mag', label: '时尚杂志', cost: 25, needs: { [NeedType.Fun]: 10 }, attribute: 'creativity', attrVal: 2, trigger: 'art' },
-    { id: 'gift_chocolates', label: '进口巧克力', cost: 40, needs: { [NeedType.Hunger]: 10, [NeedType.Fun]: 10 }, rel: true, trigger: 'love' },
+    { id: 'drink', label: '冰美式', cost: 28, needs: { [NeedType.Hunger]: 2, [NeedType.Fun]: 5 }, trigger: 'street' },
+    { id: 'book', label: '设计年鉴', cost: 180, needs: { [NeedType.Fun]: 10 }, skill: 'logic', skillVal: 5, attribute: 'iq', attrVal: 2, trigger: 'smart' },
+    { id: 'cinema_2d', label: '文艺片票', cost: 65, needs: { [NeedType.Fun]: 40 }, trigger: 'bored' },
+    { id: 'cinema_3d', label: 'IMAX大片', cost: 120, needs: { [NeedType.Fun]: 60 }, trigger: 'rich' },
+    { id: 'museum_ticket', label: '特展门票', cost: 100, buff: 'art_inspired', needs: { [NeedType.Fun]: 50 }, attribute: 'creativity', attrVal: 3, trigger: 'smart' },
+    { id: 'gym_pass', label: '私教课', cost: 800, needs: { [NeedType.Energy]: -20 }, skill: 'athletics', skillVal: 5, attribute: 'constitution', attrVal: 4, trigger: 'active' },
+    { id: 'medicine', label: '急救包', cost: 300, buff: 'healing', trigger: 'sick' },
+    { id: 'game_coin', label: '代币', cost: 10, needs: { [NeedType.Fun]: 20 }, trigger: 'bored' },
+    { id: 'cosmetic_set', label: '高级美妆', cost: 2200, needs: { [NeedType.Fun]: 20 }, attribute: 'appearanceScore', attrVal: 5, trigger: 'beauty' },
+    { id: 'protein_powder', label: '蛋白粉', cost: 450, needs: { [NeedType.Hunger]: 10 }, attribute: 'constitution', attrVal: 3, trigger: 'active' },
+    { id: 'puzzle_game', label: '益智模型', cost: 260, needs: { [NeedType.Fun]: 20 }, attribute: 'iq', attrVal: 2, trigger: 'smart' },
+    { id: 'fashion_mag', label: '时尚杂志', cost: 45, needs: { [NeedType.Fun]: 10 }, attribute: 'creativity', attrVal: 2, trigger: 'art' },
+    { id: 'gift_chocolates', label: '进口巧克力', cost: 320, needs: { [NeedType.Hunger]: 10, [NeedType.Fun]: 10 }, rel: true, trigger: 'love' },
     { id: 'protection', label: '安全措施', cost: 20, trigger: 'safe_sex' },
 ];
 
@@ -87,64 +87,64 @@ export const JOBS: Job[] = [
     { id: 'unemployed', title: '自由职业', level: 0, salary: 0, startHour: 0, endHour: 0, companyType: JobType.Unemployed },
 
     // Internet Co (需要电脑)
-    { id: 'dev_intern', title: '初级码农', level: 1, salary: 400, startHour: 10, endHour: 19, companyType: JobType.Internet, requiredTags: ['computer'] },
-    { id: 'developer', title: '全栈开发', level: 2, salary: 800, startHour: 10, endHour: 20, companyType: JobType.Internet, requiredTags: ['computer'] },
-    { id: 'senior_dev', title: '架构师', level: 3, salary: 1500, startHour: 10, endHour: 18, companyType: JobType.Internet, requiredTags: ['computer'] },
-    { id: 'cto', title: '合伙人', level: 4, salary: 3000, startHour: 11, endHour: 16, companyType: JobType.Internet, requiredTags: ['computer', 'meeting'] },
+    { id: 'dev_intern', title: '初级码农', level: 1, salary: 6000, startHour: 10, endHour: 19, companyType: JobType.Internet, requiredTags: ['computer'] },
+    { id: 'developer', title: '全栈开发', level: 2, salary: 12000, startHour: 10, endHour: 20, companyType: JobType.Internet, requiredTags: ['computer'] },
+    { id: 'senior_dev', title: '架构师', level: 3, salary: 25000, startHour: 10, endHour: 18, companyType: JobType.Internet, requiredTags: ['computer'] },
+    { id: 'cto', title: '合伙人', level: 4, salary: 60000, startHour: 11, endHour: 16, companyType: JobType.Internet, requiredTags: ['computer', 'meeting'] },
 
     // Design Co (需要画架或电脑)
-    { id: 'design_intern', title: '绘图员', level: 1, salary: 300, startHour: 9, endHour: 18, companyType: JobType.Design, requiredTags: ['easel', 'computer'] },
-    { id: 'designer', title: '视觉设计', level: 2, salary: 600, startHour: 10, endHour: 19, companyType: JobType.Design, requiredTags: ['computer', 'easel'] },
-    { id: 'senior_designer', title: '主美', level: 3, salary: 1000, startHour: 10, endHour: 18, companyType: JobType.Design, requiredTags: ['computer'] },
-    { id: 'art_director', title: '创意总监', level: 4, salary: 2000, startHour: 11, endHour: 16, companyType: JobType.Design, requiredTags: ['desk', 'meeting'] },
+    { id: 'design_intern', title: '绘图员', level: 1, salary: 4500, startHour: 9, endHour: 18, companyType: JobType.Design, requiredTags: ['easel', 'computer'] },
+    { id: 'designer', title: '视觉设计', level: 2, salary: 9000, startHour: 10, endHour: 19, companyType: JobType.Design, requiredTags: ['computer', 'easel'] },
+    { id: 'senior_designer', title: '主美', level: 3, salary: 18000, startHour: 10, endHour: 18, companyType: JobType.Design, requiredTags: ['computer'] },
+    { id: 'art_director', title: '创意总监', level: 4, salary: 40000, startHour: 11, endHour: 16, companyType: JobType.Design, requiredTags: ['desk', 'meeting'] },
 
     // Business Co (需要办公桌)
-    { id: 'biz_intern', title: '行政专员', level: 1, salary: 250, startHour: 9, endHour: 17, companyType: JobType.Business, requiredTags: ['desk'] },
-    { id: 'clerk_biz', title: '客户经理', level: 2, salary: 500, startHour: 9, endHour: 17, companyType: JobType.Business, requiredTags: ['desk', 'computer'] },
-    { id: 'biz_supervisor', title: '运营总监', level: 3, salary: 1000, startHour: 9, endHour: 17, companyType: JobType.Business, requiredTags: ['desk'] },
-    { id: 'manager', title: 'CEO', level: 4, salary: 2500, startHour: 10, endHour: 16, companyType: JobType.Business, requiredTags: ['boss_chair', 'desk'] },
+    { id: 'biz_intern', title: '行政专员', level: 1, salary: 4000, startHour: 9, endHour: 17, companyType: JobType.Business, requiredTags: ['desk'] },
+    { id: 'clerk_biz', title: '客户经理', level: 2, salary: 8500, startHour: 9, endHour: 17, companyType: JobType.Business, requiredTags: ['desk', 'computer'] },
+    { id: 'biz_supervisor', title: '运营总监', level: 3, salary: 20000, startHour: 9, endHour: 17, companyType: JobType.Business, requiredTags: ['desk'] },
+    { id: 'manager', title: 'CEO', level: 4, salary: 80000, startHour: 10, endHour: 16, companyType: JobType.Business, requiredTags: ['boss_chair', 'desk'] },
 
     // Services (Store) (需要收银台或理货)
-    { id: 'store_trainee', title: '理货员', level: 1, salary: 180, startHour: 8, endHour: 16, companyType: JobType.Store, requiredTags: ['shelf', 'cashier'] },
-    { id: 'clerk_book', title: '导购', level: 2, salary: 300, startHour: 9, endHour: 17, companyType: JobType.Store, requiredTags: ['shelf', 'counter'] },
-    { id: 'store_supervisor', title: '值班经理', level: 3, salary: 500, startHour: 9, endHour: 18, companyType: JobType.Store, requiredTags: ['cashier', 'desk'] },
-    { id: 'store_manager', title: '店长', level: 4, salary: 800, startHour: 10, endHour: 17, companyType: JobType.Store, requiredTags: ['desk'] },
+    { id: 'store_trainee', title: '理货员', level: 1, salary: 3500, startHour: 8, endHour: 16, companyType: JobType.Store, requiredTags: ['shelf', 'cashier'] },
+    { id: 'clerk_book', title: '导购', level: 2, salary: 5000, startHour: 9, endHour: 17, companyType: JobType.Store, requiredTags: ['shelf', 'counter'] },
+    { id: 'store_supervisor', title: '值班经理', level: 3, salary: 8000, startHour: 9, endHour: 18, companyType: JobType.Store, requiredTags: ['cashier', 'desk'] },
+    { id: 'store_manager', title: '店长', level: 4, salary: 12000, startHour: 10, endHour: 17, companyType: JobType.Store, requiredTags: ['desk'] },
 
     // Services (Restaurant) (需要灶台)
-    { id: 'kitchen_helper', title: '打杂', level: 1, salary: 200, startHour: 10, endHour: 20, companyType: JobType.Restaurant, requiredTags: ['stove', 'sink'] },
-    { id: 'waiter', title: '服务员', level: 2, salary: 350, startHour: 11, endHour: 20, companyType: JobType.Restaurant, requiredTags: ['table', 'counter'] },
-    { id: 'cook', title: '厨师', level: 3, salary: 600, startHour: 10, endHour: 20, companyType: JobType.Restaurant, requiredTags: ['stove'] },
-    { id: 'head_chef', title: '行政主厨', level: 4, salary: 1200, startHour: 10, endHour: 19, companyType: JobType.Restaurant, requiredTags: ['stove', 'desk'] },
+    { id: 'kitchen_helper', title: '打杂', level: 1, salary: 3800, startHour: 10, endHour: 20, companyType: JobType.Restaurant, requiredTags: ['stove', 'sink'] },
+    { id: 'waiter', title: '服务员', level: 2, salary: 5500, startHour: 11, endHour: 20, companyType: JobType.Restaurant, requiredTags: ['table', 'counter'] },
+    { id: 'cook', title: '厨师', level: 3, salary: 9000, startHour: 10, endHour: 20, companyType: JobType.Restaurant, requiredTags: ['stove'] },
+    { id: 'head_chef', title: '行政主厨', level: 4, salary: 18000, startHour: 10, endHour: 19, companyType: JobType.Restaurant, requiredTags: ['stove', 'desk'] },
 
     // Library
-    { id: 'library_staff', title: '图书管理员', level: 1, salary: 220, startHour: 9, endHour: 18, companyType: JobType.Library, vacationMonths: [2, 7], requiredTags: ['desk', 'bookshelf'] },
+    { id: 'library_staff', title: '图书管理员', level: 1, salary: 4500, startHour: 9, endHour: 18, companyType: JobType.Library, vacationMonths: [2, 7], requiredTags: ['desk', 'bookshelf'] },
 
     // Education (School) (需要黑板或讲台)
-    { id: 'teacher_kg_intern', title: '幼教实习', level: 1, salary: 300, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard', 'desk'] },
-    { id: 'teacher_kg', title: '幼师', level: 2, salary: 500, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard'] },
-    { id: 'teacher_intern', title: '小学实习教师', level: 1, salary: 350, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['desk'] },
-    { id: 'teacher_elem', title: '小学教师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard'] },
-    { id: 'teacher_pe', title: '体育老师', level: 2, salary: 600, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['sports'] },
-    { id: 'teacher_high', title: '中学教师', level: 3, salary: 700, startHour: 7.5, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard', 'desk'] },
-    { id: 'principal', title: '校长', level: 4, salary: 1500, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['desk'] },
-    { id: 'school_chef_helper', title: '食堂帮厨', level: 1, salary: 300, startHour: 6, endHour: 14, companyType: JobType.School, requiredTags: ['stove'] },
-    { id: 'school_chef', title: '饭堂厨师', level: 2, salary: 550, startHour: 6, endHour: 14, companyType: JobType.School, requiredTags: ['stove'] },
-    { id: 'school_security', title: '学校保安', level: 1, salary: 400, startHour: 7, endHour: 19, companyType: JobType.School, requiredTags: ['gate', 'desk'] },
+    { id: 'teacher_kg_intern', title: '幼教实习', level: 1, salary: 4500, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard', 'desk'] },
+    { id: 'teacher_kg', title: '幼师', level: 2, salary: 7500, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard'] },
+    { id: 'teacher_intern', title: '小学实习教师', level: 1, salary: 4800, startHour: 8, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['desk'] },
+    { id: 'teacher_elem', title: '小学教师', level: 2, salary: 8500, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard'] },
+    { id: 'teacher_pe', title: '体育老师', level: 2, salary: 8000, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['sports'] },
+    { id: 'teacher_high', title: '中学教师', level: 3, salary: 10000, startHour: 7.5, endHour: 17, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['blackboard', 'desk'] },
+    { id: 'principal', title: '校长', level: 4, salary: 25000, startHour: 8, endHour: 16, companyType: JobType.School, vacationMonths: [2, 7], requiredTags: ['desk'] },
+    { id: 'school_chef_helper', title: '食堂帮厨', level: 1, salary: 4000, startHour: 6, endHour: 14, companyType: JobType.School, requiredTags: ['stove'] },
+    { id: 'school_chef', title: '饭堂厨师', level: 2, salary: 6500, startHour: 6, endHour: 14, companyType: JobType.School, requiredTags: ['stove'] },
+    { id: 'school_security', title: '学校保安', level: 1, salary: 5000, startHour: 7, endHour: 19, companyType: JobType.School, requiredTags: ['gate', 'desk'] },
 
     // Nightlife
-    { id: 'bartender', title: '调酒师', level: 1, salary: 400, startHour: 19, endHour: 3, companyType: JobType.Nightlife, requiredTags: ['bar', 'counter'] },
-    { id: 'dj', title: 'DJ', level: 2, salary: 800, startHour: 20, endHour: 4, companyType: JobType.Nightlife, requiredTags: ['dj_booth'] },
+    { id: 'bartender', title: '调酒师', level: 1, salary: 6000, startHour: 19, endHour: 3, companyType: JobType.Nightlife, requiredTags: ['bar', 'counter'] },
+    { id: 'dj', title: 'DJ', level: 2, salary: 15000, startHour: 20, endHour: 4, companyType: JobType.Nightlife, requiredTags: ['dj_booth'] },
 
     // Hospital Careers (需要医疗设备或办公桌)
-    { id: 'nurse_intern', title: '实习护士', level: 1, salary: 300, startHour: 8, endHour: 18, companyType: JobType.Hospital, requiredTags: ['desk', 'medical_bed'] },
-    { id: 'nurse', title: '注册护士', level: 2, salary: 600, startHour: 8, endHour: 18, companyType: JobType.Hospital, requiredTags: ['desk', 'medical_bed'] },
-    { id: 'doctor_resident', title: '住院医师', level: 3, salary: 1200, startHour: 9, endHour: 19, companyType: JobType.Hospital, requiredTags: ['desk'] },
-    { id: 'doctor_chief', title: '主任医师', level: 4, salary: 2500, startHour: 9, endHour: 17, companyType: JobType.Hospital, requiredTags: ['desk'] },
+    { id: 'nurse_intern', title: '实习护士', level: 1, salary: 4000, startHour: 8, endHour: 18, companyType: JobType.Hospital, requiredTags: ['desk', 'medical_bed'] },
+    { id: 'nurse', title: '注册护士', level: 2, salary: 8500, startHour: 8, endHour: 18, companyType: JobType.Hospital, requiredTags: ['desk', 'medical_bed'] },
+    { id: 'doctor_resident', title: '住院医师', level: 3, salary: 15000, startHour: 9, endHour: 19, companyType: JobType.Hospital, requiredTags: ['desk'] },
+    { id: 'doctor_chief', title: '主任医师', level: 4, salary: 45000, startHour: 9, endHour: 17, companyType: JobType.Hospital, requiredTags: ['desk'] },
 
     // Elder Care
-    { id: 'caregiver_intern', title: '见习护工', level: 1, salary: 250, startHour: 7, endHour: 16, companyType: JobType.ElderCare, requiredTags: ['bed', 'desk'] },
-    { id: 'caregiver', title: '护工', level: 2, salary: 450, startHour: 7, endHour: 16, companyType: JobType.ElderCare, requiredTags: ['bed'] },
-    { id: 'care_manager', title: '护理主管', level: 3, salary: 800, startHour: 8, endHour: 17, companyType: JobType.ElderCare, requiredTags: ['desk'] },
+    { id: 'caregiver_intern', title: '见习护工', level: 1, salary: 4500, startHour: 7, endHour: 16, companyType: JobType.ElderCare, requiredTags: ['bed', 'desk'] },
+    { id: 'caregiver', title: '护工', level: 2, salary: 7000, startHour: 7, endHour: 16, companyType: JobType.ElderCare, requiredTags: ['bed'] },
+    { id: 'care_manager', title: '护理主管', level: 3, salary: 12000, startHour: 8, endHour: 17, companyType: JobType.ElderCare, requiredTags: ['desk'] },
 ];
 
 export const BUFFS = {
@@ -354,7 +354,7 @@ export const SCHOOL_CONFIG = {
         startHour: 8,
         endHour: 15,
         stages: [AgeStage.Child],
-        allowanceBase: 20
+        allowanceBase: 400
     },
     high_school: {
         id: 'high_school',
@@ -362,7 +362,7 @@ export const SCHOOL_CONFIG = {
         startHour: 7.5,
         endHour: 18, 
         stages: [AgeStage.Teen],
-        allowanceBase: 50
+        allowanceBase: 800
     }
 };
 

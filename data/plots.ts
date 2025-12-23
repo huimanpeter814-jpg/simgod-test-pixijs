@@ -20,7 +20,7 @@ const createGrid = (baseId: string, startX: number, startY: number, cols: number
 
 const PLOT_APT_CHEAP_S: PlotTemplate = {
     id: 'apt_cheap_s', width: 170, height: 170, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '蜗居', capacity: 1, cost: 15, type: 'public_housing', area: { x: 5, y: 5, w: 160, h: 160 } }],
+    housingUnits: [{ id: 'unit', name: '蜗居', capacity: 1, cost: 1200, type: 'public_housing', area: { x: 5, y: 5, w: 160, h: 160 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 160, h: 160, label: '房间', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed', x: 10, y: 10, w: 60, h: 80, color: '#74b9ff', label: '床', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'sleep'] },
@@ -32,7 +32,7 @@ const PLOT_APT_CHEAP_S: PlotTemplate = {
 
 const PLOT_APT_CHEAP_M: PlotTemplate = {
     id: 'apt_cheap_m', width: 155, height: 195, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '单间', capacity: 2, cost: 20, type: 'public_housing', area: { x: 5, y: 5, w: 145, h: 185 } }],
+    housingUnits: [{ id: 'unit', name: '单间', capacity: 2, cost: 1800, type: 'public_housing', area: { x: 5, y: 5, w: 145, h: 185 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 145, h: 185, label: '房间', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed', x: 10, y: 10, w: 70, h: 90, color: '#74b9ff', label: '双人床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
@@ -44,7 +44,7 @@ const PLOT_APT_CHEAP_M: PlotTemplate = {
 
 const PLOT_APT_CHEAP_L: PlotTemplate = {
     id: 'apt_cheap_l', width: 195, height: 180, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '大单间', capacity: 2, cost: 30, type: 'public_housing', area: { x: 5, y: 5, w: 185, h: 170 } }],
+    housingUnits: [{ id: 'unit', name: '大单间', capacity: 2, cost: 2200, type: 'public_housing', area: { x: 5, y: 5, w: 185, h: 170 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 185, h: 170, label: '房间', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed', x: 10, y: 10, w: 80, h: 90, color: '#74b9ff', label: '大床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
@@ -57,7 +57,7 @@ const PLOT_APT_CHEAP_L: PlotTemplate = {
 
 const PLOT_APT_LUXURY_S: PlotTemplate = {
     id: 'apt_luxury_s', width: 215, height: 220, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '精致公寓', capacity: 3, cost: 50, type: 'apartment', area: { x: 5, y: 5, w: 205, h: 210 } }],
+    housingUnits: [{ id: 'unit', name: '精致公寓', capacity: 3, cost: 3500, type: 'apartment', area: { x: 5, y: 5, w: 205, h: 210 } }],
     rooms: [
         { id: 'living', x: 5, y: 5, w: 100, h: 210, label: '厅', color: '#fff', pixelPattern: 'wood', hasWall: true },
         { id: 'rooms', x: 110, y: 5, w: 100, h: 210, label: '卧', color: '#f1f2f6', pixelPattern: 'wood', hasWall: true }
@@ -74,7 +74,7 @@ const PLOT_APT_LUXURY_S: PlotTemplate = {
 
 const PLOT_APT_LUXURY_M: PlotTemplate = {
     id: 'apt_luxury_m', width: 260, height: 220, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '高级公寓', capacity: 4, cost: 65, type: 'apartment', area: { x: 5, y: 5, w: 250, h: 210 } }],
+    housingUnits: [{ id: 'unit', name: '高级公寓', capacity: 4, cost: 4500, type: 'apartment', area: { x: 5, y: 5, w: 250, h: 210 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 210, label: '全屋', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed1', x: 160, y: 10, w: 70, h: 90, color: '#ff7675', label: '主卧', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
@@ -88,7 +88,7 @@ const PLOT_APT_LUXURY_M: PlotTemplate = {
 
 const PLOT_APT_LUXURY_L: PlotTemplate = {
     id: 'apt_luxury_l', width: 260, height: 235, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '豪华大平层', capacity: 4, cost: 80, type: 'apartment', area: { x: 5, y: 5, w: 250, h: 225 } }],
+    housingUnits: [{ id: 'unit', name: '豪华大平层', capacity: 4, cost: 6000, type: 'apartment', area: { x: 5, y: 5, w: 250, h: 225 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 225, label: '大平层', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed1', x: 160, y: 10, w: 80, h: 90, color: '#ff7675', label: '主卧', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
@@ -102,7 +102,7 @@ const PLOT_APT_LUXURY_L: PlotTemplate = {
 
 const PLOT_VILLA_S: PlotTemplate = {
     id: 'villa_s', width: 370, height: 290, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '花园洋房', capacity: 5, cost: 150, type: 'villa', area: { x: 5, y: 5, w: 360, h: 280 } }],
+    housingUnits: [{ id: 'unit', name: '花园洋房', capacity: 5, cost: 10000, type: 'villa', area: { x: 5, y: 5, w: 360, h: 280 } }],
     rooms: [
         { id: 'garden', x: 0, y: 0, w: 370, h: 290, label: '花园', color: '#55efc4', pixelPattern: 'grass' },
         { id: 'house', x: 20, y: 20, w: 250, h: 250, label: '主楼', color: '#fff', pixelPattern: 'wood', hasWall: true },
@@ -122,7 +122,7 @@ const PLOT_VILLA_S: PlotTemplate = {
 
 const PLOT_VILLA_M: PlotTemplate = {
     id: 'villa_m', width: 405, height: 285, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '湖景别墅', capacity: 6, cost: 200, type: 'villa', area: { x: 5, y: 5, w: 395, h: 275 } }],
+    housingUnits: [{ id: 'unit', name: '湖景别墅', capacity: 6, cost: 15000, type: 'villa', area: { x: 5, y: 5, w: 395, h: 275 } }],
     rooms: [
         { id: 'garden', x: 0, y: 0, w: 405, h: 285, label: '花园', color: '#55efc4', pixelPattern: 'grass' },
         { id: 'house', x: 20, y: 20, w: 280, h: 245, label: '主楼', color: '#fff', pixelPattern: 'wood', hasWall: true },
@@ -141,7 +141,7 @@ const PLOT_VILLA_M: PlotTemplate = {
 
 const PLOT_VILLA_L: PlotTemplate = {
     id: 'villa_l', width: 425, height: 305, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '半山豪宅', capacity: 6, cost: 300, type: 'villa', area: { x: 5, y: 5, w: 415, h: 295 } }],
+    housingUnits: [{ id: 'unit', name: '半山豪宅', capacity: 6, cost: 18000, type: 'villa', area: { x: 5, y: 5, w: 415, h: 295 } }],
     rooms: [
         { id: 'garden', x: 0, y: 0, w: 425, h: 305, label: '花园', color: '#55efc4', pixelPattern: 'grass' },
         { id: 'main', x: 20, y: 20, w: 300, h: 265, label: '主楼', color: '#fff', pixelPattern: 'wood', hasWall: true },
@@ -593,7 +593,7 @@ const PLOT_KINDERGARTEN_S: PlotTemplate = {
     id: 'kindergarten_s', width: 215, height: 220, type: 'kindergarten', // [修复]
     rooms: [
         { id: 'play', x: 5, y: 5, w: 140, h: 210, label: '幼托', color: '#ff9ff3', pixelPattern: 'wood', hasWall: true },
-        { id: 'nap', x: 150, y: 5, w: 60, h: 210, label: '睡', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
+        { id: 'nap', x: 150, y: 5, w: 60, h: 210, label: '幼托午睡房', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
     ],
     furniture: [
         ...createGrid('crib', 160, 20, 1, 3, 0, 50, { w: 40, h: 40, color: '#fab1a0', label: '床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby'] }),
@@ -608,7 +608,7 @@ const PLOT_KINDERGARTEN_M: PlotTemplate = {
     id: 'kindergarten_m', width: 260, height: 220, type: 'kindergarten', // [修复]
     rooms: [
         { id: 'play', x: 5, y: 5, w: 180, h: 210, label: '幼儿园', color: '#ff9ff3', pixelPattern: 'wood', hasWall: true },
-        { id: 'nap', x: 190, y: 5, w: 65, h: 210, label: '午睡房', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
+        { id: 'nap', x: 190, y: 5, w: 65, h: 210, label: '幼儿园午睡房', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
     ],
     furniture: [
         ...createGrid('crib', 200, 20, 1, 3, 0, 50, { w: 40, h: 40, color: '#fab1a0', label: '床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby'] }),
@@ -624,7 +624,7 @@ const PLOT_KINDERGARTEN_L: PlotTemplate = {
     id: 'kindergarten_l', width: 285, height: 230, type: 'kindergarten', // [修复]
     rooms: [
         { id: 'play', x: 5, y: 5, w: 200, h: 220, label: '双语幼儿园', color: '#ff9ff3', pixelPattern: 'wood', hasWall: true },
-        { id: 'nap', x: 210, y: 5, w: 70, h: 220, label: '静音房', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
+        { id: 'nap', x: 210, y: 5, w: 70, h: 220, label: '幼儿园静音房', color: '#74b9ff', pixelPattern: 'simple', hasWall: true }
     ],
     furniture: [
         ...createGrid('crib', 220, 20, 1, 4, 0, 50, { w: 40, h: 40, color: '#fab1a0', label: '床', utility: 'nap_crib', pixelPattern: 'bed_crib', tags: ['bed', 'baby'] }),
@@ -640,8 +640,8 @@ const PLOT_KINDERGARTEN_L: PlotTemplate = {
 const PLOT_SCHOOL_ELEM_S: PlotTemplate = {
     id: 'school_elem_s', width: 260, height: 300, type: 'elementary_school', // [修复]
     rooms: [
-        { id: 'class', x: 5, y: 5, w: 150, h: 290, label: '教学', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
-        { id: 'field', x: 160, y: 5, w: 95, h: 290, label: '操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
+        { id: 'class', x: 5, y: 5, w: 150, h: 290, label: '小学教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
+        { id: 'field', x: 160, y: 5, w: 95, h: 290, label: '小学操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
     ],
     furniture: [
         ...createGrid('desk', 10, 50, 2, 3, 50, 50, { w: 40, h: 30, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] }),
@@ -657,8 +657,8 @@ const PLOT_SCHOOL_ELEM_S: PlotTemplate = {
 const PLOT_SCHOOL_ELEM_M: PlotTemplate = {
     id: 'school_elem_m', width: 270, height: 305, type: 'elementary_school', // [修复]
     rooms: [
-        { id: 'class', x: 5, y: 5, w: 260, h: 180, label: '教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
-        { id: 'field', x: 5, y: 190, w: 260, h: 110, label: '操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
+        { id: 'class', x: 5, y: 5, w: 260, h: 180, label: '小学教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
+        { id: 'field', x: 5, y: 190, w: 260, h: 110, label: '小学操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
     ],
     furniture: [
         ...createGrid('desk', 20, 40, 4, 2, 50, 50, { w: 40, h: 30, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] }),
@@ -675,8 +675,8 @@ const PLOT_SCHOOL_ELEM_M: PlotTemplate = {
 const PLOT_SCHOOL_ELEM_L: PlotTemplate = {
     id: 'school_elem_l', width: 410, height: 325, type: 'elementary_school', // [修复]
     rooms: [
-        { id: 'class', x: 5, y: 5, w: 250, h: 315, label: '综合楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
-        { id: 'field', x: 260, y: 5, w: 145, h: 315, label: '大操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
+        { id: 'class', x: 5, y: 5, w: 250, h: 315, label: '小学综合楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
+        { id: 'field', x: 260, y: 5, w: 145, h: 315, label: '小学大操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
     ],
     furniture: [
         ...createGrid('desk', 20, 50, 4, 3, 50, 50, { w: 40, h: 30, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] }),
@@ -693,8 +693,8 @@ const PLOT_SCHOOL_ELEM_L: PlotTemplate = {
 const PLOT_SCHOOL_HIGH_S: PlotTemplate = {
     id: 'school_high_s', width: 270, height: 305, type: 'high_school', // [修复]
     rooms: [
-        { id: 'class', x: 5, y: 5, w: 260, h: 200, label: '教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
-        { id: 'field', x: 5, y: 210, w: 260, h: 90, label: '操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
+        { id: 'class', x: 5, y: 5, w: 260, h: 200, label: '中学教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
+        { id: 'field', x: 5, y: 210, w: 260, h: 90, label: '中学操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
     ],
     furniture: [
         ...createGrid('desk', 20, 40, 4, 2, 50, 50, { w: 40, h: 30, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] }),
@@ -710,8 +710,8 @@ const PLOT_SCHOOL_HIGH_S: PlotTemplate = {
 const PLOT_SCHOOL_HIGH_M: PlotTemplate = {
     id: 'school_high_m', width: 280, height: 425, type: 'high_school', // [修复]
     rooms: [
-        { id: 'class', x: 5, y: 5, w: 270, h: 250, label: '实验楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
-        { id: 'field', x: 5, y: 260, w: 270, h: 160, label: '体育场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
+        { id: 'class', x: 5, y: 5, w: 270, h: 250, label: '中学实验楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
+        { id: 'field', x: 5, y: 260, w: 270, h: 160, label: '中学体育场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
     ],
     furniture: [
         ...createGrid('desk', 20, 40, 4, 3, 60, 50, { w: 40, h: 30, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] }),
@@ -727,8 +727,8 @@ const PLOT_SCHOOL_HIGH_M: PlotTemplate = {
 const PLOT_SCHOOL_HIGH_L: PlotTemplate = {
     id: 'school_high_l', width: 425, height: 305, type: 'high_school', // [修复]
     rooms: [
-        { id: 'class', x: 5, y: 5, w: 260, h: 295, label: '教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
-        { id: 'field', x: 270, y: 5, w: 150, h: 295, label: '大操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
+        { id: 'class', x: 5, y: 5, w: 260, h: 295, label: '中学教学楼', color: '#dfe6e9', pixelPattern: 'wood', hasWall: true },
+        { id: 'field', x: 270, y: 5, w: 150, h: 295, label: '中学大操场', color: '#27ae60', pixelPattern: 'grass', hasWall: false }
     ],
     furniture: [
         ...createGrid('desk', 20, 40, 3, 3, 70, 50, { w: 50, h: 30, color: '#fdcb6e', label: '课桌', utility: 'study', pixelPattern: 'desk_school', tags: ['desk', 'study'] }),
@@ -781,8 +781,8 @@ const PLOT_HOSPITAL_M: PlotTemplate = {
 const PLOT_HOSPITAL_L: PlotTemplate = {
     id: 'hospital_l', width: 410, height: 325, type: 'hospital', // [修复]
     rooms: [
-        { id: 'out', x: 5, y: 5, w: 150, h: 315, label: '门诊部', color: '#fff', pixelPattern: 'tile', hasWall: true },
-        { id: 'in', x: 160, y: 5, w: 245, h: 315, label: '住院部', color: '#dff9fb', pixelPattern: 'simple', hasWall: true }
+        { id: 'out', x: 5, y: 5, w: 150, h: 315, label: '医院门诊部', color: '#fff', pixelPattern: 'tile', hasWall: true },
+        { id: 'in', x: 160, y: 5, w: 245, h: 315, label: '医院住院部', color: '#dff9fb', pixelPattern: 'simple', hasWall: true }
     ],
     furniture: [
         { id: 'nurse', x: 20, y: 20, w: 80, h: 40, color: '#74b9ff', label: '护士总台', utility: 'work', pixelPattern: 'reception', tags: ['desk'] },
@@ -813,8 +813,8 @@ const PLOT_ELDER_S: PlotTemplate = {
 
 const PLOT_ELDER_M: PlotTemplate = {
     id: 'elder_home_m', width: 370, height: 290, type: 'elder_care', // [修复]
-    housingUnits: [{ id: 'unit', name: '安康社区', capacity: 6, cost: 1500, type: 'elder_care', area: { x: 5, y: 5, w: 360, h: 280 } }],
-    rooms: [{ id: 'main', x: 5, y: 5, w: 360, h: 280, label: '康养中心', color: '#f0fff4', pixelPattern: 'tile', hasWall: true }],
+    housingUnits: [{ id: 'unit', name: '养老社区', capacity: 6, cost: 1500, type: 'elder_care', area: { x: 5, y: 5, w: 360, h: 280 } }],
+    rooms: [{ id: 'main', x: 5, y: 5, w: 360, h: 280, label: '养老中心', color: '#f0fff4', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('bed', 20, 20, 3, 2, 80, 100, { w: 60, h: 80, color: '#fff', label: '护理床', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'medical_bed'] }),
         { id: 'nurse', x: 280, y: 20, w: 60, h: 40, color: '#fff', label: '护工', utility: 'work', pixelPattern: 'reception', tags: ['desk'] },
@@ -827,7 +827,7 @@ const PLOT_ELDER_M: PlotTemplate = {
 const PLOT_ELDER_L: PlotTemplate = {
     id: 'elder_home_l', width: 410, height: 325, type: 'elder_care', // [修复]
     housingUnits: [{ id: 'unit', name: '高端养老', capacity: 8, cost: 1800, type: 'elder_care', area: { x: 5, y: 5, w: 400, h: 315 } }],
-    rooms: [{ id: 'main', x: 5, y: 5, w: 400, h: 315, label: '疗养中心', color: '#f0fff4', pixelPattern: 'tile', hasWall: true }],
+    rooms: [{ id: 'main', x: 5, y: 5, w: 400, h: 315, label: '养老中心', color: '#f0fff4', pixelPattern: 'tile', hasWall: true }],
     furniture: [
         ...createGrid('bed', 20, 20, 4, 2, 80, 100, { w: 60, h: 80, color: '#fff', label: '护理床', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'medical_bed'] }),
         { id: 'nurse', x: 20, y: 240, w: 80, h: 40, color: '#fff', label: '护工站', utility: 'work', pixelPattern: 'reception', tags: ['desk'] },

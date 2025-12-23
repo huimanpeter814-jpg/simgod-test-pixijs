@@ -136,6 +136,13 @@ export class Sim {
     // 🟢 [新增] 行为队列系统
     currentIntent: SimIntent = SimIntent.IDLE; // 当前的高层意图
     actionQueue: QueuedAction[] = [];          // 待执行的动作列表
+    // 🧠 [新增] AI 思考透明化字段
+    lastDecisionReason: string | null = null;   // 为什么产生这个意图？(Why)
+    currentPlanDescription: string | null = null; // 具体的执行策略是什么？(How)
+
+    currentNeedType?: string;      // 例如 'bladder', 'hygiene'
+    funPreference?: string;        // 例如 'skill_building', 'passive_fun'
+    socialIntentMeta?: string;     // 例如 'seek_romance', 'party'
 
     carryingSimId: string | null = null; 
     carriedBySimId: string | null = null; 

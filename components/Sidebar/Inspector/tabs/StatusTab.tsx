@@ -103,7 +103,6 @@ export const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
             <div>
                 <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 flex justify-between items-center">
                     <span>AI 决策大脑</span>
-                    {/* 显示队列长度的小徽章 */}
                     {sim.actionQueue.length > 0 && (
                         <span className="text-[9px] bg-accent/20 text-accent px-1.5 rounded">
                             {sim.actionQueue.length} 步待办
@@ -112,18 +111,31 @@ export const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                 </div>
                 
                 <div className="bg-black/20 rounded border border-white/5 p-2 flex flex-col gap-2">
-                    
                     {/* 1. 当前的高层意图 (Goal) */}
-                    <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                        <span className="text-[10px] text-gray-400">当前目标</span>
-                        <span className="text-[11px] font-bold text-accent flex items-center gap-1">
-                            {/* 这里加个小图标装饰 */}
-                            <span className="text-[10px]">🎯</span>
-                            {INTENT_MAP[sim.currentIntent] || sim.currentIntent}
-                        </span>
+                    <div className="flex flex-col gap-1 pb-2 border-b border-white/5">
+                        <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-gray-400">当前意图</span>
+                            <span className="text-[11px] font-bold text-accent flex items-center gap-1">
+                                <span className="text-[10px]">🎯</span>
+                                {INTENT_MAP[sim.currentIntent] || sim.currentIntent}
+                            </span>
+                        </div>
+                        {/* 🆕 显示决策原因 (Why) */}
+                        {sim.lastDecisionReason && (
+                            <div className="bg-white/5 p-1.5 rounded text-[10px] text-gray-300 font-mono leading-tight">
+                                <span className="text-gray-500 mr-1">Reason:</span>
+                                {sim.lastDecisionReason}
+                            </div>
+                        )}
                     </div>
+                    {/* 2. 战术策略 (Strategy) */}
+                    {sim.currentPlanDescription && (
+                        <div className="text-[10px] text-gray-400 italic px-1">
+                            "<span className="text-gray-300">{sim.currentPlanDescription}</span>"
+                        </div>
+                    )}
 
-                    {/* 2. 行为执行流 (Pipeline) */}
+                    {/* 3. 行为执行流 (Pipeline) */}
                     <div className="flex flex-col gap-1.5">
                         
                         {/* 当前正在执行的动作 (Active) */}
