@@ -103,7 +103,7 @@ export class Sim {
     isSideHustle: boolean = false;
     currentShiftStart: number = 0;
 
-    
+    isGaming: boolean = false;
 
     // 🆕 自由职业/物品相关
     royalty: { amount: number, daysLeft: number } = { amount: 0, daysLeft: 0 };
@@ -123,6 +123,7 @@ export class Sim {
 
     state: SimState;
     action: SimAction | string; 
+
     
     actionTimer!: number;
     interactionTarget: any = null;

@@ -380,10 +380,17 @@ export const DecisionLogic = {
             }
         }
 
-        // 娱乐
+        // 娱乐评分 (优化)
         if (sim.needs[NeedType.Fun] < 60 && ![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-            if (sim.money > 100) scores.push({ id: 'cinema_3d', score: (100 - sim.needs[NeedType.Fun]) * 1.2, type: 'obj' });
-            if (sim.mbti.includes('N')) scores.push({ id: 'art', score: (100 - sim.needs[NeedType.Fun]) * 1.5, type: 'obj' });
+            const funScore = (100 - sim.needs[NeedType.Fun]) * 1.5;
+            
+            if (sim.money > 100) scores.push({ id: 'cinema_3d', score: funScore, type: 'obj' });
+            if (sim.mbti.includes('N')) scores.push({ id: 'art', score: funScore * 1.2, type: 'obj' });
+            
+            // [新增] 添加通用娱乐设施搜索
+            scores.push({ id: 'computer_play', score: funScore, type: 'obj' }); // 玩电脑
+            scores.push({ id: 'read_book', score: funScore * 0.8, type: 'obj' }); // 看书
+            scores.push({ id: 'watch_tv', score: funScore * 0.9, type: 'obj' }); // 看电视
         }
 
         scores.sort((a, b) => b.score - a.score);
@@ -498,6 +505,9 @@ export const DecisionLogic = {
              [NeedType.Hunger]: 'hunger', [NeedType.Bladder]: 'bladder', [NeedType.Hygiene]: 'hygiene', [NeedType.Energy]: 'energy',
              'healing': 'healing', cooking: 'cooking', gardening: 'gardening', fishing: 'fishing', art: 'art', play: 'play',
              practice_speech: 'practice_speech', play_chess: 'play_chess', play_instrument: 'play_instrument', paint: 'paint', gym_run: 'run',
+             'computer_play': 'work', // 映射到电脑(通常utility是work)，但在 interactionRegistry 里我们做了区分
+             'read_book': 'bookshelf',
+             'watch_tv': 'cinema_', // 假设电视和电影院共用逻辑，或者根据实际家具 utility 填写
         };
         if (simpleMap[type]) utility = simpleMap[type];
 

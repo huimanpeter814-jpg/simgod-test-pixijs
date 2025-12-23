@@ -339,6 +339,20 @@ export const SocialLogic = {
                     if (type.special === 'confess') return !rel.isLover && rel.romance >= 40;
                     if (type.special === 'breakup') return rel.isLover && rel.romance < -60;
                     if (type.special === 'pickup') return !rel.hasRomance && rel.romance < 20;
+                    
+                    // === [修复] 防止重复求婚/结婚 ===
+                    if (type.special === 'propose') {
+                        // 必须是恋人，且双方都未婚
+                        return rel.isLover && !rel.isSpouse && !sim.partnerId && !partner.partnerId && rel.romance > 80;
+                    }
+                    if (type.special === 'marriage') {
+                        // 只有求婚成功后（通常通过事件触发），或作为调试选项
+                        // 这里我们隐藏直接的 marriage 选项，强制走 propose -> event 流程
+                        // 或者如果你的逻辑是 propose 成功后解锁 marriage，则检查 isSpouse
+                        return false; 
+                    }
+                    // ==============================
+
                     if (!rel.hasRomance && type.special !== 'pickup') return false;
                     return romantic;
                 }
@@ -456,6 +470,11 @@ export const SocialLogic = {
                 SocialLogic.divorce(sim, partner);
             }
             else if (finalType.special === 'try_baby') {
+                // [新增] 检查：如果任何一方已经怀孕，就不能再次受孕
+                if (sim.isPregnant || partner.isPregnant) {
+                    sim.say("已经有宝宝了...", 'normal');
+                    return;
+                }
                 const bothWant = sim.mood > 50 && partner.mood > 50 && sim.money > 500;
                 if (bothWant) {
                     let prob = (sim.constitution + sim.luck + partner.constitution + partner.luck) / 400;

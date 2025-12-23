@@ -445,28 +445,38 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
    'work': {
-        verb: '工作 💻', 
-        duration: 480, 
-        getDuration: (sim) => {
-            let base = sim.isSideHustle ? 180 : 480;
-            if (sim.isSideHustle) {
-                base *= SkillLogic.getPerkModifier(sim, 'logic', 'speed');
-                base *= SkillLogic.getPerkModifier(sim, 'creativity', 'speed');
-            }
-            return base;
+        verb: '使用电脑', 
+        duration: 240, // 缩短基础时长
+        getDuration: (sim) => sim.isGaming ? 120 : 480, // 玩游戏时间短，工作时间长
+        getVerb: (sim) => {
+            if (sim.isGaming) return '玩游戏 🎮';
+            return sim.isSideHustle ? (sim.skills.coding > sim.skills.creativity ? '接单修Bug 💻' : '闭关写作 ✍️') : '工作 💻';
         },
-        getVerb: (sim) => sim.isSideHustle ? (sim.skills.coding > sim.skills.creativity ? '接单修Bug 💻' : '闭关写作 ✍️') : '工作 💻',
-        
         onStart: (sim, obj) => {
-            if (sim.isSideHustle) {
+            // 判定是否是玩游戏：如果娱乐低，且不是在通过副业赚钱，也不是上班时间（简单判定）
+            // 注意：需要在 decision.ts 里配合设置 sim.isGaming，或者在这里动态判定
+            // 这里使用动态判定兜底
+            if (!sim.isSideHustle && sim.needs[NeedType.Fun] < 60 && sim.job.id !== 'internet') {
+                sim['isGaming'] = true; // 临时标记
                 sim.enterInteractionState(SimAction.Using);
             } else {
-                sim.enterWorkingState();
+                sim['isGaming'] = false;
+                if (sim.isSideHustle) sim.enterInteractionState(SimAction.Using);
+                else sim.enterWorkingState();
             }
             return true;
         },
 
         onUpdate: (sim, obj, f, getRate) => {
+            // 游戏模式
+            if (sim['isGaming']) {
+                sim.needs[NeedType.Fun] += getRate(150);
+                sim.needs[NeedType.Social] += getRate(50); // 网游社交
+                sim.needs[NeedType.Energy] -= getRate(80);
+                return;
+            }
+
+            // 工作模式 (原有逻辑)
             if (sim.skills.logic > sim.skills.creativity) {
                 sim.iq = Math.min(100, sim.iq + 0.01 * f);
             } else {
@@ -475,6 +485,11 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         },
 
         onFinish: (sim, obj) => {
+            if (sim['isGaming']) {
+                sim.say("好玩！", 'act');
+                sim['isGaming'] = false; // 清理标记
+                return;
+            }
             if (sim.isSideHustle && obj.label.includes('电脑')) {
                 // [新增] 严格禁止未成年人接私活赚钱
                 if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
@@ -515,15 +530,39 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             }
         }
     },
+    // [优化] 电视/电影
     'cinema_': { 
-        verb: '看电影 🎬', duration: 120,
-        onStart: (sim) => { sim.addBuff(BUFFS.movie_fun); return true; },
+        verb: '看电视 📺', duration: 90,
+        getVerb: (sim, obj) => obj.label.includes('电影') ? '看电影 🎬' : '看电视 📺',
+        onStart: (sim) => { 
+            sim.addBuff(BUFFS.movie_fun); 
+            sim.enterInteractionState(SimAction.WatchingMovie); // 确保有看电视的动画状态
+            return true; 
+        },
         onUpdate: (sim, obj, f, getRate) => {
-             sim.needs[NeedType.Fun] += getRate(120);
-             sim.needs[NeedType.Energy] -= getRate(600);
-             sim.eq = Math.min(100, sim.eq + 0.02 * f);
+             sim.needs[NeedType.Fun] += getRate(150); // 提高娱乐回复速度
+             sim.needs[NeedType.Energy] -= getRate(50); // 坐着看电视耗能低
+             // 如果是新闻频道加智商，娱乐频道加娱乐 (简化统一处理)
         }
     },
+
+    // [新增] 阅读 (对应书架)
+    'bookshelf': {
+        verb: '阅读 📖', duration: 60,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("看不懂...", 'bad'); return false; }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs[NeedType.Fun] += getRate(80);
+            // 随机提升一门技能
+            if (Math.random() < 0.01) sim.skills.writing = (sim.skills.writing || 0) + 0.1;
+        },
+        onFinish: (sim) => {
+            sim.say("书中自有黄金屋", 'act');
+        }
+    },
+
     [NeedType.Energy]: {
         verb: '睡觉 💤', duration: 420,
         getVerb: (sim, obj) => (obj.label.includes('沙发') || obj.label.includes('长椅')) ? '小憩' : '睡觉 💤',
@@ -543,14 +582,15 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             if (sim.needs[NeedType.Energy] !== undefined) sim.needs[NeedType.Energy] += getRate(t);
             if (timeKey === 'energy_nap') sim.needs[NeedType.Comfort] = 100;
 
-            // [修复 A] 智能唤醒：如果精力已满，或者肚子饿扁了，提前醒来
-            if (sim.needs[NeedType.Energy] >= 100) {
-                sim.finishAction(); // 精力满了，起床
-                sim.say("睡饱了！☀️", 'act');
-            }
-            if (sim.needs[NeedType.Hunger] < 20) {
-                sim.finishAction(); // 饿醒了
-                sim.say("饿醒了...", 'bad');
+            // [优化] 智能唤醒：精力满且天亮了才起床
+            const isNight = GameStore.time.hour >= 23 || GameStore.time.hour < 6;
+            const isHungry = sim.needs[NeedType.Hunger] < 20;
+            
+            // 只有在 (精力满 且 不是深夜) 或者 (饿醒了) 时才起床
+            if ((sim.needs[NeedType.Energy] >= 100 && !isNight) || isHungry) {
+                sim.finishAction();
+                if (isHungry) sim.say("饿醒了...", 'bad');
+                else sim.say("睡饱了！☀️", 'act');
             }
         }
     },
