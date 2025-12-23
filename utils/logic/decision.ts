@@ -202,18 +202,38 @@ export const DecisionLogic = {
             }
             // 无家可归的婴儿直接进入需求判断逻辑
             
+            // 1.1 饥饿 (最高优先级)
             if (sim.needs[NeedType.Hunger] < 50) {
                 if (this.triggerHungerBroadcast(sim)) return;
                 sim.say("饿饿...🍼", 'bad');
-            } else if (sim.needs[NeedType.Energy] < 30) {
-                if (this.findObject(sim, 'nap_crib')) return;
-                // [新增] 如果找不到床，且非常困，允许通过“等待”状态回血 (模拟被抱着睡)
+            } 
+            
+            // 1.2 [修复] 增加如厕逻辑
+            else if (sim.needs[NeedType.Bladder] < 50) {
+                 if (this.findObject(sim, NeedType.Bladder)) return;
+                 sim.say("憋不住了...", 'bad');
+            }
+
+            // 1.3 [修复] 增加卫生逻辑
+            else if (sim.needs[NeedType.Hygiene] < 50) {
+                 if (this.findObject(sim, NeedType.Hygiene)) return; // 会去寻找浴缸/淋浴
+                 sim.say("臭臭...", 'bad');
+            }
+
+            // 1.4 睡觉 (改为通用 Energy 搜索，涵盖 crib 和 bed)
+            else if (sim.needs[NeedType.Energy] < 40) { // 稍微提高阈值，别等到30才睡
+                if (this.findObject(sim, NeedType.Energy)) return;
+                
+                // 找不到床的兜底
                 if (sim.needs[NeedType.Energy] < 10) {
                     sim.say("困困...💤", 'bad');
-                    sim.needs[NeedType.Energy] += 0.05; // 极慢恢复
+                    sim.needs[NeedType.Energy] += 0.05; 
                 }
-            } else if (sim.needs[NeedType.Fun] < 50) {
-                if (this.findObject(sim, 'play_blocks')) return;
+            } 
+            
+            // 1.5 娱乐 (放宽限制，使用通用 Fun 搜索，不再死磕积木)
+            else if (sim.needs[NeedType.Fun] < 60) {
+                if (this.findObject(sim, NeedType.Fun)) return;
             }
             if (sim.action === SimAction.Idle && Math.random() < 0.5) sim.startWandering();
             return;
@@ -426,8 +446,10 @@ export const DecisionLogic = {
         }
         else if (type === NeedType.Energy) {
              candidates = candidates.concat(GameStore.furnitureIndex.get('energy') || []);
+             // [修复] 搜寻精力设施时，同时也搜寻婴儿床，确保通用逻辑能找到它
+             candidates = candidates.concat(GameStore.furnitureIndex.get('nap_crib') || []);
              if (sim.needs[NeedType.Energy] < 30) candidates = candidates.concat(GameStore.furnitureIndex.get('comfort') || []);
-        } 
+        }
         else if (type === NeedType.Hunger) {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
                 candidates = candidates.concat(GameStore.furnitureIndex.get('hunger') || []);
@@ -507,7 +529,8 @@ export const DecisionLogic = {
                 
                 // 5. 婴幼儿允许项
                 if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                    const allowed = ['energy', 'nap_crib', 'play', 'play_blocks', 'hunger', 'bladder', 'hygiene'];
+                    // [优化] 增加 'fun' (通用娱乐) 和 'comfort' (沙发)，防止家里没玩具时宝宝无聊死
+                    const allowed = ['energy', 'nap_crib', 'play', 'play_blocks', 'hunger', 'bladder', 'hygiene', 'fun', 'comfort'];
                     if (!allowed.includes(f.utility) && !f.tags?.includes('baby')) return false;
                     if (f.tags?.includes('stove') || f.tags?.includes('gym') || f.tags?.includes('computer')) return false;
                     
@@ -518,14 +541,14 @@ export const DecisionLogic = {
             });
 
             // 兜底：如果强制回家导致没找到，尝试公共设施
-            if (validCandidates.length === 0 && forceHome) {
+            // [修复] 增加年龄判断：如果是婴幼儿，严禁触发兜底逻辑去外面找东西，找不到就找不到（会触发发呆或哭闹），坚决不能自己出门
+            if (validCandidates.length === 0 && forceHome && ![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
                 validCandidates = candidates.filter((f: Furniture) => {
                     if (DecisionLogic.isRestricted(sim, f)) return false;
                     if (f.homeId && f.homeId !== sim.homeId) return false; 
                     
                     // 3. 经济 (同样替换为新函数)
                     if (!canAfford(sim, f)) return false; 
-                    // [旧代码删除] if (type === NeedType.Hunger...
                     
                     if (f.reserved && f.reserved !== sim.id) return false;
                     if (!f.multiUser && GameStore.sims.some(s => s.id !== sim.id && s.interactionTarget?.id === f.id)) return false;
