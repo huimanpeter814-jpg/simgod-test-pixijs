@@ -273,9 +273,9 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '烹饪', duration: 90,
         getDuration: (sim) => 90 * SkillLogic.getPerkModifier(sim, 'cooking', 'speed'),
         onStart: (sim) => { 
-            // [新增] 婴幼儿不能烹饪
-            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                sim.say("够不着灶台...", 'bad');
+            // [修改] 将 Infant, Toddler 扩展为包含 Child
+            if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
+                sim.say("太危险了...", 'bad');
                 return false;
             }
 

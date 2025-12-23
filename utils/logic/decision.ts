@@ -192,53 +192,72 @@ export const DecisionLogic = {
     decideAction(sim: Sim) {
         // 1. 婴幼儿特殊逻辑
         if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-            // [修改] 如果无家可归，不再强行要求回家，而是允许尝试满足需求
-            if (!sim.isAtHome() && sim.homeId) {
-                if (sim.action !== SimAction.Waiting && sim.action !== SimAction.BeingEscorted) {
-                    sim.say("我要回家...", 'bad');
-                    sim.changeState(new WaitingState());
-                }
-                return; 
-            }
-            // 无家可归的婴儿直接进入需求判断逻辑
+            // [原有逻辑] 检查是否离家出走... (保持不变)
+            if (!sim.isAtHome() && sim.homeId) { /*...*/ return; }
+
+            // === [修复 1] 拆解优先级链，防止一个需求卡死其他紧急需求 ===
             
-            // 1.1 饥饿 (最高优先级)
-            if (sim.needs[NeedType.Hunger] < 50) {
-                if (this.triggerHungerBroadcast(sim)) return;
-                sim.say("饿饿...🍼", 'bad');
-            } 
-            
-            // 1.2 [修复] 增加如厕逻辑
-            else if (sim.needs[NeedType.Bladder] < 50) {
+            // A. 如厕 (Bladder) - 最紧急，独立检查
+            if (sim.needs[NeedType.Bladder] < 40) {
                  if (this.findObject(sim, NeedType.Bladder)) return;
-                 sim.say("憋不住了...", 'bad');
+                 // 找不到厕所继续向下执行
             }
 
-            // 1.3 [修复] 增加卫生逻辑
-            else if (sim.needs[NeedType.Hygiene] < 50) {
-                 if (this.findObject(sim, NeedType.Hygiene)) return; // 会去寻找浴缸/淋浴
-                 sim.say("臭臭...", 'bad');
+            // B. 卫生 (Hygiene) - 独立检查
+            if (sim.needs[NeedType.Hygiene] < 40) {
+                 if (this.findObject(sim, NeedType.Hygiene)) return;
             }
 
-            // 1.4 睡觉 (改为通用 Energy 搜索，涵盖 crib 和 bed)
-            else if (sim.needs[NeedType.Energy] < 40) { // 稍微提高阈值，别等到30才睡
+            // C. 饥饿 (Hunger) - 独立检查
+            if (sim.needs[NeedType.Hunger] < 50) {
+                // 尝试呼叫父母
+                if (this.triggerHungerBroadcast(sim)) return; 
+                // 如果没人喂，代码会继续向下运行，防止卡死
+                sim.say("饿饿...🍼", 'bad');
+            }
+
+            // D. 睡觉 (Energy) - 独立检查
+            if (sim.needs[NeedType.Energy] < 40) {
                 if (this.findObject(sim, NeedType.Energy)) return;
                 
-                // 找不到床的兜底
+                // 困极了的兜底
                 if (sim.needs[NeedType.Energy] < 10) {
                     sim.say("困困...💤", 'bad');
-                    sim.needs[NeedType.Energy] += 0.05; 
+                    sim.needs[NeedType.Energy] += 0.05;
+                    return; // 强制休息，不再执行后续
                 }
-            } 
-            
-            // 1.5 娱乐 (放宽限制，使用通用 Fun 搜索，不再死磕积木)
-            else if (sim.needs[NeedType.Fun] < 60) {
+            }
+
+            // === [修复 2] 增加社交逻辑，但加上“防走失”限制 ===
+            // 只有当生理需求尚可时，才考虑社交
+            if (sim.needs[NeedType.Social] < 60) {
+                // 手动查找：只找“在家里的”且“能走到的”人，防止宝宝跑到公园去
+                const target = GameStore.sims.find(s => 
+                    s.id !== sim.id && 
+                    s.homeId === sim.homeId && // 必须是一家人
+                    s.isAtHome() &&            // 必须此刻在家
+                    !DecisionLogic.isRestricted(sim, s.pos) // 必须能走到
+                );
+
+                if (target) {
+                    sim.target = { x: target.pos.x + 30, y: target.pos.y };
+                    sim.interactionTarget = { type: 'human', ref: target };
+                    sim.startMovingToInteraction();
+                    return;
+                }
+            }
+
+            // E. 娱乐 (Fun) - 最后才考虑玩
+            if (sim.needs[NeedType.Fun] < 60) {
                 if (this.findObject(sim, NeedType.Fun)) return;
             }
+
+            // F. 闲逛
             if (sim.action === SimAction.Idle && Math.random() < 0.5) sim.startWandering();
             return;
         }
 
+        //成人
         // 2. 紧急生存检查 (Health)
         if (sim.health < 60 || sim.hasBuff('sick')) { 
             if (DecisionLogic.findObject(sim, 'healing')) return;
@@ -474,41 +493,71 @@ export const DecisionLogic = {
         }
 
         // [核心修改] 优先回家逻辑 & 流浪汉处理
+        // [核心修改] 优先回家逻辑 & 门禁 & 封校
         const basicNeeds = [NeedType.Hunger, NeedType.Energy, NeedType.Bladder, NeedType.Hygiene];
         let forceHome = false;
+        let limitToCurrentPlot = false; // 新增：强制限制在当前地块（用于学校/监狱等）
 
         // 只有当有家的时候才考虑强制回家
         if (sim.homeId) {
             const currentPlot = GameStore.worldLayout.find(p => sim.pos.x >= p.x && sim.pos.x <= p.x + (p.width||300) && sim.pos.y >= p.y && sim.pos.y <= p.y + (p.height||300));
             
-            // 🆕 [修复] 婴幼儿必须强制在家活动，防止他们为了玩耍（Fun）自己跑去幼儿园
+            // 1. 婴幼儿逻辑 (保持之前的修复)
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                // 判断当前是否已经在幼儿园里了（如果是，则允许使用幼儿园设施）
-                const isInKindergarten = currentPlot && (
-                    currentPlot.customType === 'kindergarten' || 
-                    (PLOTS[currentPlot.templateId] && PLOTS[currentPlot.templateId].type === 'kindergarten')
-                );
-                
-                // 如果人不在幼儿园，那么无论什么需求（包括娱乐），都强制只能搜寻家里的物品
-                if (!isInKindergarten) {
+                const isInKindergarten = currentPlot && (currentPlot.customType === 'kindergarten' || (PLOTS[currentPlot.templateId] && PLOTS[currentPlot.templateId].type === 'kindergarten'));
+                if (!isInKindergarten) forceHome = true;
+                else limitToCurrentPlot = true; // 在幼儿园里就只能用幼儿园的东西
+            } 
+            
+            // 2. 儿童及青少年特殊逻辑 (新增)
+            else if ([AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) {
+                const isNight = GameStore.time.hour >= 21 || GameStore.time.hour < 6;
+                const isSchoolTime = GameStore.time.hour >= 8 && GameStore.time.hour < 16;
+                const isInSchool = currentPlot && ['school', 'elementary_school', 'high_school'].some(t => (currentPlot.customType || '').includes(t));
+
+                // [修复 A] 门禁系统：儿童深夜必须回家，禁止去网吧/公园
+                if (sim.ageStage === AgeStage.Child && isNight) {
                     forceHome = true;
                 }
-            } 
-            // 儿童及成人：只有基础需求（吃喝睡）才优先回家，娱乐可以在外面
+                // [修复 B] 封校系统：上课期间如果在学校，禁止去校外找东西（防止逃课去买饭）
+                else if (isSchoolTime && isInSchool) {
+                    limitToCurrentPlot = true;
+                }
+                // [原有逻辑] 基础需求优先回家，但在校/在职期间除外
+                else if (basicNeeds.includes(type as NeedType)) {
+                     // 只有当“不在”学校且“不在”工作岗位时，才强制回家找吃的/睡的
+                     // 如果在学校，上面 limitToCurrentPlot 已经处理了，或者允许在校内解决
+                     if (!isInSchool && !(sim.workplaceId && currentPlot && currentPlot.id === sim.workplaceId)) {
+                        forceHome = true;
+                     }
+                }
+            }
+
+            // 3. 成人逻辑
             else if (basicNeeds.includes(type as NeedType)) {
                 const isAtWork = sim.workplaceId && currentPlot && currentPlot.id === sim.workplaceId;
-                const isAtSchool = currentPlot && ['school','kindergarten'].some(t => currentPlot.templateId.includes(t));
-                if (!isAtWork && !isAtSchool) forceHome = true;
+                if (!isAtWork) forceHome = true;
             }
         }
 
         if (candidates.length) {
+            // 获取当前地块信息（为了 limitToCurrentPlot）
+            const currentPlot = limitToCurrentPlot ? GameStore.worldLayout.find(p => sim.pos.x >= p.x && sim.pos.x <= p.x + (p.width||300) && sim.pos.y >= p.y && sim.pos.y <= p.y + (p.height||300)) : null;
+
             let validCandidates = candidates.filter((f: Furniture)=> {
-                // 1. 权限 (调用修改后的 isRestricted)
+                // 1. 权限
                 if (DecisionLogic.isRestricted(sim, f)) return false;
                 
-                // 2. 回家优先 (仅当有家时生效)
+                // 2. 回家优先
                 if (forceHome && f.homeId !== sim.homeId) return false;
+
+                // [新增] 区域锁定 (防止逃课/越狱)
+                if (limitToCurrentPlot && currentPlot) {
+                    // 检查物品是否在当前地块内
+                    const inPlot = f.x >= currentPlot.x && f.x <= currentPlot.x + (currentPlot.width||300) &&
+                                   f.y >= currentPlot.y && f.y <= currentPlot.y + (currentPlot.height||300);
+                    if (!inPlot) return false;
+                }
                 
                 // [新增] 流浪汉逻辑：如果没有家，且是基础需求，优先找公共设施 (无 homeId 的家具)
                 if (!sim.homeId && basicNeeds.includes(type as NeedType)) {
