@@ -491,47 +491,356 @@ export const CareerLogic = {
         sim.changeState(new IdleState());
     },
 
+    /**
+     * 🟢 [重构] 全方位离职判定逻辑
+     * 综合考虑：经济压力、职业前景、性格匹配、家庭负担、身心健康
+     */
     checkCareerSatisfaction(sim: Sim) {
-        if (sim.job.id === 'unemployed') return;
-        
+        // 1. 基础拦截：无业、临时工、学生不需要辞职
+        if (!sim.job || sim.job.id === 'unemployed') return;
+        if (sim.isTemporary || sim.isNPC) return;
+        if (sim.ageStage === AgeStage.Child || sim.ageStage === AgeStage.Teen) return; // 学生兼职暂时不处理辞职，由学校逻辑托管
+
         let quitScore = 0;
-        if (sim.mood < 30) quitScore += 20;
-        if (sim.hasBuff('stressed') || sim.hasBuff('anxious')) quitScore += 30;
-        if (sim.money > 10000) quitScore += 10; 
+        const reasons: string[] = []; // 调试用，记录想辞职的原因
+
+        // ==========================================
+        // 📉 阻力因素 (减分项 - 让人不想/不敢辞职)
+        // ==========================================
+
+        // 1. 经济枷锁 (最核心的修复：穷人不敢辞职)
+        // 假设每日生活成本约 50-100，存款不足 2000 (约1个月生活费) 时极度恐慌
+        if (sim.money < 500) {
+            quitScore -= 500; // 绝对不可能辞职，除非死掉
+        } else if (sim.money < 2000) {
+            quitScore -= 100; // 没钱，忍着
+        } else if (sim.money < 5000) {
+            quitScore -= 50;  // 手头紧，不敢动
+        }
+
+        // 2. 职位沉没成本 (等级越高越舍不得)
+        // Level 1: -0, Level 2: -20, Level 3: -40, Level 4: -80
+        if (sim.job.level > 1) {
+            const sunkCost = Math.pow(sim.job.level, 2) * 5; 
+            quitScore -= sunkCost;
+        }
+
+        // 3. 性格特质：稳重型
+        if (sim.mbti.includes('J')) quitScore -= 10; // J人喜欢稳定
+        if (sim.traits.includes('勤奋') || sim.traits.includes('工作狂')) quitScore -= 30;
+        if (sim.lifeGoal.includes('富翁') || sim.lifeGoal.includes('大亨')) quitScore -= 20; // 搞钱要紧
+
+        // 4. 高薪诱惑
+        if (sim.job.salary > 200) quitScore -= 20;
+
+        // ==========================================
+        // 📈 动力因素 (加分项 - 让人想辞职)
+        // ==========================================
+
+        // 1. 身心健康 (崩溃边缘)
+        if (sim.health < 30) {
+            quitScore += 100; 
+            reasons.push("身体垮了");
+        }
+        if (sim.mood < 20) {
+            quitScore += 40;
+            reasons.push("心情极差");
+        }
+        // 只有严重的负面状态才算数
+        if (sim.hasBuff('burnout')) { quitScore += 50; reasons.push("严重职业倦怠"); }
+        if (sim.hasBuff('depressed')) { quitScore += 30; reasons.push("抑郁"); }
+
+        // 2. 财富自由 (有钱任性)
+        if (sim.money > 50000) {
+            quitScore += 40; 
+            reasons.push("财富自由");
+        } else if (sim.money > 20000) {
+            quitScore += 10;
+        }
+
+        // 3. 人岗不匹配 (MBTI & 技能)
+        // I人干销售/夜店 (E类工作)
+        if (sim.mbti.includes('I') && ['nightlife', 'business', 'sales'].includes(sim.job.companyType as string)) {
+            quitScore += 15;
+            reasons.push("社恐干销售");
+        }
+        // F人(情感)干 逻辑类工作 (T类)
+        if (sim.mbti.includes('F') && ['internet', 'logic', 'science'].includes(sim.job.companyType as string)) {
+            quitScore += 10;
+            reasons.push("感性做码农");
+        }
+        // 技能严重溢出 (怀才不遇) -> 只有当该职业没法升级时才生效
+        // 简单判定：智商/核心技能远超当前职位要求
+        if (sim.iq > 80 && sim.job.level === 1 && sim.age > 25) {
+            quitScore += 10;
+            reasons.push("怀才不遇");
+        }
+
+        // 4. 职业倦怠期 (随机波动)
+        // 懒惰特质
+        if (sim.traits.includes('懒惰')) quitScore += 15;
+        // 自由散漫 (P人)
+        if (sim.mbti.includes('P')) quitScore += 5;
+
+        // 5. 家庭因素 (回归家庭)
+        // 家里有婴儿(Infant/Toddler) + 没请保姆 + 且配偶更有钱/或者单亲
+        const hasBaby = GameStore.sims.some(s => s.homeId === sim.homeId && [AgeStage.Infant, AgeStage.Toddler].includes(s.ageStage));
+        if (hasBaby) {
+            if (sim.traits.includes('家庭') || sim.lifeGoal.includes('家庭')) {
+                quitScore += 50;
+                reasons.push("想回家带娃");
+            } else {
+                quitScore += 10; // 普通人也会分心
+            }
+        }
+
+        // 6. 老龄化 (退休)
+        if (sim.ageStage === AgeStage.Elder) {
+            quitScore += 80; // 老年人极大该率退休
+            reasons.push("年事已高");
+            // 除非是工作狂或者很穷
+            if (sim.money < 5000) { quitScore -= 60; reasons.push("养老金不够"); }
+        }
+
+        // ==========================================
+        // 🎲 最终判定
+        // ==========================================
         
-        if (sim.job.companyType === JobType.Internet && sim.mbti.includes('F')) quitScore += 10;
-        if (sim.job.companyType === JobType.Business && sim.mbti.includes('I')) quitScore += 15;
-        
-        if (Math.random() * 100 < quitScore && quitScore > 50) {
-            this.fireSim(sim, 'resign');
+        // 设定一个较高的阈值，保证不会轻易离职
+        // 只有当积怨已久(Score > 80) 时才纳入考虑
+        const threshold = 80;
+
+        if (quitScore > threshold) {
+            // 即使分高，也只有 5% 的概率真的提离职 (犹豫期)
+            // 这样模拟了人们"每天都想辞职，但第二天还是去上班"的状态
+            const roll = Math.random();
+            const chance = sim.traits.includes('冲动') ? 0.15 : 0.05;
+
+            if (roll < chance) {
+                // 1. 确定是退休还是辞职
+                const isRetire = sim.ageStage === AgeStage.Elder;
+                
+                // 2. 整理原因字符串
+                const reasonStr = reasons.join(' + ') || "个人发展原因";
+
+                // 3. 🟢 [核心修改] 调用 fireSim 并传入详细原因
+                // 注意：这里不再调用 GameStore.addLog，因为 fireSim 里已经统一写了
+                this.fireSim(sim, isRetire ? 'retire' : 'resign', reasonStr);
+                
+                // 4. 保留气泡作为视觉反馈
+                if (!isRetire) sim.say("世界那么大，我想去看看。", 'life');
+                // 退休的气泡也在 fireSim 里处理了，这里可以不写，或者写个不一样的
+            }
         }
     },
 
+    /**
+     * 🟢 [重构] 智能辞退判定逻辑
+     * 综合考量：绩效、考勤、资历、职场政治、个人特质与运气
+     */
     checkFire(sim: Sim) {
-        if (sim.job.id === 'unemployed') return;
+        // 1. 基础拦截：无业、临时工、NPC、未成年人不会被常规开除
+        if (!sim.job || sim.job.id === 'unemployed') return;
+        if (sim.isTemporary || sim.isNPC) return;
+        if (sim.ageStage === AgeStage.Child || sim.ageStage === AgeStage.Teen) return; 
 
-        if (sim.workPerformance < -60) {
-            this.fireSim(sim, 'fired');
-        } else if (sim.consecutiveAbsences >= 3) {
-            this.fireSim(sim, 'absent');
+        let fireScore = 0;
+        const reasons: string[] = [];
+
+        // ==========================================
+        // 🚨 风险积累 (Risk Accumulation)
+        // ==========================================
+
+        // 1. 核心指标：绩效 (Performance)
+        // 范围通常是 -100 到 100
+        // 只有负分才会有开除风险
+        if (sim.workPerformance < 0) {
+            // 基础分：绝对值。例如 -60 分 -> +60 风险
+            fireScore += Math.abs(sim.workPerformance);
+            
+            // 严重不合格惩罚 (红线)
+            if (sim.workPerformance < -60) {
+                fireScore += 30;
+                reasons.push("业绩长期不达标");
+            }
+        } else {
+            // 绩效好可以作为"免死金牌"，抵消缺勤或性格问题
+            // 例如 +50 分 -> 抵消 25 风险
+            fireScore -= sim.workPerformance * 0.5;
+        }
+
+        // 2. 核心指标：考勤 (Attendance)
+        if (sim.consecutiveAbsences > 0) {
+            // 每一天旷工增加大量风险 (比绩效更严重，态度问题)
+            let absencePenalty = sim.consecutiveAbsences * 30; 
+            
+            // [挽救判定] 尝试用口才/逻辑找借口
+            // 逻辑(Logic)高编理由，魅力(Charisma)高求情，高情商(EQ)懂卖惨
+            const excusePower = (sim.skills.logic || 0) * 0.5 + (sim.skills.charisma || 0) * 0.5 + (sim.eq || 50) * 0.2;
+            // 难度随旷工天数指数级增加
+            const excuseDifficulty = sim.consecutiveAbsences * 25; 
+            
+            if (Math.random() * 100 < (excusePower - excuseDifficulty)) {
+                absencePenalty *= 0.4; // 成功糊弄过去，风险大幅降低
+                // 只有小概率会冒泡，避免刷屏
+                if (Math.random() > 0.8) sim.say("还好老板信了我的理由...😰", 'sys');
+            } else {
+                reasons.push(`连续旷工(${sim.consecutiveAbsences}天)`);
+            }
+            
+            fireScore += absencePenalty;
+        }
+
+        // ==========================================
+        // 🛡️ 职场护身符 (Protections)
+        // ==========================================
+        
+        // A. 资历 (Level): 老员工(Level 3+)有豁免权，新人(Level 1)最容易背锅
+        if (sim.job.level >= 3) fireScore -= 50; // 经理级别很难被动开除
+        else if (sim.job.level === 2) fireScore -= 20;
+        
+        // B. 关键能力 (Competence): 智商高，老板舍不得开
+        if (sim.iq > 85) fireScore -= 15;
+
+        // C. 职场政治 (Office Politics)
+        // 魅力高、情商高、E人(外向) -> 容易维护上下级关系
+        if (sim.traits.includes('魅力') || (sim.skills.charisma || 0) > 40) fireScore -= 20;
+        if (sim.eq > 70) fireScore -= 15;
+        if (sim.mbti.startsWith('E')) fireScore -= 10;
+        
+        // D. 运气 (Luck)
+        if (sim.traits.includes('幸运')) fireScore -= 30; // 锦鲤体质，总能化险为夷
+
+        // ==========================================
+        // 💣 危险因子 (Risk Factors)
+        // ==========================================
+        
+        // A. 性格地雷
+        if (sim.traits.includes('倒霉')) fireScore += 25; // 喝凉水都塞牙，裁员先裁他
+        if (sim.traits.includes('懒惰')) fireScore += 20; // 摸鱼被发现
+        if (sim.traits.includes('刻薄') || sim.traits.includes('邪恶')) fireScore += 20; // 同事联名投诉
+        
+        // B. 状态糟糕
+        // 长期心情不好/健康差，容易在工作中出纰漏或发脾气
+        if (sim.mood < 20) fireScore += 15;
+        if (sim.health < 30) {
+            fireScore += 20;
+            reasons.push("健康状况堪忧");
+        }
+
+        // C. 人岗不匹配 (和辞职逻辑呼应)
+        // I人做销售/夜店，容易被孤立或业绩差
+        if (sim.mbti.startsWith('I') && ['sales', 'business', 'nightlife'].includes(sim.job.companyType as string)) {
+            fireScore += 15;
+        }
+
+        // ==========================================
+        // ⚖️ 最终裁决 (Final Judgment)
+        // ==========================================
+        
+        const threshold = 100; // 风险阈值：满分100，超过即进入"待处理名单"
+        
+        if (fireScore > threshold) {
+            // 并非达到阈值就一定开除，给予概率缓冲 (Russian Roulette)
+            // 分数越高，概率越大
+            
+            // 基础概率 15% (给予一定的存活空间)
+            let fireChance = 0.15;
+            
+            // 旷工零容忍：旷工3天以上概率直接拉满
+            if (sim.consecutiveAbsences >= 3) fireChance = 0.95;
+            
+            // 绩效极差 (-90以下) 概率提升
+            if (sim.workPerformance < -90) fireChance += 0.5;
+            
+            // 倒霉蛋概率加倍
+            if (sim.traits.includes('倒霉')) fireChance *= 1.5;
+
+            if (Math.random() < fireChance) {
+                // --- 触发开除 ---
+                const reasonType = sim.consecutiveAbsences >= 3 ? 'absent' : 'fired';
+                
+                // 1. 整理原因
+                const finalReason = reasons.length > 0 ? reasons.join(' + ') : "综合表现不佳";
+                
+                // 2. 🟢 [核心修改] 传入 finalReason，移除这里的 console.log 和 GameStore.addLog
+                this.fireSim(sim, reasonType, finalReason);
+                
+                // 3. 保留临场气泡
+                if (sim.health < 30) sim.say("这时候失业...要命啊...", 'bad');
+                else if (sim.money < 1000) sim.say("下个月房租怎么办...😭", 'bad');
+                else sim.say("此处不留爷，自有留爷处！", 'bad');
+                
+            } else {
+                // --- 侥幸逃脱 (严重警告) ---
+                if (!sim.hasBuff('stressed')) sim.addBuff(BUFFS.stressed); 
+                sim.say("老板找我谈话了...好险...", 'bad');
+                GameStore.addLog(sim, "收到公司的【严重警告信】，请尽快改善表现！", 'career');
+                if (sim.workPerformance < -50) sim.workPerformance = -45;
+            }
         }
     },
 
-    fireSim(sim: Sim, reason: 'resign' | 'fired' | 'absent') {
+    /**
+     * 🟢 [重构] 执行离职/解雇的底层操作
+     * @param sim 市民对象
+     * @param type 类型：主动辞职 | 被开除 | 旷工辞退 | 退休
+     * @param detail (可选) 详细原因字符串，用于生成更有趣的日志
+     */
+    fireSim(sim: Sim, type: 'resign' | 'fired' | 'absent' | 'retire', detail?: string) {
         const oldTitle = sim.job.title;
+        const oldJobId = sim.job.id;
+
+        // 1. 核心数据重置
         sim.job = JOBS.find(j => j.id === 'unemployed')!;
         sim.workplaceId = undefined;
         sim.workPerformance = 0;
-        sim.consecutiveAbsences = 0; 
-        
-        if (reason === 'fired') {
-            GameStore.addLog(sim, `被公司开除了 (${oldTitle})`, 'bad');
-            sim.addBuff(BUFFS.fired);
-        } else if (reason === 'absent') {
-            GameStore.addLog(sim, `因旷工被辞退`, 'bad');
-        } else if (reason === 'resign') {
-            GameStore.addLog(sim, `辞去了 ${oldTitle} 的工作`, 'sys');
-            sim.addBuff(BUFFS.well_rested);
+        sim.consecutiveAbsences = 0;
+        // 注意：不重置 dailyIncome，因为那是他今天已经赚到的钱，离职不能没收工资
+
+        // 2. [关键修复] 状态立即中断
+        // 如果市民正在工作、通勤，必须立刻打断，防止成为"幽灵员工"
+        if (sim.action === SimAction.Working || sim.action === SimAction.Commuting) {
+            sim.changeState(new IdleState());
+            sim.path = []; // 清空寻路路径
+            sim.target = null;
+            sim.interactionTarget = null;
+        }
+
+        // 3. 区分类型处理 (日志 & Buff)
+        switch (type) {
+            case 'fired':
+                // 开除：心情大跌，获得"被解雇"Buff
+                GameStore.addLog(sim, detail ? `惨遭开除: ${detail}` : `被公司开除了 (${oldTitle})`, 'bad');
+                sim.addBuff(BUFFS.fired); 
+                sim.addBuff(BUFFS.sad); // 叠加一个悲伤
+                sim.say("我的天呐...失业了...", 'bad');
+                break;
+                
+            case 'absent':
+                // 旷工辞退
+                GameStore.addLog(sim, `因长期旷工被辞退`, 'bad');
+                sim.addBuff(BUFFS.fired);
+                sim.say("早就想到了...", 'normal');
+                break;
+                
+            case 'resign':
+                // 主动辞职：如释重负
+                GameStore.addLog(sim, detail ? `辞职生效: ${detail}` : `辞去了 ${oldTitle} 的工作`, 'career');
+                sim.addBuff(BUFFS.well_rested); // 感到轻松
+                sim.addBuff(BUFFS.happy);       // 甚至有点开心
+                // 根据原因稍微吐槽一下
+                if (detail && detail.includes('富翁')) sim.say("不装了，我是亿万富翁。", 'money');
+                else sim.say("拜拜了您嘞！", 'act');
+                break;
+                
+            case 'retire':
+                // 退休：光荣离开
+                GameStore.addLog(sim, `从 ${oldTitle} 光荣退休`, 'life');
+                sim.addBuff(BUFFS.happy); 
+                sim.addBuff(BUFFS.relaxed); // 专属：退休生活
+                sim.say("终于可以享受生活了...", 'life');
+                break;
         }
     }
 };

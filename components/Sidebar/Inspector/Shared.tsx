@@ -1,18 +1,34 @@
 import React from 'react';
 
-// [修改] 优化进度条显示逻辑，val >= 1 即显示第一格 (Math.ceil)
-// 之前是 Math.floor(val / 20)，导致 0-19 都是 0 格，缺乏反馈
+// [修改] 优化进度条显示逻辑 - 三态显示法
+// 1. val >= 20*i : 全亮 (里程碑达成)
+// 2. val > 20*(i-1) : 半亮 (当前正在修习该阶段)
+// 3. 其他 : 暗色 (未解锁)
 export const SkillBar: React.FC<{ val: number }> = ({ val }) => (
     <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map(i => (
-            <div 
-                key={i} 
-                className={`w-3 h-3 rounded-sm border border-black/20 transition-colors duration-300 ${
-                    i <= Math.ceil(val / 20) ? 'bg-accent shadow-[0_0_5px_rgba(162,155,254,0.4)]' : 'bg-white/5'
-                }`} 
-                title={`Level ${i*20}`}
-            />
-        ))}
+        {[1, 2, 3, 4, 5].map(i => {
+            const targetLevel = i * 20;
+            const prevLevel = (i - 1) * 20;
+            
+            let styleClass = 'bg-white/5 border-white/10'; // 默认: 未解锁 (暗)
+
+            if (val >= targetLevel) {
+                // 状态1: 已达成里程碑 (全亮 + 发光)
+                styleClass = 'bg-accent border-accent shadow-[0_0_5px_rgba(162,155,254,0.6)]';
+            } else if (val > prevLevel) {
+                // 状态2: 正在进行中 (半亮 / 半透明)
+                // 让你看到虽然没满，但已经有点东西了
+                styleClass = 'bg-accent/40 border-accent/60'; 
+            }
+
+            return (
+                <div 
+                    key={i} 
+                    className={`w-3 h-3 rounded-sm border transition-all duration-300 ${styleClass}`} 
+                    title={`Level ${prevLevel} - ${targetLevel}`}
+                />
+            );
+        })}
     </div>
 );
 

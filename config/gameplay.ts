@@ -149,6 +149,9 @@ export const JOBS: Job[] = [
 
 export const BUFFS = {
     well_rested: { id: 'well_rested', label: '元气满满', type: 'good' as const, duration: 180 },
+    happy: { id: 'happy', label: '心情愉快', type: 'good' as const, duration: 180 },
+    sad: { id: 'sad', label: '悲伤', type: 'bad' as const, duration: 120 },
+    relaxed: { id: 'relaxed', label: '轻松惬意', type: 'good' as const, duration: 240 },
     stressed: { id: 'stressed', label: '社畜过劳', type: 'bad' as const, duration: 120 },
     in_love: { id: 'in_love', label: '恋爱脑', type: 'good' as const, duration: 300 },
     heartbroken: { id: 'heartbroken', label: '网抑云', type: 'bad' as const, duration: 400 },
