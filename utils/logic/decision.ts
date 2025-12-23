@@ -12,9 +12,7 @@ import { PLOTS } from '../../data/plots';
 const isWorkTime = (sim: Sim): boolean => {
     if (!sim.job || sim.job.id === 'unemployed') return false;
     const hour = GameStore.time.hour;
-    // 简单的周一到周五判断 (假设 totalDays % 7 < 5)
-    const isWeekend = (GameStore.time.totalDays % 7) >= 5; 
-    if (isWeekend) return false;
+    // 移除周末检查，只要在工作时间内就是上班时间
     return hour >= sim.job.startHour && hour < sim.job.endHour;
 };
 
@@ -22,8 +20,7 @@ const isWorkTime = (sim: Sim): boolean => {
 const isSchoolTime = (sim: Sim): boolean => {
     if (![AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) return false;
     const hour = GameStore.time.hour;
-    const isWeekend = (GameStore.time.totalDays % 7) >= 5;
-    if (isWeekend) return false;
+    // 移除周末检查，每天都要上学
     return hour >= 8 && hour < 16;
 };
 
@@ -1317,6 +1314,21 @@ export const DecisionLogic = {
                     const distSq = (f.x - sim.pos.x)**2 + (f.y - sim.pos.y)**2;
                     if (distSq > 250000) return false; 
                 }
+            }
+            // 🛑 [新增修复] 幼儿禁止使用成人危险设施
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                // 禁止健身
+                if (['gym', 'run', 'lift', 'treadmill'].some(k => f.utility.includes(k))) return false;
+                
+                // 禁止玩电脑 (除非将来有儿童平板)
+                if (f.label.includes('电脑') || f.utility.includes('computer') || f.utility === 'work') return false;
+                
+                // 禁止玩火/做饭
+                if (f.utility === 'cooking' || f.utility === 'stove') return false;
+            }
+            // 🛑 [新增修复] 成人/青少年禁止使用婴儿床
+            if (f.utility === 'nap_crib' && ![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                return false;
             }
             // A. 权限检查 (核心)
             if (this.isRestricted(sim, f)) return false;

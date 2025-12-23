@@ -370,10 +370,25 @@ export const CareerLogic = {
         sim.target = null;
         sim.interactionTarget = null;
         sim.path = [];
+        // 🟢 [修复] 正常下班也需要记录流水和日志
+        const earned = sim.job.salary;
+        sim.money += earned;
+        sim.dailyIncome += earned;
+        // 手动记录流水 (避免与 EconomyLogic 循环引用)
+        const timeStr = `${String(GameStore.time.hour).padStart(2, '0')}:${String(GameStore.time.minute).padStart(2, '0')}`;
+        if (!sim.dailyTransactions) sim.dailyTransactions = [];
+        sim.dailyTransactions.unshift({
+            time: timeStr,
+            amount: earned,
+            reason: '工资结算',
+            type: 'income'
+        });
+        // 限制长度
+        if (sim.dailyTransactions.length > 50) sim.dailyTransactions.pop();
         
-        sim.money += sim.job.salary;
-        sim.dailyIncome += sim.job.salary;
-        sim.say(`下班! +$${sim.job.salary}`, 'money');
+        GameStore.addLog(sim, `完成工作，收到工资 +$${earned}`, 'money');
+        sim.say(`下班! +$${earned}`, 'money');
+
         sim.addBuff(BUFFS.stressed);
 
         this.updatePerformance(sim);
@@ -447,7 +462,24 @@ export const CareerLogic = {
         const workRatio = Math.max(0, Math.min(1, workedDuration / totalDuration));
         const actualPay = Math.floor(sim.job.salary * workRatio);
         
-        sim.money += actualPay;
+        // 🟢 [修复] 早退工资逻辑：增加收入统计、流水记录和日志
+        if (actualPay > 0) {
+            sim.money += actualPay;
+            sim.dailyIncome += actualPay; // 更新今日收入统计
+
+            // 手动记录流水 (避免直接调用 EconomyLogic 导致循环依赖)
+            const timeStr = `${String(GameStore.time.hour).padStart(2, '0')}:${String(GameStore.time.minute).padStart(2, '0')}`;
+            if (!sim.dailyTransactions) sim.dailyTransactions = [];
+            sim.dailyTransactions.unshift({
+                time: timeStr,
+                amount: actualPay,
+                reason: '早退结算',
+                type: 'income'
+            });
+            if (sim.dailyTransactions.length > 50) sim.dailyTransactions.pop();
+
+            GameStore.addLog(sim, `早退结算工资 +$${actualPay}`, 'money');
+        }
         sim.hasLeftWorkToday = true;
         
         sim.workPerformance -= 15;
@@ -455,6 +487,7 @@ export const CareerLogic = {
         sim.target = null;
         sim.interactionTarget = null;
         sim.say("早退... 😓", 'bad');
+        sim.say(`早退... (+$${actualPay})`, 'bad'); // 气泡也提示一下金额
         sim.changeState(new IdleState());
     },
 
