@@ -33,9 +33,14 @@ export const gameLoopStep = (dt: number = 1) => {
 
         // [修复] 如果更新后坐标变成了 NaN，回滚到更新前
         if (isNaN(s.pos.x) || isNaN(s.pos.y)) {
-            // console.warn(`[GameLoop] Recovered ${s.name} from NaN void.`);
-            s.pos.x = isNaN(backupX) ? 100 : backupX; // 如果连备份都是坏的，才重置到 100
+            console.warn(`[GameLoop] Recovered ${s.name} from NaN void.`);
+            s.pos.x = isNaN(backupX) ? 100 : backupX; 
             s.pos.y = isNaN(backupY) ? 100 : backupY;
+            
+            // [新增] 既然位置重置了，必须清除当前的路径和状态，防止逻辑错乱
+            s.path = [];
+            s.target = null;
+            s.action = 'idle';
         }
     });
     // ====== [新增代码 START] ======

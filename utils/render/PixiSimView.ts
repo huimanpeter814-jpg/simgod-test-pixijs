@@ -1,6 +1,8 @@
 import { Container, Graphics, Sprite, Assets, Text, Texture } from 'pixi.js';
 import { Sim } from '../Sim';
 
+const failedAssets = new Set<string>(); // [新增] 全局记录失效资源
+
 export class PixiSimView {
     container: Container;
     private characterContainer: Container; 
@@ -96,6 +98,12 @@ export class PixiSimView {
 
     private updateLayerTexture(sprite: Sprite, path: string, type: 'body' | 'outfit' | 'hair') {
         if (this.currentAssets[type] === path && sprite.texture !== Texture.EMPTY) return;
+
+        // [新增] 如果已知该资源损坏，直接跳过，防止死循环请求
+        if (failedAssets.has(path)) {
+            sprite.texture = Texture.EMPTY;
+            return;
+       }
         
         if (path && Assets.cache.has(path)) {
             sprite.texture = Assets.get(path);

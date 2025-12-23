@@ -68,6 +68,12 @@ export class GameStore {
 
     static removeSim(id: string) {
         this.sims = this.sims.filter(s => s.id !== id);
+        // [新增] 清理所有人的社交记忆，防止坏死引用
+        this.sims.forEach(s => {
+            if (s.relationships[id]) {
+                delete s.relationships[id];
+            }
+        });
         if (this.selectedSimId === id) this.selectedSimId = null;
         this.notify();
     }

@@ -333,7 +333,8 @@ const PixiGameCanvasComponent: React.FC = () => {
                     view.showSelectionRing(GameStore.selectedSimId === sim.id);
                 });
 
-                if (GameStore.sims.length > 0) {
+                // [修复后] 直接对 View 缓存进行检查，无论 Sim 数组是否为空
+                if (simViewsRef.current.size > 0) {
                     simViewsRef.current.forEach((v, id) => { 
                         if (!activeIds.has(id)) { 
                             currentSimLayer.removeChild(v.container as any); 
