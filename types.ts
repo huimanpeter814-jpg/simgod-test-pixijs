@@ -10,7 +10,9 @@ export enum SimIntent {
     WORK = 'work',               // 去工作
     SOCIALIZE = 'socialize',     // 去社交
     FUN = 'fun',                 // 找乐子
-    WANDER = 'wander'            // 瞎逛
+    WANDER = 'wander',            // 瞎逛
+    SURVIVE = 'survive',        // 生存优先（如快饿死、快困死）
+    FULFILL_NEED = 'fulfill_need' // 满足特定需求（如上厕所、洗澡）
 }
 // 队列中的单个动作单元
 export interface QueuedAction {
