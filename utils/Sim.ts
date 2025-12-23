@@ -95,10 +95,15 @@ export class Sim {
     consecutiveAbsences: number = 0; 
 
     job!: Job; 
-    dailyExpense!: number;
-    dailyIncome!: number; 
+    dailyIncome: number = 0; // 确保有默认值
+    dailyExpense: number = 0; // 确保有默认值
+    
+    // 🟢 [新增] 今日收支明细数组
+    dailyTransactions: { time: string, amount: number, reason: string, type: 'income' | 'expense' }[] = [];
     isSideHustle: boolean = false;
     currentShiftStart: number = 0;
+
+    
 
     // 🆕 自由职业/物品相关
     royalty: { amount: number, daysLeft: number } = { amount: 0, daysLeft: 0 };
@@ -168,7 +173,11 @@ export class Sim {
             // 零点检查 & 版税结算
             if (GameStore.time.hour === 0 && GameStore.time.minute === 0) { 
                 CareerLogic.checkFire(this); 
-                
+                // 重置每日数据
+                this.dailyIncome = 0;
+                this.dailyExpense = 0;
+                this.dailyTransactions = []; // 清空账单
+                this.calculateDailyBudget(); // 重新计算预算
                 // 🆕 结算版税
                 if (this.royalty && this.royalty.amount > 0) {
                     this.money += this.royalty.amount;

@@ -47,6 +47,11 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '咕嘟咕嘟', duration: 5,
         onStart: (sim, obj) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("够不着...", 'bad'); return false; }
+            // 🟢 [新增] 贫困保护：如果钱少于 100 块，且不是极度口渴/饥饿，就忍忍吧
+            if (sim.money < 100 && sim.needs[NeedType.Hunger] > 30) {
+                sim.say("省点钱喝凉水吧...", 'bad');
+                return false;
+            }
             if (sim.money >= 5) { 
                 sim.money -= 5; 
                 sim.needs[NeedType.Hunger] += 5; 
@@ -91,13 +96,8 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
                 }
             }
 
-            // 没有特定意图，按家具标价购买通用物品（旧逻辑）
-            const cost = obj.cost || 50; 
-            if (sim.money < cost) {
-                sim.say("太贵了...", 'bad');
-                return false;
-            }
-            return true;
+            sim.say("只是看看...", 'normal');
+            return false;
         },
         onFinish: (sim, obj) => {
             // 🆕 结算特定意图
@@ -105,16 +105,15 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
                 const item = ITEMS.find(i => i.id === sim.intendedShoppingItemId);
                 if (item) {
                     sim.buyItem(item); // 真正扣款并获得效果
+                    sim.say("买买买! ✨", 'act');
                 }
                 sim.intendedShoppingItemId = undefined; // 消费完成，清理
                 return;
             }
 
-            // 通用结算
-            const cost = obj.cost || 50;
-            sim.money -= cost;
-            sim.say("买买买! ✨", 'act');
-            sim.needs[NeedType.Fun] += 20;
+            // 🟢 [修改后] 如果真的允许无目的闲逛，这里不要扣钱，只加少量乐趣
+            sim.say("只是看看~", 'act');
+            sim.needs[NeedType.Fun] += 5;
         }
     },
     'run': {
@@ -194,7 +193,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
                 sim.say("还不会种菜...", 'bad');
                 return false;
             }
-            if (sim.money < 5) { sim.say("买不起种子...", 'bad'); return false; }
+            if (sim.money < 50) { sim.say("买不起种子...", 'bad'); return false; }
             sim.money -= 5; // 种子成本
             return true;
         },
@@ -331,7 +330,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
                 sim.say("够不着...", 'bad');
                 return false;
             }
-            if (sim.money < 20) { sim.say("买不起颜料...", 'bad'); return false; }
+            if (sim.money < 100) { sim.say("买不起颜料...", 'bad'); return false; }
             sim.money -= 20; 
             return true;
         },

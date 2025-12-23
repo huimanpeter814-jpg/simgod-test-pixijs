@@ -20,7 +20,7 @@ const createGrid = (baseId: string, startX: number, startY: number, cols: number
 
 const PLOT_APT_CHEAP_S: PlotTemplate = {
     id: 'apt_cheap_s', width: 170, height: 170, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '蜗居', capacity: 1, cost: 400, type: 'public_housing', area: { x: 5, y: 5, w: 160, h: 160 } }],
+    housingUnits: [{ id: 'unit', name: '蜗居', capacity: 1, cost: 15, type: 'public_housing', area: { x: 5, y: 5, w: 160, h: 160 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 160, h: 160, label: '房间', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed', x: 10, y: 10, w: 60, h: 80, color: '#74b9ff', label: '床', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'sleep'] },
@@ -32,7 +32,7 @@ const PLOT_APT_CHEAP_S: PlotTemplate = {
 
 const PLOT_APT_CHEAP_M: PlotTemplate = {
     id: 'apt_cheap_m', width: 155, height: 195, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '单间', capacity: 2, cost: 600, type: 'public_housing', area: { x: 5, y: 5, w: 145, h: 185 } }],
+    housingUnits: [{ id: 'unit', name: '单间', capacity: 2, cost: 20, type: 'public_housing', area: { x: 5, y: 5, w: 145, h: 185 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 145, h: 185, label: '房间', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed', x: 10, y: 10, w: 70, h: 90, color: '#74b9ff', label: '双人床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
@@ -44,7 +44,7 @@ const PLOT_APT_CHEAP_M: PlotTemplate = {
 
 const PLOT_APT_CHEAP_L: PlotTemplate = {
     id: 'apt_cheap_l', width: 195, height: 180, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '大单间', capacity: 2, cost: 800, type: 'public_housing', area: { x: 5, y: 5, w: 185, h: 170 } }],
+    housingUnits: [{ id: 'unit', name: '大单间', capacity: 2, cost: 30, type: 'public_housing', area: { x: 5, y: 5, w: 185, h: 170 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 185, h: 170, label: '房间', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed', x: 10, y: 10, w: 80, h: 90, color: '#74b9ff', label: '大床', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
@@ -57,7 +57,7 @@ const PLOT_APT_CHEAP_L: PlotTemplate = {
 
 const PLOT_APT_LUXURY_S: PlotTemplate = {
     id: 'apt_luxury_s', width: 215, height: 220, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '精致公寓', capacity: 3, cost: 2500, type: 'apartment', area: { x: 5, y: 5, w: 205, h: 210 } }],
+    housingUnits: [{ id: 'unit', name: '精致公寓', capacity: 3, cost: 50, type: 'apartment', area: { x: 5, y: 5, w: 205, h: 210 } }],
     rooms: [
         { id: 'living', x: 5, y: 5, w: 100, h: 210, label: '厅', color: '#fff', pixelPattern: 'wood', hasWall: true },
         { id: 'rooms', x: 110, y: 5, w: 100, h: 210, label: '卧', color: '#f1f2f6', pixelPattern: 'wood', hasWall: true }
@@ -74,7 +74,7 @@ const PLOT_APT_LUXURY_S: PlotTemplate = {
 
 const PLOT_APT_LUXURY_M: PlotTemplate = {
     id: 'apt_luxury_m', width: 260, height: 220, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '高级公寓', capacity: 4, cost: 3000, type: 'apartment', area: { x: 5, y: 5, w: 250, h: 210 } }],
+    housingUnits: [{ id: 'unit', name: '高级公寓', capacity: 4, cost: 65, type: 'apartment', area: { x: 5, y: 5, w: 250, h: 210 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 210, label: '全屋', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed1', x: 160, y: 10, w: 70, h: 90, color: '#ff7675', label: '主卧', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
@@ -88,7 +88,7 @@ const PLOT_APT_LUXURY_M: PlotTemplate = {
 
 const PLOT_APT_LUXURY_L: PlotTemplate = {
     id: 'apt_luxury_l', width: 260, height: 235, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '豪华大平层', capacity: 4, cost: 4000, type: 'apartment', area: { x: 5, y: 5, w: 250, h: 225 } }],
+    housingUnits: [{ id: 'unit', name: '豪华大平层', capacity: 4, cost: 80, type: 'apartment', area: { x: 5, y: 5, w: 250, h: 225 } }],
     rooms: [{ id: 'main', x: 5, y: 5, w: 250, h: 225, label: '大平层', color: '#f5f6fa', pixelPattern: 'wood', hasWall: true }],
     furniture: [
         { id: 'bed1', x: 160, y: 10, w: 80, h: 90, color: '#ff7675', label: '主卧', utility: 'energy', pixelPattern: 'bed_king', multiUser: true, tags: ['bed'] },
@@ -102,7 +102,7 @@ const PLOT_APT_LUXURY_L: PlotTemplate = {
 
 const PLOT_VILLA_S: PlotTemplate = {
     id: 'villa_s', width: 370, height: 290, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '花园洋房', capacity: 5, cost: 8000, type: 'villa', area: { x: 5, y: 5, w: 360, h: 280 } }],
+    housingUnits: [{ id: 'unit', name: '花园洋房', capacity: 5, cost: 150, type: 'villa', area: { x: 5, y: 5, w: 360, h: 280 } }],
     rooms: [
         { id: 'garden', x: 0, y: 0, w: 370, h: 290, label: '花园', color: '#55efc4', pixelPattern: 'grass' },
         { id: 'house', x: 20, y: 20, w: 250, h: 250, label: '主楼', color: '#fff', pixelPattern: 'wood', hasWall: true },
@@ -122,7 +122,7 @@ const PLOT_VILLA_S: PlotTemplate = {
 
 const PLOT_VILLA_M: PlotTemplate = {
     id: 'villa_m', width: 405, height: 285, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '湖景别墅', capacity: 6, cost: 10000, type: 'villa', area: { x: 5, y: 5, w: 395, h: 275 } }],
+    housingUnits: [{ id: 'unit', name: '湖景别墅', capacity: 6, cost: 200, type: 'villa', area: { x: 5, y: 5, w: 395, h: 275 } }],
     rooms: [
         { id: 'garden', x: 0, y: 0, w: 405, h: 285, label: '花园', color: '#55efc4', pixelPattern: 'grass' },
         { id: 'house', x: 20, y: 20, w: 280, h: 245, label: '主楼', color: '#fff', pixelPattern: 'wood', hasWall: true },
@@ -141,7 +141,7 @@ const PLOT_VILLA_M: PlotTemplate = {
 
 const PLOT_VILLA_L: PlotTemplate = {
     id: 'villa_l', width: 425, height: 305, type: 'residential',
-    housingUnits: [{ id: 'unit', name: '半山豪宅', capacity: 6, cost: 12000, type: 'villa', area: { x: 5, y: 5, w: 415, h: 295 } }],
+    housingUnits: [{ id: 'unit', name: '半山豪宅', capacity: 6, cost: 300, type: 'villa', area: { x: 5, y: 5, w: 415, h: 295 } }],
     rooms: [
         { id: 'garden', x: 0, y: 0, w: 425, h: 305, label: '花园', color: '#55efc4', pixelPattern: 'grass' },
         { id: 'main', x: 20, y: 20, w: 300, h: 265, label: '主楼', color: '#fff', pixelPattern: 'wood', hasWall: true },

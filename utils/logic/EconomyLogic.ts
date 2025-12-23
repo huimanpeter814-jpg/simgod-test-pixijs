@@ -28,6 +28,19 @@ const getItemUtility = (itemId: string): string => {
     }
 };
 
+// 🟢 [新增] 辅助函数：记录流水
+const recordTransaction = (sim: Sim, amount: number, reason: string, type: 'income' | 'expense') => {
+    const timeStr = `${String(GameStore.time.hour).padStart(2, '0')}:${String(GameStore.time.minute).padStart(2, '0')}`;
+    sim.dailyTransactions.unshift({ // 最新发生的排在前面
+        time: timeStr,
+        amount: amount,
+        reason: reason,
+        type: type
+    });
+    // 限制列表长度，防止数据过多（例如只保留最近50条）
+    if (sim.dailyTransactions.length > 50) sim.dailyTransactions.pop();
+};
+
 export const EconomyLogic = {
     calculateDailyBudget(sim: Sim) {
         if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
@@ -144,6 +157,8 @@ export const EconomyLogic = {
         sim.money -= item.cost;
         sim.dailyExpense += item.cost;
         sim.dailyBudget -= item.cost;
+        // 🟢 [新增] 记录消费
+        recordTransaction(sim, item.cost, item.label, 'expense');
 
         if (item.needs) {
             for (let k in item.needs) {
@@ -212,6 +227,8 @@ export const EconomyLogic = {
         if (sim.money >= share) {
             sim.money -= share;
             sim.dailyExpense += share;
+            // 🟢 [新增] 记录房租
+            recordTransaction(sim, share, '支付房租', 'expense');
         } else {
             sim.addBuff(BUFFS.broke);
             sim.say("房租要交不起了...", 'bad');
@@ -230,6 +247,8 @@ export const EconomyLogic = {
 
         sim.money += earned;
         sim.dailyIncome += earned; 
+        // 🟢 [新增] 记录收入
+        recordTransaction(sim, earned, source, 'income');
         GameStore.addLog(sim, `通过 ${source} 赚了 $${earned}`, 'money');
         sim.say(`赚到了! +$${earned}`, 'money');
         sim.addBuff(BUFFS.side_hustle_win);
