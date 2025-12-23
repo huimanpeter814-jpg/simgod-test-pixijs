@@ -391,8 +391,8 @@ export const DecisionLogic = {
     },
 
     /**
-     * 🗺️ [战术规划器] 将意图分解为行动队列 (Pro版)
-     * 根据意图的元数据 (Meta)，制定个性化的执行方案，并记录策略描述。
+     * 🗺️ [战术规划器] 将意图分解为行动队列 (Pro版 - 修复死循环)
+     * 修复：加入“饥不择食”兜底逻辑，防止因性格偏好导致找不到物品而卡死。
      */
     planForIntent(sim: Sim, intent: SimIntent): QueuedAction[] {
         const queue: QueuedAction[] = [];
@@ -436,37 +436,46 @@ export const DecisionLogic = {
                 let actionVerb = 'use';
 
                 // --- 🟢 [战术分支] 贫富与性格差异 ---
-                const isSnob = sim.traits.includes('势利眼');     // 只要贵的
-                const isFrugal = sim.traits.includes('吝啬鬼') || sim.money < 50; // 只要便宜的
+                const isSnob = sim.traits.includes('势利眼');     
+                const isFrugal = sim.traits.includes('吝啬鬼') || sim.money < 50; 
+                // ⚠️ 关键修正：如果是 SURVIVE 状态，意味着极度危险，此时忽略性格偏好
+                const isDesperate = intent === SimIntent.SURVIVE || sim.needs[needType] < 15;
 
                 if (needType === NeedType.Hunger) {
-                    // 1. 优先找剩饭 (TODO: 库存系统)
+                    // 1. 优先找剩饭 (暂略)
                     
-                    // 2. 根据性格决定去哪吃
-                    if (isSnob && sim.money > 200) {
-                        searchTags = ['eat_out', 'restaurant', 'bar']; // 势利眼下馆子
+                    // 2. 策略分级
+                    if (isDesperate) {
+                        // 🚑 救命模式：什么都吃
+                        searchTags = ['hunger', 'fridge', 'eat_out', 'buy_food', 'cooking', 'vending_machine']; 
+                        actionVerb = 'eat';
+                        sim.currentPlanDescription = "饿急了，饥不择食！🆘";
+                    } else if (isSnob && sim.money > 200) {
+                        searchTags = ['eat_out', 'restaurant', 'bar']; 
                         actionVerb = 'eat_out';
                         sim.currentPlanDescription = "势利眼：非高档餐厅不去 🍷";
                     } else if (sim.skills.cooking > 20 && sim.hasFreshIngredients) {
-                        searchTags = ['stove', 'cooking']; // 会做饭且有菜
+                        searchTags = ['stove', 'cooking']; 
                         actionVerb = 'cooking';
                         sim.currentPlanDescription = "大显身手：亲自下厨 🍳";
                     } else if (isFrugal) {
-                        searchTags = ['fridge', 'vending_machine', 'hunger']; // 吝啬鬼吃冰箱
+                        searchTags = ['fridge', 'vending_machine', 'hunger']; 
                         actionVerb = 'eat';
                         sim.currentPlanDescription = "省钱模式：吃点便宜的 🥡";
                     } else {
-                        // 普通人混着搜
                         searchTags = ['hunger', 'fridge', 'eat_out', 'buy_food'];
                         actionVerb = 'eat';
                         sim.currentPlanDescription = "寻找最近的食物来源";
                     }
                 } else if (needType === NeedType.Energy) {
-                    if (isSnob) {
+                    if (isDesperate) {
+                        searchTags = ['energy', 'bed', 'nap_crib', 'sofa', 'bench', 'chair'];
+                        sim.currentPlanDescription = "困得不行，随便找地方睡";
+                    } else if (isSnob) {
                         searchTags = ['bed', 'energy']; 
                         sim.currentPlanDescription = "回卧室休息 (只睡好床)";
                     } else {
-                        searchTags = ['energy', 'bed', 'nap_crib', 'sofa', 'bench']; // 累了长椅也能睡
+                        searchTags = ['energy', 'bed', 'nap_crib', 'sofa', 'bench'];
                         sim.currentPlanDescription = "找地方补觉";
                     }
                     actionVerb = 'sleep';
@@ -481,8 +490,15 @@ export const DecisionLogic = {
                 }
 
                 // 执行查找
-                const targetObj = this.findBestFurniture(sim, searchTags);
+                let targetObj = this.findBestFurniture(sim, searchTags);
                 
+                // 🟢 [兜底重试机制] 如果按偏好没找到，且不是救命模式，尝试全局搜索
+                if (!targetObj && !isDesperate && needType === NeedType.Hunger) {
+                     // 比如吝啬鬼没找到冰箱，那就只能去餐厅了，总比饿死强
+                     targetObj = this.findBestFurniture(sim, ['hunger', 'fridge', 'eat_out', 'buy_food', 'cooking']);
+                     if (targetObj) sim.currentPlanDescription = "没找到便宜的，只好破费了...";
+                }
+
                 if (targetObj) {
                     // 动态动词修正
                     if (needType === NeedType.Hunger && (targetObj.utility === 'cooking' || targetObj.label.includes('灶'))) actionVerb = 'cooking';
@@ -490,24 +506,27 @@ export const DecisionLogic = {
 
                     addInteractSequence(targetObj, actionVerb, `${needType} @ ${targetObj.label}`);
                 } else {
-                    // 兜底逻辑
+                    // 🔴 最终兜底：真的全图都找不到
                     if (needType === NeedType.Energy) {
-                         queue.push({ type: 'WAIT', duration: 5000, desc: '原地打盹' });
-                         sim.say("困死了...💤", 'bad');
-                         sim.currentPlanDescription = "无处可去，原地打盹";
+                         // 睡地板逻辑
+                         sim.currentPlanDescription = "无处可去，原地昏睡";
+                         queue.push({ type: 'WAIT', duration: 10000, desc: '原地打盹' });
+                         sim.say("太困了...直接睡地板吧 💤", 'bad');
+                         // 这里建议直接回复一点体力，防止死循环
+                         sim.needs[NeedType.Energy] += 10; 
                     } else {
-                        sim.say(`找不到东西解决 ${needType}`, 'bad');
+                        sim.say(`附近没有解决 ${needType} 的设施!`, 'bad');
+                        // 缩短等待时间，尽快重试或触发其他逻辑
                         queue.push({ type: 'WAIT', duration: 2000 });
-                        sim.currentPlanDescription = `找不到资源: ${needType}`;
+                        sim.currentPlanDescription = `资源枯竭: ${needType}`;
                     }
                 }
                 break;
 
-            // === 2. 工作与上学 (保持逻辑，略微增强寻路描述) ===
+            // === 2. 工作与上学 (保持不变) ===
             case SimIntent.WORK:
                 sim.currentPlanDescription = "履行社会责任";
                 if ([AgeStage.Child, AgeStage.Teen].includes(sim.ageStage)) {
-                    // 上学
                     const schoolPlot = GameStore.worldLayout.find(p => ['school', 'elementary_school', 'high_school'].some(t => (p.customType||'').includes(t)) || p.templateId.includes('school'));
                     if (schoolPlot) {
                          const enterX = schoolPlot.x + (schoolPlot.width||300)/2;
@@ -517,7 +536,6 @@ export const DecisionLogic = {
                          sim.currentPlanDescription = "去学校上课 🏫";
                     }
                 } else if (sim.workplaceId) {
-                    // 上班
                     const workPlot = GameStore.worldLayout.find(p => p.id === sim.workplaceId);
                     if (workPlot) {
                         queue.push({ type: 'WALK', targetPos: { x: workPlot.x + 100, y: workPlot.y + 100 }, desc: '去上班' });
@@ -527,78 +545,48 @@ export const DecisionLogic = {
                 }
                 break;
 
-            // === 3. 社交 (Social) - 🟢 核心修改 ===
+            // === 3. 社交 (Social) (保持不变) ===
             case SimIntent.SOCIALIZE:
-                // 读取社交意图元数据
-                const socialType = sim['socialIntentMeta'] || 'chat'; // 'seek_romance', 'party', 'chat'
+                // ... (复用之前的代码) ...
+                const socialType = sim['socialIntentMeta'] || 'chat';
+                let candidates = GameStore.sims.filter(s => s.id !== sim.id && !s.isTemporary && !['sleeping', 'working', 'schooling', 'commuting'].includes(s.action as string));
 
-                // 候选人全集
-                let candidates = GameStore.sims.filter(s => 
-                    s.id !== sim.id && 
-                    !s.isTemporary && 
-                    !['sleeping', 'working', 'schooling', 'commuting'].includes(s.action as string)
-                );
-
-                // --- 🟢 [战术分支] 寻找真爱 (Seek Romance) ---
                 if (socialType === 'seek_romance') {
                     sim.currentPlanDescription = "雷达扫描：寻找单身异性 💕";
                     candidates = candidates.filter(target => {
-                        // 1. 性别匹配
                         let match = true;
                         if (sim.orientation === 'Hetero') match = target.gender !== sim.gender;
                         else if (sim.orientation === 'Homo') match = target.gender === sim.gender;
-                        // 2. 年龄匹配 (差不过15岁，且成年)
                         const ageDiff = Math.abs(target.age - sim.age);
                         const isAdult = target.ageStage >= AgeStage.Teen;
-                        // 3. 非亲属
                         const notFamily = target.familyId !== sim.familyId;
-                        // 4. 单身
                         const isSingle = !target.partnerId;
-                        
                         return match && ageDiff < 15 && isAdult && notFamily && isSingle;
                     });
                     
                     if (candidates.length > 0) {
-                         // 优先找好看的
                          candidates.sort((a, b) => (b.appearanceScore || 50) - (a.appearanceScore || 50));
-                         
                          const target = candidates[0];
-                         // 使用 flirt 动作
                          queue.push({ type: 'WALK', targetId: target.id, targetPos: target.pos, desc: `被 ${target.name} 吸引` });
                          queue.push({ type: 'INTERACT', targetId: target.id, interactionKey: 'flirt', desc: '搭讪' }); 
                          return queue;
                     } else {
-                        // 找不到对象，只好普通社交
                         sim.say("周围没有心动的人...", 'sys');
                         sim.currentPlanDescription = "没找到真爱，随便聊聊";
                     }
                 }
 
-                // --- 🟢 [战术分支] 派对狂欢 (Party) ---
-                if (socialType === 'party') {
-                     sim.currentPlanDescription = "寻找热闹的人群 🎉";
-                    // 暂时简化为：找任何 E 人或者关系好的人
-                } else {
-                     sim.currentPlanDescription = "找个熟人聊聊";
-                }
-
-                // --- 通用社交逻辑 (Chat) ---
                 if (candidates.length > 0) {
                     candidates.sort((a, b) => {
                         const relA = sim.relationships[a.id]?.friendship || 0;
                         const relB = sim.relationships[b.id]?.friendship || 0;
-                        
-                        // 内向者只找熟人，外向者找新人
-                        let scoreA = relA;
-                        let scoreB = relB;
+                        let scoreA = relA, scoreB = relB;
                         if (sim.mbti.startsWith('I')) { scoreA += (relA > 20 ? 50 : 0); }
-                        else { scoreA += (relA < 10 ? 20 : 0); } // E人喜欢认识新朋友
-
+                        else { scoreA += (relA < 10 ? 20 : 0); }
                         const distA = Math.hypot(a.pos.x - sim.pos.x, a.pos.y - sim.pos.y);
                         const distB = Math.hypot(b.pos.x - sim.pos.x, b.pos.y - sim.pos.y);
                         return (scoreB - distB*0.1) - (scoreA - distA*0.1);
                     });
-
                     const targetSim = candidates[0];
                     queue.push({ type: 'WALK', targetId: targetSim.id, targetPos: targetSim.pos, desc: `去找 ${targetSim.name}` });
                     queue.push({ type: 'INTERACT', targetId: targetSim.id, interactionKey: 'chat', desc: '聊天' });
@@ -609,49 +597,40 @@ export const DecisionLogic = {
                 }
                 break;
 
-            // === 4. 娱乐与自我实现 (Fun) - 🟢 核心修改 ===
+            // === 4. 娱乐与自我实现 (Fun) (保持不变) ===
             case SimIntent.FUN:
-                // 读取娱乐偏好
-                const funPref = sim['funPreference'] || 'any'; // 'passive_fun', 'skill_building', 'side_hustle', 'any'
-                
+                const funPref = sim['funPreference'] || 'any';
                 let funTypes: string[] = [];
                 let funVerb = 'play';
 
-                // --- 🟢 [战术分支] 偏好映射 ---
                 if (funPref === 'passive_fun') {
-                    // 抑郁/懒惰/累：只找被动娱乐
                     funTypes = ['tv', 'sofa', 'bed', 'bench', 'cinema_2d', 'bookshelf']; 
                     sim.currentPlanDescription = "只想躺平 (低能量模式) ☁️";
                 } else if (funPref === 'skill_building') {
-                    // 进取：找技能设施
                     funTypes = ['art', 'chess', 'piano', 'gym', 'computer', 'bookshelf'];
                     sim.currentPlanDescription = "自我提升：练点技能 📈";
                 } else if (funPref === 'side_hustle') {
-                    // 搞钱：找电脑/工作台
                     funTypes = ['computer', 'work_station', 'painting'];
                     sim.currentPlanDescription = "搞点副业赚外快 💰";
                 } else {
-                    // 通用：什么都玩
                     funTypes = ['fun', 'tv', 'computer', 'game', 'bookshelf', 'art', 'gym'];
                     if (sim.needs[NeedType.Energy] < 50) funTypes.push('comfort');
                     sim.currentPlanDescription = "寻找好玩的东西 🎮";
                 }
                 
-                // 执行查找
                 const funObj = this.findBestFurniture(sim, funTypes);
                 
                 if (funObj) {
-                    // 映射动作动词
                     if (funObj.utility === 'art' || funObj.label.includes('画')) funVerb = 'paint';
                     else if (funObj.utility === 'gym' || funObj.label.includes('跑')) funVerb = 'run';
                     else if (funObj.label.includes('琴')) funVerb = 'play_instrument';
                     else if (funObj.label.includes('棋')) funVerb = 'play_chess';
                     else if (funObj.label.includes('书')) funVerb = 'read_book';
-                    else if (funObj.label.includes('电脑')) funVerb = funPref === 'side_hustle' ? 'work_coding' : 'play_game'; // 电脑区别用途
+                    else if (funObj.label.includes('电脑')) funVerb = funPref === 'side_hustle' ? 'work_coding' : 'play_game'; 
 
                     addInteractSequence(funObj, funVerb, '娱乐');
                 } else {
-                    queue.push({ type: 'WALK', desc: '散步' }); // 没东西玩就散步
+                    queue.push({ type: 'WALK', desc: '散步' }); 
                     sim.currentPlanDescription = "没东西玩，散散步";
                 }
                 break;
