@@ -38,6 +38,14 @@ export const gameLoopStep = (dt: number = 1) => {
             s.pos.y = isNaN(backupY) ? 100 : backupY;
         }
     });
+    // ====== [新增代码 START] ======
+    // 修复：更新并清理粒子，防止无限增长
+    if (GameStore.particles.length > 0) {
+        // 减少生命值 (0.05 是衰减速度，你可以根据需要调整)
+        GameStore.particles.forEach(p => p.life -= safeDt * 0.05);
+        // 移除已经死亡的粒子
+        GameStore.particles = GameStore.particles.filter(p => p.life > 0);
+    }
 
     // B. 时间流速控制
     GameStore.timeAccumulator += dt * GameStore.time.speed;
@@ -54,6 +62,7 @@ export const gameLoopStep = (dt: number = 1) => {
 
         // 每分钟触发一次的逻辑 (Update with minuteChanged = true)
         GameStore.sims.forEach(s => s.update(0, true));
+        
 
         if (GameStore.time.minute >= 60) {
             GameStore.time.minute = 0;
@@ -80,9 +89,28 @@ export const gameLoopStep = (dt: number = 1) => {
                 GameStore.sims.forEach(s => {
                     s.dailyExpense = 0; 
                     s.dailyIncome = 0; 
+                    s.dailyTransactions = []; // <--- 强制清空今日账单，防止内存爆炸
                     s.payRent(); 
                     s.calculateDailyBudget(); 
                     s.applyMonthlyEffects(currentMonth, holiday);
+                    // ====== [新增：版税结算逻辑] ======
+                    // 将 Sim.ts 里的逻辑移到这里
+                    if (s.royalty && s.royalty.amount > 0) {
+                        // 发钱
+                        s.money += s.royalty.amount;
+                        s.dailyIncome += s.royalty.amount; // 计入今日收入
+                        
+                        // 记录日志和冒气泡
+                        GameStore.addLog(s, `收到作品版税 +$${s.royalty.amount}`, 'money');
+                        s.say("版税到账 💰", 'money');
+                        
+                        // 扣除剩余天数
+                        s.royalty.daysLeft--;
+                        if (s.royalty.daysLeft <= 0) {
+                            s.royalty.amount = 0;
+                            s.say("版税停了，该写新书了...", 'sys');
+                        }
+                    }
                 });
                 
                 NarrativeSystem.handleDailyDiaries(GameStore.sims, GameStore.time, (msg: string) => GameStore.addLog(null, msg, 'sys', true));
