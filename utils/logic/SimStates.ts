@@ -7,7 +7,7 @@ import { SocialLogic } from './social';
 import { SchoolLogic } from './school';
 import { INTERACTIONS, RESTORE_TIMES } from './interactionRegistry';
 import { hasRequiredTags, getInteractionPos } from '../simulationHelpers';
-import { PLOTS } from '../../data/plots'; // [新增] 引入 PLOTS 用于查表
+import { PLOTS } from '../../data/plots'; 
 
 // === 1. 状态接口定义 ===
 export interface SimState {
@@ -69,7 +69,7 @@ export class TransitionState extends BaseState {
     }
 }
 
-// --- 空闲状态 ---
+// --- 🟢 [核心修改] 空闲状态 ---
 export class IdleState extends BaseState {
     actionName = SimAction.Idle;
 
@@ -82,56 +82,68 @@ export class IdleState extends BaseState {
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
 
+        // 1. 优先检查行为队列 (Action Queue)
+        // 如果有未完成的计划，立即执行下一步，不等待思考冷却
+        if (sim.hasPlan()) {
+            DecisionLogic.decideAction(sim);
+            return;
+        }
+
+        // 2. 思考计时器 (模拟发呆/反应时间)
         if (sim.decisionTimer > 0) {
             sim.decisionTimer -= dt;
         } else {
-            // 婴幼儿逻辑
+            // 3. 婴幼儿特殊保护逻辑
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                // 🚨 [修复] 增加 !sim.getHomeLocation() 判断
-                // 如果已经在家里，或者根本没有家(流浪/家被拆了)，则不要呼叫接送，直接在当前位置活动
                 if (sim.isAtHome() || !sim.getHomeLocation()) {
-                    // 在家或流浪：就地玩耍/睡觉
                     DecisionLogic.decideAction(sim); 
                 } else {
-                    // 在外面 (且确实有家可回)：主动呼叫接送
-                    sim.say("我要回家...", 'bad');
-                    SchoolLogic.arrangePickup(sim);
-                    
+                    // 迷路/在校等待接送
                     if (sim.action !== SimAction.Waiting) {
+                        sim.say("我要回家...", 'bad');
+                        SchoolLogic.arrangePickup(sim);
                         sim.changeState(new WaitingState());
                     }
                 }
             } else {
+                // 4. 成年人/儿童：触发AI决策生成新意图
                 DecisionLogic.decideAction(sim);
             }
+            
+            // 重置思考冷却 (1~2秒)
             sim.decisionTimer = 60 + Math.random() * 60;
         }
     }
 }
 
 
-// --- 等待状态 (重要：用于婴儿等待接送) ---
+// --- 🟢 [核心修改] 等待状态 ---
 export class WaitingState extends BaseState {
     actionName = SimAction.Waiting;
-    timeoutTimer = 0; // [新增] 超时计时器
-
+    
     enter(sim: Sim) {
         sim.target = null;
         sim.path = [];
-        sim.say("...", 'sys');
-        this.timeoutTimer = 350; 
+        // 如果队列没有指定时间，默认给个短时间，防止无限等待
+        if (!sim.actionTimer || sim.actionTimer <= 0) {
+            sim.actionTimer = 200; 
+        }
+        if (!sim.bubble.text) sim.say("...", 'sys');
     }
 
     update(sim: Sim, dt: number) {
-        // [新增] 超时检查
-        this.timeoutTimer -= dt;
-        if (this.timeoutTimer <= 0) {
-            sim.say("没人理我...", 'bad');
-            sim.changeState(new IdleState()); // 回到 Idle，这样下一次 update 就会重新触发 decideAction -> 重新呼叫父母
+        super.update(sim, dt);
+        
+        sim.actionTimer -= dt;
+        
+        // 倒计时结束，返回 Idle，这样队列的下一步动作(如果有)就会被 IdleState 执行
+        if (sim.actionTimer <= 0) {
+            sim.changeState(new IdleState());
         }
     }
 }
-// --- 移动状态 ---
+
+// --- 🟢 [核心修改] 移动状态 ---
 export class MovingState extends BaseState {
     actionName: string;
     stuckTimer: number = 0;
@@ -160,16 +172,16 @@ export class MovingState extends BaseState {
             this.lastPos = { x: sim.pos.x, y: sim.pos.y };
         }
 
-        if (this.stuckTimer > 300) { // 约5秒不动
+        if (this.stuckTimer > 300) { 
+            // 卡死处理：瞬移或放弃
             if (sim.target) {
-                // 如果离目标很近 (50px)，瞬移
                 const distToTarget = (sim.target.x - sim.pos.x)**2 + (sim.target.y - sim.pos.y)**2;
                 if (distToTarget < 2500) {
                     sim.pos = { ...sim.target };
                     this.handleArrival(sim);
                 } else {
-                    // 离得远还卡住，说明寻路失败
                     sim.say("过不去...", 'sys');
+                    // 卡死也视为当前动作结束，返回 Idle 让队列决定是重试还是放弃
                     sim.changeState(new IdleState());
                 }
             } else {
@@ -186,6 +198,14 @@ export class MovingState extends BaseState {
     }
 
     private handleArrival(sim: Sim) {
+        // [关键逻辑] 如果 Sim 正在执行一个计划队列
+        // 移动结束不代表交互开始，应该返回 Idle，由 IdleState 触发队列的下一项 (INTERACT)
+        if (sim.hasPlan()) {
+            sim.changeState(new IdleState());
+            return;
+        }
+
+        // [兼容旧逻辑] 如果没有队列，尝试自动交互
         if (sim.interactionTarget) { 
             sim.startInteraction(); 
         } else {

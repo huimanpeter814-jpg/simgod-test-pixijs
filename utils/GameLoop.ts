@@ -28,6 +28,7 @@ export const gameLoopStep = (dt: number = 1) => {
         const backupX = s.pos.x;
         const backupY = s.pos.y;
 
+        // 这里调用 Sim.update -> State.update -> IdleState -> DecisionLogic
         s.update(safeDt * GameStore.time.speed, false);
 
         // [修复] 如果更新后坐标变成了 NaN，回滚到更新前
@@ -45,13 +46,13 @@ export const gameLoopStep = (dt: number = 1) => {
     // 60 = 1秒1分钟 (太快)
     // 120 = 2秒1分钟 (标准)
     // 180 = 3秒1分钟 (悠闲) <-- 我们用这个
-    const ticksPerMin = 180; 
+    const ticksPerMin = 120; 
 
     while (GameStore.timeAccumulator >= ticksPerMin) {
         GameStore.timeAccumulator -= ticksPerMin;
         GameStore.time.minute++;
 
-        // 低频逻辑
+        // 每分钟触发一次的逻辑 (Update with minuteChanged = true)
         GameStore.sims.forEach(s => s.update(0, true));
 
         if (GameStore.time.minute >= 60) {
