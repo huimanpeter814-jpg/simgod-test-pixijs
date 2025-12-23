@@ -87,19 +87,16 @@ export class IdleState extends BaseState {
         } else {
             // 婴幼儿逻辑
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                if (sim.isAtHome()) {
-                    // 在家：正常玩耍/睡觉
+                // 🚨 [修复] 增加 !sim.getHomeLocation() 判断
+                // 如果已经在家里，或者根本没有家(流浪/家被拆了)，则不要呼叫接送，直接在当前位置活动
+                if (sim.isAtHome() || !sim.getHomeLocation()) {
+                    // 在家或流浪：就地玩耍/睡觉
                     DecisionLogic.decideAction(sim); 
                 } else {
-                    // [核心修复] 在外面 (包括走出了幼儿园范围)：主动呼叫接送
+                    // 在外面 (且确实有家可回)：主动呼叫接送
                     sim.say("我要回家...", 'bad');
-                    
-                    // 尝试呼叫家长/保姆
-                    // arrangePickup 会调用 requestEscort -> 找到人后切换自己为 WaitingState
                     SchoolLogic.arrangePickup(sim);
                     
-                    // 如果呼叫失败（例如没找到人），为了防止鬼畜，暂时进入 Waiting
-                    // 但下一轮 checkKindergarten 或 Idle 循环会再次尝试
                     if (sim.action !== SimAction.Waiting) {
                         sim.changeState(new WaitingState());
                     }
@@ -877,14 +874,45 @@ export class PickingUpState extends BaseState {
             const isSchoolTime = currentHour >= 8 && currentHour < 17;
             
             if (inSchool || !isSchoolTime) {
-                // -> 回家
-                const home = sim.getHomeLocation();
-                if (home) {
-                    targetPos = home;
+                // -> 目标：回家 (接放学)
+                
+                // 🚨 [核心修复] 无家可归处理逻辑
+                // sim 是家长(或保姆)，优先取 sim 的家
+                let homeLoc = sim.getHomeLocation();
+                
+                if (!homeLoc) {
+                    // 如果是流浪汉家庭，"回家"意味着去非学校的公共场所
+                    // 寻找一个 type 为 park 或 public 的地块，且不是当前的学校地块
+                    const safePlot = GameStore.worldLayout.find(p => {
+                        const tpl = PLOTS[p.templateId];
+                        const type = p.customType || (tpl ? tpl.type : 'public');
+                        const isSchoolPlot = ['kindergarten', 'elementary_school', 'high_school'].includes(type);
+                        const isCurrentPlot = kindergarten && p.id === kindergarten.id;
+                        
+                        return !isSchoolPlot && !isCurrentPlot; 
+                    });
+
+                    if (safePlot) {
+                        homeLoc = { 
+                            x: safePlot.x + (safePlot.width || 300) / 2, 
+                            y: safePlot.y + (safePlot.height || 300) / 2 
+                        };
+                        sim.say("去公园...", "family");
+                    } else {
+                        // 实在找不到（比如全是学校），找个地图中间空地
+                        homeLoc = { x: 1500, y: 1000 };
+                        sim.say("四海为家...", "bad");
+                    }
+                }
+
+                if (homeLoc) {
+                    targetPos = homeLoc;
                     sim.say("回家咯~", "family");
                 } else {
-                    targetPos = { x: sim.pos.x + 50, y: sim.pos.y + 50 }; 
+                    // 理论上不会到这里，除非地图是空的
+                    targetPos = { x: sim.pos.x + 50, y: sim.pos.y + 50 };
                 }
+
             } else if (kindergarten) {
                 // -> 去幼儿园
                 targetPos = { 

@@ -237,7 +237,9 @@ export const FamilyGenerator = {
         
         // 🆕 处理单身家庭 (Solo household)
         if (count === 1) {
-            const stages = [AgeStage.Adult, AgeStage.MiddleAged, AgeStage.Teen];
+            // [核心修复] 禁止单身家庭生成 Teen (未成年)，只能是 Adult 或 MiddleAged
+            // 防止生成无监护人的“流浪未成年”
+            const stages = [AgeStage.Adult, AgeStage.MiddleAged]; 
             const stage = stages[Math.floor(Math.random() * stages.length)];
             const singleMoney = Math.floor(baseMoney / 2);
             
@@ -254,7 +256,25 @@ export const FamilyGenerator = {
             console.log(`[Genetics] Generated Solo Sim: ${sim.name}`);
             return [sim];
         }
-
+        // [核心修复] 如果因为没有房子导致家庭无家可归 (homeId === null)
+        // 强制所有成员生成为成年人，防止出现“流浪的未成年人家庭”
+        if (!homeId) {
+            console.log("[Genetics] No home found, forcing all members to be adults to avoid homeless minors.");
+            const moneyPerAdult = Math.floor(baseMoney / count);
+            for (let i = 0; i < count; i++) {
+                let config = FamilyGenerator.generateSimConfig(
+                    homeX + i * 20, homeY, familySurname, familyId, AgeStage.Adult, null, moneyPerAdult
+                );
+                config.familyLore = FamilyGenerator.generateFamilyLore(familySurname, wealthClass, 'Standard') + " 暂时无家可归，相依为命。";
+                members.push(new Sim(config));
+            }
+            // 简单绑定关系
+            if (count >= 2) SocialLogic.marry(members[0], members[1], true);
+            
+            // 直接返回，跳过后续的家庭类型生成
+            return members;
+        }
+        
         // 🆕 生成家庭背景故事
         // 3. 决定家庭类型 (FamilyType)
         let familyType: FamilyType = 'Standard';
