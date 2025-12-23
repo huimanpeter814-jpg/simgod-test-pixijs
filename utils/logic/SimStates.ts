@@ -6,7 +6,7 @@ import { DecisionLogic } from './decision';
 import { SocialLogic } from './social';
 import { SchoolLogic } from './school';
 import { INTERACTIONS, RESTORE_TIMES } from './interactionRegistry';
-import { hasRequiredTags } from '../simulationHelpers';
+import { hasRequiredTags, getInteractionPos } from '../simulationHelpers';
 import { PLOTS } from '../../data/plots'; // [新增] 引入 PLOTS 用于查表
 
 // === 1. 状态接口定义 ===
@@ -1077,6 +1077,137 @@ export class FeedBabyState extends BaseState {
                 if (sim.job.id === 'nanny') sim.changeState(new NannyState());
                 else sim.changeState(new IdleState());
             }
+        }
+    }
+}
+
+// === [新增] 大人给宝宝洗澡状态 ===
+export class BatheBabyState extends BaseState {
+    actionName = SimAction.BatheBaby;
+    phase: 'go_to_baby' | 'go_to_shower' | 'bathing' = 'go_to_baby'; // 状态机阶段
+    targetBabyId: string;
+    targetShower: Furniture | null = null;
+    timer: number = 0;
+
+    constructor(babyId: string) {
+        super();
+        this.targetBabyId = babyId;
+    }
+
+    enter(sim: Sim) {
+        // 1. 寻找最近的淋浴间/浴缸
+        const showers = GameStore.furniture.filter(f => f.homeId === sim.homeId && (f.utility === 'shower' || f.utility === 'hygiene'));
+        if (showers.length === 0) {
+            sim.say("找不到浴室...", 'bad');
+            sim.changeState(new IdleState());
+            return;
+        }
+        // 找最近的一个
+        this.targetShower = showers.sort((a, b) => {
+            const distA = (a.x - sim.pos.x)**2 + (a.y - sim.pos.y)**2;
+            const distB = (b.x - sim.pos.x)**2 + (b.y - sim.pos.y)**2;
+            return distA - distB;
+        })[0];
+
+        // 2. 第一步：先走向宝宝
+        const baby = GameStore.sims.find(s => s.id === this.targetBabyId);
+        if (baby) {
+            sim.target = { x: baby.pos.x, y: baby.pos.y }; // 走到宝宝身边
+            sim.path = []; // 重置路径
+            sim.say("来洗澡咯 🛁", 'family');
+        } else {
+            sim.changeState(new IdleState());
+        }
+    }
+
+    update(sim: Sim, dt: number) {
+        const baby = GameStore.sims.find(s => s.id === this.targetBabyId);
+        if (!baby) { sim.changeState(new IdleState()); return; }
+
+        // --- 阶段 1: 走向宝宝 ---
+        if (this.phase === 'go_to_baby') {
+            const arrived = sim.moveTowardsTarget(dt);
+            const distSq = (sim.pos.x - baby.pos.x)**2 + (sim.pos.y - baby.pos.y)**2;
+            
+            // 到达或者距离很近 (<40px)
+            if (arrived || distSq < 1600) {
+                // 抱起宝宝
+                baby.carriedBySimId = sim.id;
+                sim.carryingSimId = baby.id;
+                baby.changeState(new BeingBathedState()); // 宝宝进入被动状态
+                
+                // 切换目标：去浴室
+                this.phase = 'go_to_shower';
+                if (this.targetShower) {
+                    const { anchor } = getInteractionPos(this.targetShower);
+                    sim.target = anchor;
+                    sim.path = [];
+                    sim.say("去浴室...", 'act');
+                }
+            }
+        } 
+        // --- 阶段 2: 抱着宝宝去浴室 ---
+        else if (this.phase === 'go_to_shower') {
+            const arrived = sim.moveTowardsTarget(dt);
+            
+            // 手动同步宝宝位置 (模拟抱着)
+            baby.pos = { x: sim.pos.x + 5, y: sim.pos.y + 5 };
+            
+            if (arrived) {
+                // 到达浴室，放下宝宝，开始洗澡
+                this.phase = 'bathing';
+                this.timer = 60; // 洗澡时长 (秒)
+                sim.say("洗刷刷 🚿", 'act');
+                
+                // 视觉上把宝宝放在淋浴位置
+                baby.carriedBySimId = null;
+                sim.carryingSimId = null;
+                if (this.targetShower) {
+                    baby.pos = { x: this.targetShower.x + 10, y: this.targetShower.y + 10 };
+                }
+            }
+        } 
+        // --- 阶段 3: 洗澡中 ---
+        else if (this.phase === 'bathing') {
+            // 1. 计时
+            this.timer -= (dt / 60); 
+            
+            // 2. 恢复数值
+            baby.needs[NeedType.Hygiene] = Math.min(100, baby.needs[NeedType.Hygiene] + 0.5); // 宝宝变干净
+            sim.needs[NeedType.Hygiene] = Math.min(100, sim.needs[NeedType.Hygiene] + 0.1);  // 大人顺便洗洗手
+            
+            // 3. 结束判断
+            if (this.timer <= 0 || baby.needs[NeedType.Hygiene] >= 100) {
+                baby.needs[NeedType.Hygiene] = 100;
+                
+                // 结束
+                baby.changeState(new IdleState());
+                baby.say("香喷喷！✨", 'happy');
+                sim.say("洗干净啦", 'family');
+                
+                // 大人回归原职
+                if (sim.job.id === 'nanny') sim.changeState(new NannyState());
+                else sim.changeState(new IdleState());
+            }
+        }
+    }
+}
+
+// === [新增] 宝宝被洗澡状态 (被动) ===
+export class BeingBathedState extends BaseState {
+    actionName = SimAction.BeingBathed;
+    
+    enter(sim: Sim) {
+        sim.target = null;
+        sim.path = [];
+        sim.say("...", 'sys');
+    }
+
+    update(sim: Sim, dt: number) {
+        // 全程被动，无需逻辑
+        // 安全检查：如果长时间没大人管 (比如大人突然消失了)，自动恢复
+        if (!sim.carriedBySimId && sim.needs[NeedType.Hygiene] < 100) {
+            // 这里可以加一个简单的超时判断，防止卡死
         }
     }
 }

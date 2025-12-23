@@ -97,9 +97,29 @@ export const NeedsLogic = {
         if (sim.isNPC) return;
 
         const f = 0.0008 * dt;
+        
+        // 1. 扣血逻辑
         if (sim.needs[NeedType.Energy] <= 0 || sim.needs[NeedType.Hunger] <= 0) {
             sim.health -= 0.05 * f * 10;
-            if (Math.random() > 0.95) sim.say("感觉快不行了...", 'bad');
+            
+            // [修复] 增加濒死打断逻辑：如果正在扣血，且还在工作/上学/睡觉，强制停止！
+            if (sim.health < 90) { // 健康开始受损时
+                // 定义需要被打断的长时状态
+                const longActions = ['working', 'sleeping', 'studying', 'school'];
+                // 简单的状态判断（你需要根据你的 SimAction 枚举调整）
+                const isBusy = sim.actionTimer > 0; 
+                
+                if (isBusy) {
+                    if (Math.random() < 0.1) { // 避免每一帧都触发说话
+                        sim.say("不行了...撑不住了...", 'bad');
+                    }
+                    
+                    // 强制结束当前行为，进入空闲状态，以便 decideAction 能接管并寻找食物/床
+                    sim.finishAction(); 
+                }
+            }
+
+            if (Math.random() > 0.99) sim.say("感觉快不行了...", 'bad'); // 降低说话频率
         } else if (sim.health < 100 && sim.needs[NeedType.Energy] > 80 && sim.needs[NeedType.Hunger] > 80) {
             sim.health += 0.01 * f;
         }

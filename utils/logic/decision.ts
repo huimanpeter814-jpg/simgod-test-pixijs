@@ -4,7 +4,7 @@ import { GameStore } from '../simulation';
 import { CONFIG } from '../../constants'; 
 import { Furniture, SimAction, NeedType, AgeStage, JobType } from '../../types';
 import { getInteractionPos } from '../simulationHelpers';
-import { FeedBabyState, WaitingState, IdleState } from './SimStates';
+import { FeedBabyState, WaitingState, IdleState, BatheBabyState } from './SimStates';
 import { PLOTS } from '../../data/plots'; 
 
 export const DecisionLogic = {
@@ -188,12 +188,61 @@ export const DecisionLogic = {
         return false;
     },
 
+    // [新增] 呼叫洗澡逻辑
+    triggerHygieneBroadcast(sim: Sim) {
+        // 1. 检查家里有没有洗澡设施 (淋浴或浴缸)
+        const hasShower = GameStore.furniture.some(f => f.homeId === sim.homeId && (f.utility === 'shower' || f.utility === 'hygiene'));
+        if (!hasShower) {
+            sim.say("家里没澡盆...", 'bad');
+            return false;
+        }
+
+        // 2. 寻找合适的照顾者（优先保姆，其次父母，最后亲戚）
+        const potentialCaregivers = GameStore.sims.filter(s => 
+            s.id !== sim.id && 
+            s.ageStage >= AgeStage.Adult && // 必须是成年人
+            s.homeId === sim.homeId && 
+            s.isAtHome() &&
+            (s.job.id === 'nanny' || s.familyId === sim.familyId) &&
+            // 只能打断空闲、闲逛或保姆工作状态
+            (s.action === SimAction.Idle || s.action === SimAction.Wandering || s.action === SimAction.NannyWork)
+        );
+
+        if (potentialCaregivers.length > 0) {
+            // 排序：保姆 > 父母 > 其他
+            potentialCaregivers.sort((a, b) => {
+                let scoreA = a.job.id === 'nanny' ? 100 : 0;
+                let scoreB = b.job.id === 'nanny' ? 100 : 0;
+                if (a.id === sim.motherId || a.id === sim.fatherId) scoreA += 50;
+                if (b.id === sim.motherId || b.id === sim.fatherId) scoreB += 50;
+                return scoreB - scoreA;
+            });
+
+            const caregiver = potentialCaregivers[0];
+            
+            // 3. 触发行为
+            caregiver.finishAction(); // 打断大人当前行为
+            caregiver.changeState(new BatheBabyState(sim.id)); // 对应下一步在 SimStates 里新建的类
+            
+            sim.say("洗澡澡! 🛁", 'sys');
+            sim.changeState(new WaitingState()); // 宝宝原地等待
+            return true;
+        }
+        return false;
+    },    
+
     // === 🧠 核心决策函数 ===
     decideAction(sim: Sim) {
         // 1. 婴幼儿特殊逻辑
         if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-            // [原有逻辑] 检查是否离家出走... (保持不变)
-            if (!sim.isAtHome() && sim.homeId) { /*...*/ return; }
+           // [原有逻辑] 检查是否离家出走
+            if (!sim.isAtHome() && sim.homeId) {
+                if (sim.action !== SimAction.Waiting && sim.action !== SimAction.BeingEscorted) {
+                    sim.say("我要回家...", 'bad');
+                    sim.changeState(new WaitingState());
+                }
+                return; 
+            }
 
             // === [修复 1] 拆解优先级链，防止一个需求卡死其他紧急需求 ===
             
@@ -205,7 +254,11 @@ export const DecisionLogic = {
 
             // B. 卫生 (Hygiene) - 独立检查
             if (sim.needs[NeedType.Hygiene] < 40) {
-                 if (this.findObject(sim, NeedType.Hygiene)) return;
+                 // [修改] 改为呼叫大人帮忙，而不是自己去找
+                 if (this.triggerHygieneBroadcast(sim)) return; 
+                 
+                 // 如果没人帮，只能发牢骚
+                 sim.say("臭臭...", 'bad');
             }
 
             // C. 饥饿 (Hunger) - 独立检查

@@ -529,10 +529,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         verb: '睡觉 💤', duration: 420,
         getVerb: (sim, obj) => (obj.label.includes('沙发') || obj.label.includes('长椅')) ? '小憩' : '睡觉 💤',
         getDuration: (sim, obj) => {
-             if (obj.label.includes('沙发') || obj.label.includes('长椅')) {
-                 const missing = 100 - sim.needs[NeedType.Energy];
-                 return (missing / 100) * RESTORE_TIMES.energy_nap * 1.1; 
-             }
+             // ... (保持原样)
              const missing = 100 - sim.needs[NeedType.Energy];
              return (missing / 100) * RESTORE_TIMES.energy_sleep * 1.1; 
         },
@@ -546,11 +543,32 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             let t = RESTORE_TIMES[timeKey];
             if (sim.needs[NeedType.Energy] !== undefined) sim.needs[NeedType.Energy] += getRate(t);
             if (timeKey === 'energy_nap') sim.needs[NeedType.Comfort] = 100;
+
+            // [修复 A] 智能唤醒：如果精力已满，或者肚子饿扁了，提前醒来
+            if (sim.needs[NeedType.Energy] >= 100) {
+                sim.finishAction(); // 精力满了，起床
+                sim.say("睡饱了！☀️", 'act');
+            }
+            if (sim.needs[NeedType.Hunger] < 20) {
+                sim.finishAction(); // 饿醒了
+                sim.say("饿醒了...", 'bad');
+            }
         }
     },
     'shower': {
         verb: '洗澡 🚿', duration: 20,
-        onStart: (sim) => { sim.enterInteractionState(SimAction.Using); return true; }, 
+        onStart: (sim) => { 
+            // [修复 B] 禁止婴幼儿独自使用淋浴
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("我需要大人帮忙洗...", 'bad');
+                // 暂时没有“给宝宝洗澡”的交互，所以只能先失败，避免穿模
+                // 建议：如果没有大人帮忙，可以让他们通过 "Waiting" 状态缓慢恢复一点卫生（模拟擦洗）
+                return false; 
+            }
+
+            sim.enterInteractionState(SimAction.Using); 
+            return true; 
+        }, 
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs[NeedType.Hygiene] += getRate(20); 
             sim.needs[NeedType.Energy] += getRate(400); 

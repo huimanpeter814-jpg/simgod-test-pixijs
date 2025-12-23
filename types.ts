@@ -27,7 +27,9 @@ export enum SimAction {
     BeingEscorted = 'being_escorted', // 孩子被护送/抱着
     Waiting = 'waiting', // 原地等待状态
     NannyWork = 'nanny_work', // 🆕 保姆工作状态
-    FeedBaby = 'feed_baby' // 🆕 喂食婴儿状态
+    FeedBaby = 'feed_baby', // 🆕 喂食婴儿状态
+    BatheBaby = 'bathe_baby',   // 大人给宝宝洗澡
+    BeingBathed = 'being_bathed' // 宝宝被洗澡
 }
 
 export enum JobType {
