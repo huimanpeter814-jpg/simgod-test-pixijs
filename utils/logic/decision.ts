@@ -695,9 +695,26 @@ export const DecisionLogic = {
                     // 对于人：
                     const targetSim = GameStore.sims.find(s => s.id === action.targetId);
                     if (targetSim) {
+                        // 🛑 [修复] 婴幼儿追人防暴走检查
+                        if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                            // 1. 如果目标跑太远了 (>500px)，放弃追逐
+                            const dist = Math.hypot(targetSim.pos.x - sim.pos.x, targetSim.pos.y - sim.pos.y);
+                            if (dist > 500) {
+                                sim.say("追不上...", 'sys');
+                                sim.currentIntent = SimIntent.IDLE;
+                                return;
+                            }
+                            // 2. 如果目标已经不在家了（且宝宝本来是在家的），放弃追逐
+                            if (sim.isAtHome() && !targetSim.isAtHome()) {
+                                sim.say("别跑呀...", 'sys');
+                                sim.currentIntent = SimIntent.IDLE;
+                                return;
+                            }
+                        }
+
                         sim.target = { ...targetSim.pos }; // 更新为最新位置
-                        sim.interactionTarget = { type: 'human', ref: targetSim }; // 预设交互目标
-                    } 
+                        sim.interactionTarget = { type: 'human', ref: targetSim }; 
+                    }
                     // 对于物体：
                     else {
                         const targetObj = GameStore.furniture.find(f => f.id === action.targetId);
@@ -1290,6 +1307,17 @@ export const DecisionLogic = {
         
         // 2. 筛选逻辑 (硬性过滤)
         const validCandidates = candidates.filter(f => {
+            // 🛑 [核心修复] 婴幼儿严禁独自出门：只能使用家里的东西
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                if (sim.homeId) {
+                    // 如果有家，必须是家里的物品 (严禁跑去邻居家或公园)
+                    if (f.homeId !== sim.homeId) return false;
+                } else {
+                    // 如果无家可归(极少见)，只准选身边的物品 (500px范围)，防止横穿地图
+                    const distSq = (f.x - sim.pos.x)**2 + (f.y - sim.pos.y)**2;
+                    if (distSq > 250000) return false; 
+                }
+            }
             // A. 权限检查 (核心)
             if (this.isRestricted(sim, f)) return false;
             
