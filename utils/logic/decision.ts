@@ -556,7 +556,7 @@ export const DecisionLogic = {
                         // 注意：这里需要你的 InteractionSystem 支持 'chat' 等 key
                         // 如果暂不支持，回退到原来的 SocialLogic 调用
                         sim.interactionTarget = { type: 'human', ref: targetSim };
-                        sim.enterInteractionState(action.interactionKey); // 这里假设 InteractionState 能处理 key
+                        sim.startInteraction();
                     } else if (targetObj) {
                         sim.target = null;
                         sim.interactionTarget = targetObj;
@@ -567,7 +567,7 @@ export const DecisionLogic = {
                         } else if (action.interactionKey === 'school_attend') {
                             sim.changeState(new SchoolingState());
                         } else {
-                            sim.enterInteractionState(action.interactionKey);
+                            sim.startInteraction();
                         }
                     }
                 }
