@@ -46,7 +46,7 @@ export const gameLoopStep = (dt: number = 1) => {
     // 60 = 1秒1分钟 (太快)
     // 120 = 2秒1分钟 (标准)
     // 180 = 3秒1分钟 (悠闲) <-- 我们用这个
-    const ticksPerMin = 120; 
+    const ticksPerMin = 180; 
 
     while (GameStore.timeAccumulator >= ticksPerMin) {
         GameStore.timeAccumulator -= ticksPerMin;

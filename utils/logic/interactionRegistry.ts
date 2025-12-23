@@ -671,6 +671,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     'default': {
         verb: '使用', duration: 30,
         getVerb: (sim, obj) => {
+             if (!obj.label) return "使用";
              if (obj.label.includes('沙发')) return "葛优躺";
              if (obj.label.includes('马桶') || obj.label.includes('公厕')) return "方便";
              if (obj.label.includes('淋浴')) return "洗澡";
@@ -683,7 +684,8 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             const t = RESTORE_TIMES[u] || RESTORE_TIMES.default;
             if (sim.needs[u as NeedType] !== undefined) sim.needs[u as NeedType] += getRate(t);
             
-            if (obj.label.includes('试妆') || obj.label.includes('镜')) {
+            // ✅ 修复：先判断 obj.label 是否存在
+            if (obj.label && (obj.label.includes('试妆') || obj.label.includes('镜'))) {
                 sim.appearanceScore = Math.min(100, sim.appearanceScore + 0.1 * f);
             }
         }
