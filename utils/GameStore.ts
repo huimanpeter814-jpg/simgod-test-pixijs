@@ -1045,32 +1045,36 @@ export class GameStore {
             this.logs = payload.logs;
         }
 
-        // 3. 核心：同步 Sims 列表 (Reconciliation 协调算法)
-        // 我们不应该每帧都 new Sim，那样 GC 压力太大。
-        // 我们应该更新现有的 Sim 对象引用。
+        // 3. 核心：同步 Sims 列表
         const incomingSims = payload.sims;
-        const activeIds = new Set(incomingSims.map((s: any) => s.id));
+        if (!Array.isArray(incomingSims)) return; // 防御检查
+
+        const activeIds = new Set(incomingSims.map((s: any) => s?.id).filter(Boolean)); // 过滤掉无效 ID
 
         // 3.1 移除已经消失的 Sim
-        // (比如有人搬走了，Worker 把它删了，主线程也要跟着删)
         for (let i = this.sims.length - 1; i >= 0; i--) {
             const localSim = this.sims[i];
-            if (!activeIds.has(localSim.id)) {
-                // 如果需要，这里可以顺便清理一下 simIndexMap，虽然 removeSim 也会做
-                this.simIndexMap.delete(localSim.id);
+            // [修复] 增加对 localSim 的非空检查
+            if (!localSim || !activeIds.has(localSim.id)) {
+                if (localSim) this.freeSabIndex(localSim.id);
                 this.sims.splice(i, 1);
+                // 顺便清理索引 Map
+                if (localSim) this.simIndexMap.delete(localSim.id);
             }
         }
 
         // 3.2 更新或创建 Sim
         incomingSims.forEach((data: any) => {
+            // [修复] 增加数据完整性检查
+            if (!data || !data.id) return;
+
             let sim = this.sims.find(s => s.id === data.id);
 
-            // A. 如果是新 Sim（Worker 刚生成的），主线程先创建一个空壳
+            // A. 新 Sim
             if (!sim) {
-                // 此时还不知道位置，初始化为 0,0 即可，马上会被 getters 覆盖
+                // 初始化 pos 防止 Pixi 报错
                 sim = new Sim({ x: 0, y: 0 }); 
-                sim.id = data.id; // ⚠️ 必须强制同步 ID
+                sim.id = data.id;
                 this.sims.push(sim);
             }
 
@@ -1090,6 +1094,8 @@ export class GameStore {
             sim.health = data.health;
             sim.homeId = data.homeId;
             sim.isPregnant = data.isPregnant;
+            if (data.name) sim.name = data.name;
+            if (data.surname) sim.surname = data.surname;
             if (data.hairColor) sim.hairColor = data.hairColor;
             if (data.skinColor) sim.skinColor = data.skinColor;
             if (data.clothesColor) sim.clothesColor = data.clothesColor;

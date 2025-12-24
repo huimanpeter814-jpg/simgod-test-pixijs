@@ -113,37 +113,29 @@ const PixiGameCanvasComponent: React.FC = () => {
     useEffect(() => {
         
         const worker = new Worker(new URL('../utils/simulationWorker.ts', import.meta.url), { type: 'module' });
-
-        // 🚀 [新增] 将 Worker 实例挂载到 GameStore，供 UI 调用
         GameStore.worker = worker;
-        // ✅ [新增] Worker 就绪后，立即触发游戏初始化流程
-        // 这样就不用在 App.tsx 里调 initGame 了，避免了时序问题
-        GameStore.initGameFlow();
-        // ✅ 初始化共享内存 (如果还没初始化过)
-        if (!GameStore.sharedBuffer) {
-            GameStore.initSharedMemory();
-        }
 
-        // ✅ 发送内存给 Worker (握手)
+        // 1. ✅ [关键修复] 初始化/重置共享内存 (主线程)
+        // 即使 GameStore.sharedBuffer 已经存在(比如React热重载后)，
+        // 我们也要调用 initSharedMemory 来重置 availableIndices (索引分配器)，
+        // 这样主线程的分配状态才能和新创建的 Worker 保持一致 (Worker 也是刚初始化的)。
+        GameStore.initSharedMemory(GameStore.sharedBuffer);
+
+        // 2. ✅ [关键修复] 握手：必须先把内存发给 Worker！
+        // 只有 Worker 收到了内存并初始化了 availableIndices，才能开始造人。
         worker.postMessage({ 
             type: 'INIT_SAB', 
             payload: { buffer: GameStore.sharedBuffer } 
         });
 
-        // 🚀 [修改] 智能启动逻辑：由主线程读取存档，发送给 Worker
-        const saveData = SaveManager.loadFromSlot(1);
-        if (saveData) {
-            console.log("📂 Found save data, sending to worker...");
-            worker.postMessage({ 
-                type: 'LOAD_GAME', 
-                payload: saveData 
-            });
-        } else {
-            console.log("✨ No save found, starting new game...");
-            worker.postMessage({ type: 'START_NEW_GAME' });
-        }
-        // ✅ 启动循环
+        // 3. ✅ [关键修复] 只有在发完内存后，才启动游戏流程
+        // initGameFlow 会发送 START_NEW_GAME 或 LOAD_GAME 指令。
+        // 由于 postMessage 是有序的，Worker 一定会先处理 INIT_SAB，再处理 START。
+        GameStore.initGameFlow();
+
+        // 4. 启动循环
         worker.postMessage({ type: 'START' });
+
 
         worker.onmessage = (e) => {
                 const { type, payload } = e.data;
@@ -160,57 +152,7 @@ const PixiGameCanvasComponent: React.FC = () => {
                         GameStore.logs = payload.logs;
                     }
 
-                    // 同步 Sim 列表 (处理出生/死亡)
-                    // 注意：因为位置数据已经在 SAB 里了，这里主要同步 id, action, bubble 等 UI 状态
-                    const serverSims = payload.sims;
-                    const serverIds = new Set(serverSims.map((s: any) => s.id));
                     
-                    // 2. 同步：新增 或 更新
-                    serverSims.forEach((sData: any) => {
-                        let sim = GameStore.sims.find(s => s.id === sData.id);
-                        
-                        if (!sim) {
-                            // 创建新实例
-                            sim = new Sim({ ...sData, pos: { x: 0, y: 0 } });
-                            
-                            // 🚨🚨🚨 [核心修复] 强制覆盖 ID 🚨🚨🚨
-                            // 防止 Sim 构造函数自动生成新 ID，导致和 Server ID 不一致而被误删
-                            sim.id = sData.id; 
-                            
-                            GameStore.sims.push(sim);
-                            // 建议把这个 log 注释掉，否则正常运行后也会刷屏（因为这里是创建时触发）
-                            // console.log(`[Client] Synced new sim: ${sim.name}`);
-                        }
-
-                        if (sim) {
-                            sim.action = sData.action;
-                            sim.bubble = sData.bubble;
-                            sim.mood = sData.mood;
-                            sim.appearance = sData.appearance;
-                            
-                            // 更新索引
-                            if (sData.sabIndex !== undefined && sData.sabIndex !== -1) {
-                                GameStore.simIndexMap.set(sData.id, sData.sabIndex);
-                            }
-                        }
-                    });
-
-                    // 3. 清理：移除本地有但服务器没有的 Sim (防止幽灵)
-                    for (let i = GameStore.sims.length - 1; i >= 0; i--) {
-                        const localSim = GameStore.sims[i];
-                        if (!serverIds.has(localSim.id)) {
-                            // 销毁对应的 Pixi 视图
-                            const view = simViewsRef.current.get(localSim.id);
-                            if (view) {
-                                view.destroy();
-                                simViewsRef.current.delete(localSim.id);
-                            }
-                            // 从列表移除
-                            GameStore.sims.splice(i, 1);
-                            GameStore.simIndexMap.delete(localSim.id); // 清理索引
-                        }
-                    }
-
                     // 通知 UI 更新
                     GameStore.notify();
                 }

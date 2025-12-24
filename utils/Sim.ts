@@ -152,16 +152,26 @@ export class Sim {
     // [新增] 明确标记 NPC 身份 (UI层应据此过滤，不显示在居民列表)
     isNPC: boolean = false;
 
-    constructor(config: SimInitConfig = {}) {
-        SimInitializer.initialize(this, config);
+    constructor(config: SimInitConfig = {}, skipInit: boolean = false) {
         
-        // 构造后逻辑
-        this.calculateDailyBudget();
-        if ([AgeStage.Adult, AgeStage.MiddleAged].includes(this.ageStage)) { 
-            this.assignJob(); 
+        if (!skipInit) {
+            // 正常初始化逻辑
+            SimInitializer.initialize(this, config);
+            
+            this.calculateDailyBudget();
+            if ([AgeStage.Adult, AgeStage.MiddleAged].includes(this.ageStage)) { 
+                this.assignJob(); 
+            }
         }
         
-        // 初始状态
+        // 🛑 [核心修复] 无论是否 skipInit，pos 都必须存在！
+        // 如果是主线程创建的“替身”(skipInit=true)，这里必须给个默认坐标，
+        // 否则 PixiSimView 在下一行读取 sim.pos.x 时就会崩。
+        if (!this.pos) {
+            this.pos = { x: 0, y: 0 };
+        }
+
+        // 初始状态 (状态机对象很轻量，保留没事)
         this.state = new IdleState();
         this.action = SimAction.Idle;
     }
