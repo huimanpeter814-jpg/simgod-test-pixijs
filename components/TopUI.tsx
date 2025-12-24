@@ -9,11 +9,17 @@ const SaveLoadModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
     useEffect(() => {
         setSlots(GameStore.getSaveSlots());
+        // ✅ [新增] 2. 订阅 Store 更新
+        // 当存档真正写入成功后，GameStore.handleWorkerMessage 会调用 notify()
+        // 这时我们再重新读取列表，就能看到新存档了
+        const unsub = GameStore.subscribe(() => {
+             setSlots(GameStore.getSaveSlots());
+        });
+        return unsub;
     }, []);
 
     const handleSave = (index: number) => {
-        GameStore.saveGame(index);
-        setSlots(GameStore.getSaveSlots());
+        GameStore.requestSaveGame(index);
     };
 
     const handleLoad = (index: number) => {
@@ -135,8 +141,7 @@ const TopUI: React.FC = () => {
   }, []);
 
   const setSpeed = (s: number) => {
-    GameStore.time.speed = s;
-    GameStore.notify(); 
+    GameStore.setGameSpeed(s);
   };
 
   const holiday = HOLIDAYS[time.month];

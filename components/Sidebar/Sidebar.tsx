@@ -31,11 +31,11 @@ const GameOverlay: React.FC = () => {
     }, []);
 
     const handleSpawnFamily = () => {
-        GameStore.spawnFamily(); // Random family (2+)
+        GameStore.sendSpawnFamily();// Random family (2+)
     };
 
     const handleSpawnSingle = () => {
-        GameStore.spawnSingle(); // Solo Sim
+        GameStore.sendSpawnSingle(); // Solo Sim
     };
 
     // Toggle Editor Logic

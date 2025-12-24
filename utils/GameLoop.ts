@@ -27,9 +27,13 @@ export const gameLoopStep = (dt: number = 1) => {
         // [修复] 记录移动前的位置，用于 NaN 恢复
         const backupX = s.pos.x;
         const backupY = s.pos.y;
+        // 🟢 [修改] 增加移动速度倍率
+        // 这里的 1.5 表示市民移动速度是原来的 1.5 倍
+        // 你可以根据手感调整为 2.0 或更高
+        const moveSpeedMultiplier = 1.5;
 
         // 这里调用 Sim.update -> State.update -> IdleState -> DecisionLogic
-        s.update(safeDt * GameStore.time.speed, false);
+        s.update(safeDt * GameStore.time.speed* moveSpeedMultiplier, false);
 
         // [修复] 如果更新后坐标变成了 NaN，回滚到更新前
         if (isNaN(s.pos.x) || isNaN(s.pos.y)) {
@@ -59,7 +63,7 @@ export const gameLoopStep = (dt: number = 1) => {
     // 60 = 1秒1分钟 (太快)
     // 120 = 2秒1分钟 (标准)
     // 180 = 3秒1分钟 (悠闲) <-- 我们用这个
-    const ticksPerMin = 180; 
+    const ticksPerMin = 60; 
 
     while (GameStore.timeAccumulator >= ticksPerMin) {
         GameStore.timeAccumulator -= ticksPerMin;

@@ -129,6 +129,26 @@ export class GameStore {
             this.addLog(null, "已请求生成新家庭...", "sys");
         }
     }
+    // ✅ [新增] 发送自定义家庭数据
+    static sendSpawnCustomFamily(configs: any[]) {
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SPAWN_CUSTOM_FAMILY', payload: configs });
+        }
+    }
+    // ✅ [新增] 同步地图数据给 Worker (用于编辑器应用后、导入地图后)
+    static sendUpdateMap() {
+        if (this.worker) {
+            this.worker.postMessage({
+                type: 'UPDATE_MAP',
+                payload: {
+                    worldLayout: this.worldLayout,
+                    furniture: this.furniture,
+                    rooms: this.rooms,
+                    housingUnits: this.housingUnits
+                }
+            });
+        }
+    }
     static particles: { x: number; y: number; life: number }[] = [];
     
     static time: GameTime = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
@@ -181,6 +201,34 @@ export class GameStore {
         this.notify();
     }
 
+    // ✅ [新增] 1. 选中/取消选中 Sim (同时更新本地和 Worker)
+    static selectSim(id: string | null) {
+        // 1. 立即更新本地状态 (为了 UI 响应速度)
+        this.selectedSimId = id;
+        this.notify();
+
+        // 2. 告诉 Worker 我选中了谁 (以便 Worker 下一帧发回详细数据)
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SELECT_SIM', payload: id });
+        }
+    }
+
+    // ✅ [新增] 2. 发送分配住址指令
+    static sendAssignHome(simId: string) {
+        if (this.worker) {
+            this.worker.postMessage({ type: 'ASSIGN_HOME', payload: simId });
+            this.showToast("⏳ 正在分配住址...");
+        }
+    }
+
+    // ✅ [新增] 3. 任何原本直接修改数据的操作，都要变成 send...
+    // 比如：GameStore.spawnNanny(...) 现在应该改为：
+    static sendSpawnNanny(homeId: string) {
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SPAWN_NANNY', payload: homeId });
+        }
+    }
+
     static removeSim(id: string) {
         this.sims = this.sims.filter(s => s.id !== id);
         // ✅ [新增] 回收索引
@@ -193,6 +241,14 @@ export class GameStore {
         });
         if (this.selectedSimId === id) this.selectedSimId = null;
         this.notify();
+    }
+
+    // ✅ [新增] 请求存档
+    static requestSaveGame(slot: number) {
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SAVE_GAME', payload: { slot } });
+            this.showToast(`💾 正在归档数据 (Slot ${slot})...`);
+        }
     }
 
     static spawnNanny(homeId: string, task: 'home_care' | 'drop_off' | 'pick_up' = 'home_care', targetChildId?: string) {
@@ -498,6 +554,8 @@ export class GameStore {
             }
             
             this.triggerMapUpdate();
+            // [新增] 立即同步给 Worker
+            this.sendUpdateMap();
             this.showToast("✅ 地图导入成功！");
         } catch (e) {
             console.error("Import execution failed", e);
@@ -940,27 +998,129 @@ export class GameStore {
         this.refreshFurnitureOwnership();
         this.notify();
     }
-}
 
-export function initGame() {
-    GameStore.sims = [];
-    GameStore.particles = [];
-    GameStore.logs = []; 
-    GameStore.time = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
+    // ✅ [新增] 处理 Worker 发来的同步数据
+    static handleWorkerSync(payload: any) {
+        // 1. 同步时间
+        this.time = payload.time;
 
-    GameStore.rebuildWorld(true); 
+        // 2. 同步日志 (合并或替换)
+        // 注意：为了避免日志跳动，可以只追加新的，或者直接替换 UI 展示用的数组
+        if (payload.logs && payload.logs.length > 0) {
+            this.logs = payload.logs;
+        }
 
-    if (GameStore.loadGame(1,true)) {
-        GameStore.addLog(null, "自动读取存档 1 成功", "sys");
-    } else {
-        GameStore.addLog(null, "正在初始化新城市人口...", "sys");
-        
-        GameStore.spawnSingle();
-        GameStore.spawnSingle();
-        GameStore.spawnFamily();
-        GameStore.spawnFamily();
+        // 3. 核心：同步 Sims 列表 (Reconciliation 协调算法)
+        // 我们不应该每帧都 new Sim，那样 GC 压力太大。
+        // 我们应该更新现有的 Sim 对象引用。
+        const incomingSims = payload.sims;
+        const activeIds = new Set(incomingSims.map((s: any) => s.id));
 
-        GameStore.addLog(null, `新世界已生成！当前人口: ${GameStore.sims.length}`, "sys");
+        // 3.1 移除已经消失的 Sim
+        this.sims = this.sims.filter(s => activeIds.has(s.id));
+
+        // 3.2 更新或创建 Sim
+        incomingSims.forEach((data: any) => {
+            let sim = this.sims.find(s => s.id === data.id);
+
+            if (!sim) {
+                // 如果是新出现的 Sim，创建一个“空壳”
+                // @ts-ignore - 我们不需要完整的初始化逻辑，只需要数据容器
+                sim = new Sim({ x: 0, y: 0 }); // 初始坐标不重要，马上会被 SAB 覆盖
+                Object.assign(sim, data);
+                
+                // 🔥 [关键魔法] 注入 getter，让 pos.x / pos.y 直接读共享内存
+                // 只有当分配了 sabIndex 时才注入
+                if (data.sabIndex !== -1) {
+                    this.injectSabGetters(sim, data.sabIndex);
+                }
+                
+                this.sims.push(sim);
+            } else {
+                // 如果 Sim 已存在，更新它的属性 (除了位置，位置由 SAB 托管)
+                // 只更新变化的属性，或者直接 Object.assign
+                Object.assign(sim, data);
+                
+                // 确保 SAB 索引正确 (防止重连或重新分配)
+                if (data.sabIndex !== -1 && (sim as any)._sabIndex !== data.sabIndex) {
+                    this.injectSabGetters(sim, data.sabIndex);
+                }
+            }
+        });
+
+        // 4. 通知 React 组件重新渲染
+        this.notify();
     }
-    GameStore.notify();
+
+    // ✅ [修改] 处理 Worker 返回的消息 (在 App.tsx 调用的 handleWorkerSync 里，或者单独的 listener)
+    // 建议把这个逻辑加到 handleWorkerSync 旁边，或者扩充 onmessage
+    static handleWorkerMessage(type: string, payload: any) {
+        if (type === 'SAVE_DATA_READY') {
+            const { slot, data } = payload;
+            const success = SaveManager.saveToSlot(slot, data);
+            if (success) {
+                this.showToast(`✅ 存档 ${slot} 保存成功！`);
+                // 这里可以触发 UI 刷新，比如通过 event bus 或者再次 notify
+                this.notify();
+            } else {
+                this.showToast(`❌ 保存失败: 空间不足?`);
+            }
+        }
+        // ✅ [新增] 处理 Worker 发回的地图初始化数据
+        else if (type === 'INIT_MAP') {
+            console.log("[Main] Received Map Data from Worker");
+            
+            this.worldLayout = payload.worldLayout;
+            this.furniture = payload.furniture;
+            this.rooms = payload.rooms;
+            this.housingUnits = payload.housingUnits;
+            
+            // 重建索引，确保渲染层能找到东西
+            this.initIndex();
+            this.triggerMapUpdate(); // 通知 Pixi 重新生成世界
+            
+            this.showToast("🌍 世界加载完成");
+        }
+    }
+
+    // ✅ [新增] 注入共享内存读取器
+    private static injectSabGetters(sim: any, index: number) {
+        (sim as any)._sabIndex = index;
+        const view = this.sharedView;
+        
+        // 覆盖 pos 属性
+        Object.defineProperty(sim, 'pos', {
+            get: () => {
+                const base = index * SAB_CONFIG.STRUCT_SIZE;
+                return {
+                    x: view[base + SAB_CONFIG.OFFSET_X],
+                    y: view[base + SAB_CONFIG.OFFSET_Y]
+                };
+            },
+            configurable: true
+        });
+
+        // 如果需要，也可以覆盖 action (将数字转回字符串)
+        // 注意：这需要你有 ACTION_CODE 的反向映射表
+        // Object.defineProperty(sim, 'action', { ... }) 
+    }
+    static async initGameFlow() {
+    // 确保 Worker 已经准备好
+    if (!this.worker) {
+        console.error("Worker not ready yet!");
+        return;
+    }
+
+    // 1. 尝试读取自动存档 (Slot 1)
+    // 注意：SaveManager 在主线程，所以我们读出数据，然后传给 Worker
+    const autoSave = SaveManager.loadFromSlot(1);
+    
+        if (autoSave) {
+            console.log("Found auto-save, loading...");
+            this.worker.postMessage({ type: 'LOAD_GAME', payload: autoSave });
+        } else {
+            console.log("No save found, starting new game...");
+            this.worker.postMessage({ type: 'START_NEW_GAME' });
+        }
+    }
 }

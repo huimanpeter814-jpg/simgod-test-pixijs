@@ -96,7 +96,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                         <h2 className="text-xl font-bold truncate tracking-tight flex items-center gap-2">{sim.name}<span className={`text-sm font-bold ${genderColor}`}>{genderIcon}</span></h2>
                         <button 
                             onMouseDown={(e) => e.stopPropagation()} 
-                            onClick={() => { GameStore.selectedSimId = null; GameStore.notify(); }} 
+                            onClick={() => { GameStore.selectSim(null); }}
                             className="text-white/30 hover:text-white transition-colors"
                         >
                             ✕

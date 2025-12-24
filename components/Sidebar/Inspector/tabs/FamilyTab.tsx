@@ -98,8 +98,7 @@ export const FamilyTab: React.FC<{ sim: Sim, sims: Sim[] }> = ({ sim, sims }) =>
     );
 
     const handleSelect = (id: string) => {
-        GameStore.selectedSimId = id;
-        GameStore.notify();
+        GameStore.selectSim(id);
     };
 
     return (

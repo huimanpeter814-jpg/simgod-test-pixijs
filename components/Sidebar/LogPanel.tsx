@@ -133,7 +133,7 @@ const LogPanel: React.FC = () => {
                                                 className="font-bold text-gray-300 mr-1 cursor-pointer hover:underline hover:text-white"
                                                 onClick={() => {
                                                     const s = GameStore.sims.find(sim => sim.name === log.simName);
-                                                    if (s) { GameStore.selectedSimId = s.id; GameStore.notify(); }
+                                                    if (s) { GameStore.selectSim(s.id); }
                                                 }}
                                             >
                                                 [{log.simName}]

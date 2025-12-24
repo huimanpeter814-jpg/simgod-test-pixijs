@@ -38,16 +38,17 @@ export class EditorManager implements EditorState {
         this.history = [];
         this.redoStack = [];
         this.interactionState = 'idle';
-        GameStore.time.speed = 0; 
+        GameStore.setGameSpeed(0);
         GameStore.notify();
     }
 
     confirmChanges() {
         this.snapshot = null; 
         this.resetState();
-        GameStore.time.speed = 1; 
+        GameStore.setGameSpeed(1);
         GameStore.initIndex(); 
         GameStore.refreshFurnitureOwnership();
+        GameStore.sendUpdateMap();
         GameStore.notify();
     }
 
@@ -97,7 +98,7 @@ export class EditorManager implements EditorState {
         }
         this.snapshot = null;
         this.resetState();
-        GameStore.time.speed = 1;
+        GameStore.setGameSpeed(1);
         GameStore.triggerMapUpdate();
     }
 

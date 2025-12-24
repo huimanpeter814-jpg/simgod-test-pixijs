@@ -27,7 +27,7 @@ export const AttrTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                         <span className="text-gray-500 text-[9px]">家庭住址</span>
                         <div className="flex justify-between items-center">
                             <span className={`${sim.homeId ? 'text-gray-200' : 'text-gray-500 italic'}`}>{homeUnit ? homeUnit.name : '无家可归'}</span>
-                            {!sim.homeId && <button onClick={() => GameStore.assignRandomHome(sim)} className="text-[9px] bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-2 py-0.5 rounded border border-blue-500/30 transition-colors">分配住址</button>}
+                            {!sim.homeId && <button onClick={() => GameStore.sendAssignHome(sim.id)} className="text-[9px] bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-2 py-0.5 rounded border border-blue-500/30 transition-colors">分配住址</button>}
                         </div>
                     </div>
                     

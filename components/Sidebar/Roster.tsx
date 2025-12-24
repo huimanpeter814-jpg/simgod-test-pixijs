@@ -62,7 +62,7 @@ const Roster: React.FC<RosterProps> = ({ sims, selectedId }) => {
                         {members.map(sim => (
                             <div
                                 key={sim.id}
-                                onClick={() => { GameStore.selectedSimId = sim.id; GameStore.notify(); }}
+                                onClick={() => { GameStore.selectSim(sim.id); }}
                                 className={`
                                 w-full shrink-0 bg-[#121212]/80 backdrop-blur-md rounded-lg border-2 cursor-pointer relative flex flex-col items-center justify-center py-1 transition-all hover:border-white group
                                 ${selectedId === sim.id ? 'border-select shadow-[0_0_10px_rgba(57,255,20,0.3)] bg-white/10' : 'border-white/10'}

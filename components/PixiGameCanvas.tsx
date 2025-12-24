@@ -6,7 +6,6 @@ import { loadGameAssets } from '../utils/assetLoader';
 import { GameStore } from '../utils/GameStore';
 import { PixiSimView } from '../utils/render/PixiSimView';
 import { PixiWorldBuilder } from '../utils/render/PixiWorldBuilder';
-import { gameLoopStep } from '../utils/GameLoop';
 import { PLOTS } from '../data/plots'; 
 import { SAB_CONFIG } from '../constants'; 
 import { SaveManager } from '../managers/SaveManager'; 
@@ -117,6 +116,9 @@ const PixiGameCanvasComponent: React.FC = () => {
 
         // 🚀 [新增] 将 Worker 实例挂载到 GameStore，供 UI 调用
         GameStore.worker = worker;
+        // ✅ [新增] Worker 就绪后，立即触发游戏初始化流程
+        // 这样就不用在 App.tsx 里调 initGame 了，避免了时序问题
+        GameStore.initGameFlow();
         // ✅ 初始化共享内存 (如果还没初始化过)
         if (!GameStore.sharedBuffer) {
             GameStore.initSharedMemory();
@@ -150,6 +152,8 @@ const PixiGameCanvasComponent: React.FC = () => {
                     // [同步逻辑]
                     // Worker 现在只发送非高频数据 (时间、日志、Sim列表元数据)
                     GameStore.time = payload.time;
+                    // ✅ 将数据灌入主线程的 Store
+                    GameStore.handleWorkerSync(payload);
                     
                     // 处理日志 (防止日志跳变，可选优化)
                     if (payload.logs && payload.logs.length > GameStore.logs.length) {
@@ -210,7 +214,13 @@ const PixiGameCanvasComponent: React.FC = () => {
                     // 通知 UI 更新
                     GameStore.notify();
                 }
+                // ✅ [新增] 必须把其他消息（如存档数据）转发给 GameStore 处理！
+                else {
+                    GameStore.handleWorkerMessage(type, payload);
+                }
         };
+        // 把 worker 挂载到 Store 上
+        GameStore.worker = worker;
 
         return () => {
             // 🧹 [新增] 清理引用

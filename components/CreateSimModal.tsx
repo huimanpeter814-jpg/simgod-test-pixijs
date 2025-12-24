@@ -132,7 +132,7 @@ const CreateSimModal: React.FC<CreateSimModalProps> = ({ onClose }) => {
     };
 
     const handleCreateFamily = () => {
-        GameStore.spawnCustomFamily(familyMembers);
+        GameStore.sendSpawnCustomFamily(familyMembers);
         onClose();
     };
 
