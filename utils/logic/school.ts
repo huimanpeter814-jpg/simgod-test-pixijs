@@ -163,10 +163,25 @@ export const SchoolLogic = {
                 if (sim.needs.fun < 80) sim.needs.fun += 0.5;
                 if (sim.needs.hunger < 50) sim.needs.hunger = 90; 
             } else {
-                // 放学时间：叫家长接回家 (Pick-up)
-                // 只要不是正在“被护送”状态，就检查是否需要接送。
-                if (sim.action !== SimAction.BeingEscorted) {
+                // 放学时间：如果在校但没被接，叫家长来接 (Pick-up)
+                if (sim.action !== SimAction.BeingEscorted && sim.action !== SimAction.Waiting) {
                     SchoolLogic.requestEscort(sim, 'pick_up');
+                }
+            }
+        }else {
+            // 🟢 [核心修复] 如果不在幼儿园，且是上学时间 -> 呼叫家长送学
+            if (isDaycareTime) {
+                // 防止重复呼叫：如果已经在等待、被护送或正在路上，就不再呼叫
+                const isBusy = sim.action === SimAction.Waiting || 
+                               sim.action === SimAction.BeingEscorted || 
+                               sim.action === SimAction.Escorting;
+                
+                // 且确保没有家长正在来接我的路上
+                const processing = GameStore.sims.some(s => s.carryingSimId === sim.id);
+
+                if (!isBusy && !processing) {
+                    sim.say("我要上学...", 'sys');
+                    SchoolLogic.requestEscort(sim, 'drop_off');
                 }
             }
         }

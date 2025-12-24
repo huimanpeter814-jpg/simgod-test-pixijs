@@ -397,6 +397,15 @@ export const CareerLogic = {
             if (sim.hasLeftWorkToday) return;
 
             if (sim.action === SimAction.Working || sim.action === SimAction.Commuting) return;
+            // 🟢 [核心修复] 检查是否有办公地点，如果没有，尝试重新绑定
+            if (!sim.workplaceId) {
+                this.bindWorkplace(sim);
+                // 如果绑定后还是没有 (说明地图上真没这公司)，则不要去上班，避免死循环
+                if (!sim.workplaceId) {
+                    if (Math.random() < 0.01) sim.say("公司倒闭了? 没地儿上班", 'bad');
+                    return;
+                }
+            }
 
             sim.isSideHustle = false;
             sim.consecutiveAbsences = 0; 

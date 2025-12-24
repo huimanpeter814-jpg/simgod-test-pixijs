@@ -243,8 +243,25 @@ export class CommutingState extends BaseState {
     }
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
+        // 1. 卡死检测
+        const distMoved = (sim.pos.x - this.lastPos.x)**2 + (sim.pos.y - this.lastPos.y)**2;
+        if (distMoved < 0.01) {
+            this.stuckTimer += dt;
+        } else {
+            this.stuckTimer = 0;
+            this.lastPos = { x: sim.pos.x, y: sim.pos.y };
+        }
+
+        // 如果卡住超过5秒，直接强制瞬移或进入工作状态 (防止一直在路上晃荡)
+        if (this.stuckTimer > 300) {
+            this.handleArrival(sim);
+            return;
+        }
+
+        // 2. 移动与到达处理
+        // [修复] 到达后必须调用 handleArrival 进行打卡，而不是直接 new WorkingState()
         if (sim.moveTowardsTarget(dt)) {
-            sim.changeState(new WorkingState());
+            this.handleArrival(sim);
         }
     }
     private handleArrival(sim: Sim) {
@@ -351,27 +368,46 @@ export class WorkingState extends BaseState {
                 if (Math.random() < 0.1 && sim.orientation !== 'aro') { SocialLogic.triggerJealousy(sim, nearby, sim); }
             }
         }
+        // --- 3. [修复] 移动逻辑分离 ---
+        
+        // 计时器只负责“决定下一个目标”，不负责“移动”
         this.subStateTimer -= dt;
-        if (this.subStateTimer > 0) return;
-        this.subStateTimer = 300 + Math.random() * 300; 
-        const jobType = sim.job.companyType;
-        const jobTitle = sim.job.title;
-        const plot = sim.workplaceId ? GameStore.worldLayout.find(p => p.id === sim.workplaceId) : null;
-        if (plot && ((jobType === JobType.Restaurant && jobTitle.includes('服务')) || (jobType === JobType.Store && !jobTitle.includes('收银')) || (jobType === JobType.Hospital && jobTitle.includes('护士')) || (jobType === JobType.ElderCare))) {
-            const tx = plot.x + 20 + Math.random() * ((plot.width||300) - 40);
-            const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
-            sim.target = { x: tx, y: ty };
+        if (this.subStateTimer <= 0) {
+            this.subStateTimer = 300 + Math.random() * 300; 
+            
+            const jobType = sim.job.companyType;
+            const jobTitle = sim.job.title;
+            const plot = sim.workplaceId ? GameStore.worldLayout.find(p => p.id === sim.workplaceId) : null;
+            
+            if (plot) {
+                // 判断是否需要走动的职业 (服务员、护士、看护、店员)
+                if ((jobType === JobType.Restaurant && jobTitle.includes('服务')) || 
+                    (jobType === JobType.Store && !jobTitle.includes('收银')) || 
+                    (jobType === JobType.Hospital && jobTitle.includes('护士')) || 
+                    (jobType === JobType.ElderCare)) {
+                    
+                    const tx = plot.x + 20 + Math.random() * ((plot.width||300) - 40);
+                    const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
+                    sim.target = { x: tx, y: ty };
+                } 
+                // 医生/老师偶尔走动
+                else if ((jobType === JobType.Hospital && jobTitle.includes('医')) || (jobType === JobType.School)) {
+                     if (Math.random() > 0.7) {
+                         const tx = plot.x + 20 + Math.random() * ((plot.width||300) - 40);
+                         const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
+                         sim.target = { x: tx, y: ty };
+                     }
+                }
+            }
+        }
+
+        // [关键] 只要有目标，每帧都执行移动，而不是被 return 挡住
+        if (sim.target) {
             sim.moveTowardsTarget(dt);
-        } else if (jobType === JobType.School && (jobTitle.includes('师') || jobTitle.includes('教'))) {
-            if (Math.random() > 0.7) sim.say("同学们看黑板...", 'act');
-        } else if (jobType === JobType.Hospital && jobTitle.includes('医')) {
-             if (Math.random() > 0.8 && sim.workplaceId) {
-                 const bed = GameStore.furniture.find(f => f.id.startsWith(sim.workplaceId!) && f.label.includes('病床'));
-                 if (bed) { sim.target = { x: bed.x + 20, y: bed.y + bed.h + 5 }; }
-             }
         }
     }
 }
+
 
 // --- 上学通勤 ---
 export class CommutingSchoolState extends BaseState {
@@ -821,6 +857,8 @@ export class NannyState extends BaseState {
 export class PickingUpState extends BaseState {
     actionName = SimAction.PickingUp;
     repathTimer = 0; // [优化] 减少重寻路频率
+    stuckTimer = 0; // [新增] 卡死检测
+    lastPos = { x: 0, y: 0 };
     
     enter(sim: Sim) {
         sim.path = [];
@@ -843,6 +881,12 @@ export class PickingUpState extends BaseState {
             sim.changeState(new IdleState()); 
             return; 
         }
+        // 1. [新增] 优先检查孩子是否饿了，如果饿了先喂食
+        if (child.needs[NeedType.Hunger] < 30) {
+            sim.say("先喂宝宝...", 'family');
+            sim.changeState(new FeedBabyState(child.id));
+            return;
+        }
 
         // [优化] 只有当孩子位置发生显著变化时，或者每隔一段时间，才更新目标
         // 防止每帧重算路径导致性能浪费和鬼畜
@@ -858,28 +902,28 @@ export class PickingUpState extends BaseState {
         // 移动逻辑
         const arrived = sim.moveTowardsTarget(dt);
         const distSq = (sim.pos.x - child.pos.x)**2 + (sim.pos.y - child.pos.y)**2;
-        
-        // [核心修复] 判定条件：
-        // 1. 距离小于 60px (3600) - 即使隔着婴儿床也能抱到
-        // 2. 或者寻路系统认为已经到达 (arrived === true)，说明撞到了障碍物边缘
-        if (distSq <= 900 || arrived) {
-            // === 成功接到孩子 ===
+        // 检测是否卡住不动了
+        const moveDist = (sim.pos.x - this.lastPos.x)**2 + (sim.pos.y - this.lastPos.y)**2;
+        if (moveDist < 0.01) this.stuckTimer += dt;
+        else { this.stuckTimer = 0; this.lastPos = { x: sim.pos.x, y: sim.pos.y }; }
+        // [关键修复] 判定成功的条件：
+        // A. 距离 < 60px (3600) - 扩大范围，因为婴儿床有碰撞体积
+        // B. 寻路显示到达 (arrived)
+        // C. 卡住超过 2秒 且 距离孩子不远 (< 100px) - 视为隔着家具抱到了
+        const isStuckButClose = this.stuckTimer > 120 && distSq < 10000;
+
+        if (distSq <= 3600 || arrived || isStuckButClose) {
             sim.say("抓到你了！", 'family');
             
-            // 1. 建立双向绑定
+            // 绑定与状态切换逻辑 (保持原有逻辑)
             child.carriedBySimId = sim.id;
-            
-            // 2. 强制打断孩子当前状态，进入被护送状态
             child.changeState(new BeingEscortedState());
             
-            // 3. 计算目的地 (学校 or 家)
-            // [核心修复] 使用 PLOTS[id].type 查找幼儿园
             const kindergarten = GameStore.worldLayout.find(p => {
                 const tpl = PLOTS[p.templateId];
                 return tpl && tpl.type === 'kindergarten';
             });
-            // 判断逻辑：如果孩子当前就在幼儿园范围内，说明是接放学，要回家
-            // 否则就是送上学
+
             const inSchool = kindergarten && 
                              child.pos.x >= kindergarten.x && 
                              child.pos.x <= kindergarten.x + (kindergarten.width||300) &&
@@ -887,67 +931,28 @@ export class PickingUpState extends BaseState {
                              child.pos.y <= kindergarten.y + (kindergarten.height||300);
             
             let targetPos = { x: 0, y: 0 };
-
-            // [修复开始] 引入时间判断，防止大半夜送孩子上学
             const currentHour = GameStore.time.hour;
-            // 幼儿园通常是 8点到17点
             const isSchoolTime = currentHour >= 8 && currentHour < 17;
             
             if (inSchool || !isSchoolTime) {
-                // -> 目标：回家 (接放学)
-                
-                // 🚨 [核心修复] 无家可归处理逻辑
-                // sim 是家长(或保姆)，优先取 sim 的家
+                // 回家逻辑
                 let homeLoc = sim.getHomeLocation();
-                
-                if (!homeLoc) {
-                    // 如果是流浪汉家庭，"回家"意味着去非学校的公共场所
-                    // 寻找一个 type 为 park 或 public 的地块，且不是当前的学校地块
-                    const safePlot = GameStore.worldLayout.find(p => {
-                        const tpl = PLOTS[p.templateId];
-                        const type = p.customType || (tpl ? tpl.type : 'public');
-                        const isSchoolPlot = ['kindergarten', 'elementary_school', 'high_school'].includes(type);
-                        const isCurrentPlot = kindergarten && p.id === kindergarten.id;
-                        
-                        return !isSchoolPlot && !isCurrentPlot; 
-                    });
-
-                    if (safePlot) {
-                        homeLoc = { 
-                            x: safePlot.x + (safePlot.width || 300) / 2, 
-                            y: safePlot.y + (safePlot.height || 300) / 2 
-                        };
-                        sim.say("去公园...", "family");
-                    } else {
-                        // 实在找不到（比如全是学校），找个地图中间空地
-                        homeLoc = { x: 1500, y: 1000 };
-                        sim.say("四海为家...", "bad");
-                    }
-                }
-
-                if (homeLoc) {
-                    targetPos = homeLoc;
-                    sim.say("回家咯~", "family");
-                } else {
-                    // 理论上不会到这里，除非地图是空的
-                    targetPos = { x: sim.pos.x + 50, y: sim.pos.y + 50 };
-                }
-
+                if (!homeLoc) homeLoc = { x: 1500, y: 1000 };
+                targetPos = homeLoc;
+                sim.say("回家咯~", "family");
             } else if (kindergarten) {
-                // -> 去幼儿园
+                // 去学校
                 targetPos = { 
                     x: kindergarten.x + (kindergarten.width||300)/2, 
                     y: kindergarten.y + (kindergarten.height||300)/2 
                 };
                 sim.say("去幼儿园~", "family");
             } else {
-                sim.say("没地方去...", "bad");
+                sim.say("没学校去...", "bad");
                 sim.changeState(new IdleState());
                 return;
             }
-            // [修复结束]
 
-            // 4. 切换到护送状态
             sim.changeState(new EscortingState(targetPos));
         }
     }
@@ -1003,11 +1008,16 @@ export class EscortingState extends BaseState {
                                      sim.pos.x <= kindergarten.x + (kindergarten.width||300) &&
                                      sim.pos.y >= kindergarten.y && 
                                      sim.pos.y <= kindergarten.y + (kindergarten.height||300);
+                    // [优化判定] 除了判定坐标，如果已经到达了目的地(target)，也视为成功
+                    // 这样即使坐标计算有细微偏差，也不会导致任务失败
+                    const distToDest = (sim.pos.x - this.dest.x)**2 + (sim.pos.y - this.dest.y)**2;
+                    const isAtDestination = distToDest < 100; // 允许10px误差
                     
-                    if (inSchool) {
+                    if (inSchool|| isAtDestination) {
                         child.changeState(new SchoolingState());
                         child.say("到学校啦 👋", 'family');
                         sim.say("乖乖听话", 'family');
+                        droppedAtSchool = true; // 标记成功
                     } else {
                         child.changeState(new IdleState()); // 到家了
                         child.say("回家啦！", 'family');
