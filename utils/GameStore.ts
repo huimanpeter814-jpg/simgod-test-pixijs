@@ -230,17 +230,29 @@ export class GameStore {
     }
 
     static removeSim(id: string) {
+        // [修复] 主线程拦截
+        if (this.worker) {
+            this.worker.postMessage({ type: 'REMOVE_SIM', payload: id });
+            // 可以在这里先做个 UI 上的乐观删除（可选），但为了保险起见，建议等 Sync
+            // 如果你想让 UI 反应快一点，可以暂时在这里把 selectedSimId 置空
+            if (this.selectedSimId === id) this.selectedSimId = null;
+            this.notify();
+            return; // 🛑
+        }
+
+        // --- Worker 逻辑 ---
         this.sims = this.sims.filter(s => s.id !== id);
-        // ✅ [新增] 回收索引
+        // 回收索引 (权威操作)
         this.freeSabIndex(id);
-        // [新增] 清理所有人的社交记忆，防止坏死引用
+        
+        // 清理关系等逻辑...
         this.sims.forEach(s => {
             if (s.relationships[id]) {
                 delete s.relationships[id];
             }
         });
-        if (this.selectedSimId === id) this.selectedSimId = null;
-        this.notify();
+        
+        // Worker 不需要 notify UI，它会通过下一次 SYNC 告诉主线程人没了
     }
 
     // ✅ [新增] 请求存档
@@ -847,34 +859,56 @@ export class GameStore {
     }
 
     static spawnFamily(size?: number) {
+        // [修复] 主线程拦截
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SPAWN_FAMILY', payload: { size } });
+            return; // 🛑
+        }
+
+        // --- Worker 逻辑 ---
         const count = size || (2 + Math.floor(Math.random() * 3)); 
         const fam = FamilyGenerator.generate(count, this.housingUnits, this.sims);
         this.sims.push(...fam);
         
+        // 关键：为生成的每个人分配索引
+        fam.forEach(s => this.allocSabIndex(s.id)); 
+
         const logMsg = count === 1 
             ? `新居民 ${fam[0].name} 搬入了城市。`
             : `新家庭 (${fam[0].surname}家) 搬入城市！共 ${fam.length} 人。`;
-            
         this.addLog(null, logMsg, "sys");
-        this.notify();
     }
 
     static spawnSingle() {
+        if (this.worker) {
+             this.worker.postMessage({ type: 'SPAWN_SINGLE' });
+             return; // 🛑
+        }
         this.spawnFamily(1);
     }
 
     static spawnCustomSim(config: SimInitConfig) {
+        // [修复] 主线程逻辑：只发指令，不执行逻辑
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SPAWN_CUSTOM', payload: config });
+            // 可以加个 Toast 提示用户正在处理
+            this.showToast("正在创建角色...");
+            return; // 🛑 关键：直接返回，不要执行下面的 new Sim()
+        }
+
+        // --- 以下是 Worker 才会执行的逻辑 ---
         const sim = new Sim(config);
-        
         this.sims.push(sim);
-        // ✅ [新增] 立即分配共享内存索引
+        // Worker 分配内存索引 (这是权威操作)
         this.allocSabIndex(sim.id);
+        
         this.assignRandomHome(sim); 
-        
         this.addLog(null, `[入住] 新居民 ${sim.name} (自定义) 搬入了城市。`, "sys");
-        this.showToast(`✨ ${sim.name} 创建成功！`);
-        this.notify();
         
+        // 注意：Worker 里没有 showToast，这些 UI 通知需要通过 postMessage 发回，或者忽略
+        // this.showToast(...) // Worker 里不需要这个，或者发回主线程处理
+        
+        // Worker 不需要 selectSim，或者只是标记一下
         this.selectedSimId = sim.id;
     }
 
@@ -1017,38 +1051,142 @@ export class GameStore {
         const activeIds = new Set(incomingSims.map((s: any) => s.id));
 
         // 3.1 移除已经消失的 Sim
-        this.sims = this.sims.filter(s => activeIds.has(s.id));
+        // (比如有人搬走了，Worker 把它删了，主线程也要跟着删)
+        for (let i = this.sims.length - 1; i >= 0; i--) {
+            const localSim = this.sims[i];
+            if (!activeIds.has(localSim.id)) {
+                // 如果需要，这里可以顺便清理一下 simIndexMap，虽然 removeSim 也会做
+                this.simIndexMap.delete(localSim.id);
+                this.sims.splice(i, 1);
+            }
+        }
 
         // 3.2 更新或创建 Sim
         incomingSims.forEach((data: any) => {
             let sim = this.sims.find(s => s.id === data.id);
 
+            // A. 如果是新 Sim（Worker 刚生成的），主线程先创建一个空壳
             if (!sim) {
-                // 如果是新出现的 Sim，创建一个“空壳”
-                // @ts-ignore - 我们不需要完整的初始化逻辑，只需要数据容器
-                sim = new Sim({ x: 0, y: 0 }); // 初始坐标不重要，马上会被 SAB 覆盖
-                Object.assign(sim, data);
-                
-                // 🔥 [关键魔法] 注入 getter，让 pos.x / pos.y 直接读共享内存
-                // 只有当分配了 sabIndex 时才注入
-                if (data.sabIndex !== -1) {
-                    this.injectSabGetters(sim, data.sabIndex);
-                }
-                
+                // 此时还不知道位置，初始化为 0,0 即可，马上会被 getters 覆盖
+                sim = new Sim({ x: 0, y: 0 }); 
+                sim.id = data.id; // ⚠️ 必须强制同步 ID
                 this.sims.push(sim);
-            } else {
-                // 如果 Sim 已存在，更新它的属性 (除了位置，位置由 SAB 托管)
-                // 只更新变化的属性，或者直接 Object.assign
-                Object.assign(sim, data);
+            }
+
+            // B. 同步低频状态 (UI展示用的数据)
+            // 这些数据不走 SAB，还是走 postMessage
+            // 1. === 基础视觉与身份属性 (所有 Sim 都有) ===
+            sim.action = data.action;
+            sim.bubble = data.bubble;
+            sim.mood = data.mood;
+            sim.appearance = data.appearance;
+            sim.name = data.name;
+            sim.surname = data.surname;
+            sim.familyId = data.familyId;
+            sim.gender = data.gender;
+            sim.ageStage = data.ageStage;
+            sim.age = data.age;
+            sim.health = data.health;
+            sim.homeId = data.homeId;
+            sim.isPregnant = data.isPregnant;
+
+            // 职业数据处理 (可能是简略版 {title}，也可能是完整版)
+            // 使用合并更新，保留本地 Job 对象的默认结构
+            if (data.job) {
+                sim.job = { ...sim.job, ...data.job };
+            }
+
+            // 2. === 详细属性 (只有被选中时 Worker 才会发送) ===
+            // ⚠️ 必须检查是否存在，否则会将未选中状态下的旧数据覆盖为 undefined
+
+            // 核心需求 & Buffs
+            if (data.needs) sim.needs = data.needs;
+            if (data.buffs) sim.buffs = data.buffs;
+
+            // 经济系统
+            if (data.money !== undefined) {
+                sim.money = data.money;
+                sim.dailyBudget = data.dailyBudget;
+                sim.dailyIncome = data.dailyIncome;
+                sim.dailyExpense = data.dailyExpense;
+                sim.dailyTransactions = data.dailyTransactions;
+            }
+
+            // AI 决策大脑 (显示在 Inspector 的 Header 或调试区)
+            if (data.currentIntent) {
+                sim.currentIntent = data.currentIntent;
+                sim.actionQueue = data.actionQueue;
+                sim.lastDecisionReason = data.lastDecisionReason;
+                sim.currentPlanDescription = data.currentPlanDescription;
+                sim.interactionTarget = data.interactionTarget;
+            }
+
+            // 技能与特质
+            if (data.skills) sim.skills = data.skills;
+            if (data.traits) sim.traits = data.traits;
+            if (data.lifeGoal) sim.lifeGoal = data.lifeGoal;
+            if (data.zodiac) sim.zodiac = data.zodiac;
+            if (data.mbti) sim.mbti = data.mbti;
+            
+            // 身体数值 (用于体检报告或详细信息)
+            if (data.height !== undefined) {
+                sim.height = data.height;
+                sim.weight = data.weight;
+                sim.appearanceScore = data.appearanceScore;
+                sim.constitution = data.constitution;
+                sim.iq = data.iq;
+                sim.eq = data.eq;
+            }
+
+            // 详细色值 (用于外观编辑或显示)
+            if (data.skinColor) {
+                sim.skinColor = data.skinColor;
+                sim.hairColor = data.hairColor;
+                sim.clothesColor = data.clothesColor;
+                sim.pantsColor = data.pantsColor;
+            }
+
+            // 社交关系与家族
+            if (data.relationships) {
+                sim.relationships = data.relationships;
+                sim.partnerId = data.partnerId;
+                sim.fatherId = data.fatherId;
+                sim.motherId = data.motherId;
+                sim.childrenIds = data.childrenIds;
+                sim.familyLore = data.familyLore;
+                sim.faithfulness = data.faithfulness;
+            }
+
+            // 记忆系统
+            if (data.memories) sim.memories = data.memories;
+            
+            // 工作表现 (如果有)
+            if (data.workPerformance !== undefined) sim.workPerformance = data.workPerformance;
+
+            // C. 🚨🚨🚨 [核心修改] 接收 SAB 索引 🚨🚨🚨
+            // data.sabIndex 是 Worker 告诉我们的“座位号”
+            if (data.sabIndex !== undefined && data.sabIndex !== -1) {
                 
-                // 确保 SAB 索引正确 (防止重连或重新分配)
-                if (data.sabIndex !== -1 && (sim as any)._sabIndex !== data.sabIndex) {
+                // 1. 只有当 这个小人还没有被连线，或者座位号变了 时，才执行注入
+                // 我们用一个隐藏属性 _sabIndex 来记录当前连接的座位号
+                // (sim as any) 是为了绕过 TS 检查访问这个临时属性
+                if ((sim as any)._sabIndex !== data.sabIndex) {
+                    
+                    // 记录到全局 Map，供渲染层快速查询
+                    this.simIndexMap.set(data.id, data.sabIndex);
+                    
+                    // 🔥 执行连线：把 sim.pos 变成一个“传送门”，直接读共享内存
                     this.injectSabGetters(sim, data.sabIndex);
+                    
+                    // 记录一下“我已经连好线了”，防止下一帧重复执行消耗性能
+                    (sim as any)._sabIndex = data.sabIndex;
+                    
+                    // console.log(`🔗 Linked ${sim.name} to SAB index ${data.sabIndex}`);
                 }
             }
         });
 
-        // 4. 通知 React 组件重新渲染
+        // 3. 通知 UI 更新
         this.notify();
     }
 

@@ -30,7 +30,7 @@ export const gameLoopStep = (dt: number = 1) => {
         // 🟢 [修改] 增加移动速度倍率
         // 这里的 1.5 表示市民移动速度是原来的 1.5 倍
         // 你可以根据手感调整为 2.0 或更高
-        const moveSpeedMultiplier = 1.5;
+        const moveSpeedMultiplier = 2;
 
         // 这里调用 Sim.update -> State.update -> IdleState -> DecisionLogic
         s.update(safeDt * GameStore.time.speed* moveSpeedMultiplier, false);
