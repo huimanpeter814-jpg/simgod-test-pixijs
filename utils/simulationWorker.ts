@@ -2,6 +2,7 @@
 import { GameStore } from './GameStore';
 import { gameLoopStep } from './GameLoop';
 import { Sim } from './Sim';
+import { SAB_CONFIG, ACTION_CODE } from '../constants'; // 引入配置
 
 // 标记我们在 Worker 环境中，避免 GameStore 尝试创建 Worker
 // @ts-ignore
@@ -22,20 +23,52 @@ const TICK_RATE = 1000 / TARGET_FPS;
 const startLoop = () => {
     if (loopInterval) clearInterval(loopInterval);
     loopInterval = setInterval(() => {
-        // 执行一帧逻辑
-        gameLoopStep(1); // dt = 1 (或者基于时间差计算)
+        // 1. 执行逻辑计算 (保持不变)
+        gameLoopStep(1); 
 
-        // 将核心数据同步回主线程用于渲染
-        // 为了性能，我们只发送渲染和UI需要的数据
+        // 2. 🚀 [新增] 将数据写入共享内存 (Zero Copy Sync)
+        // 只有当内存初始化后才执行
+        if (GameStore.sharedView) {
+            GameStore.sims.forEach(s => {
+                // 确保该 Sim 分配了内存位置
+                // (Worker 是逻辑源头，所以由 Worker 负责调用 allocSabIndex)
+                const index = GameStore.allocSabIndex(s.id);
+                
+                if (index !== -1) {
+                    const base = index * SAB_CONFIG.STRUCT_SIZE;
+                    const view = GameStore.sharedView;
+
+                    // 写入各项数据
+                    view[base + SAB_CONFIG.OFFSET_X] = s.pos.x;
+                    view[base + SAB_CONFIG.OFFSET_Y] = s.pos.y;
+                    
+                    // 将字符串动作转换为数字 ID (如果在 ACTION_CODE 里没找到，就默认为 0/idle)
+                    // 注意：你需要确保 s.action 是字符串，或者根据你的逻辑调整
+                    const actionKey = s.action as string; 
+                    view[base + SAB_CONFIG.OFFSET_ACTION] = ACTION_CODE[actionKey as keyof typeof ACTION_CODE] || 0;
+                    
+                    // 示例：写入朝向 (简单判断：如果目标在右边则为 1，左边为 0)
+                    // view[base + SAB_CONFIG.OFFSET_DIR] = (s.target && s.target.x > s.pos.x) ? 1 : 0;
+                }
+            });
+        }
+
+        // 3. 发送消息回主线程
+        // ⚠️ 关键优化：既然位置已经通过 SAB 同步了，payload 里就不需要发那么详细的数据了
+        // 但为了保持兼容性，同时也为了让主线程知道 "哪个 ID 对应 哪个 SAB Index"，
+        // 我们需要在 payload 里带上 index 信息。
+        
         const syncData = {
             type: 'SYNC',
             payload: {
+                // 简化版 Sims 列表 (不再包含 x, y 等高频数据，只发元数据)
                 sims: GameStore.sims.map(s => ({
-                    // 序列化 Sim 对象，保留渲染所需属性
                     id: s.id,
+                    // 必须把分配的 index 告诉主线程！
+                    sabIndex: GameStore.simIndexMap.get(s.id) ?? -1, 
+                    
+                    // 下面这些属性是 UI 展示需要的，依然需要发送 (除非你也把它们放入 SAB)
                     name: s.name,
-                    pos: s.pos,
-                    action: s.action,
                     ageStage: s.ageStage,
                     appearance: s.appearance,
                     skinColor: s.skinColor,
@@ -43,28 +76,12 @@ const startLoop = () => {
                     clothesColor: s.clothesColor,
                     pantsColor: s.pantsColor,
                     mood: s.mood,
-                    health: s.health,
-                    bubble: s.bubble,
-                    carryingSimId: s.carryingSimId,
-                    carriedBySimId: s.carriedBySimId,
-                    // 其他 UI 可能需要的属性...
-                    job: s.job,
-                    money: s.money,
-                    needs: s.needs,
-                    relationships: s.relationships,
-                    memories: s.memories, // 注意：如果记忆太多可能会卡，可考虑截断
-                    familyId: s.familyId,
-                    surname: s.surname,
-                    partnerId: s.partnerId,
-                    childrenIds: s.childrenIds,
-                    traits: s.traits,
-                    isPregnant: s.isPregnant,
-                    isTemporary: s.isTemporary,
-                    homeId: s.homeId,
-                    workplaceId: s.workplaceId
+                    bubble: s.bubble, // 气泡是稀疏数据，适合 postMessage
+                    action: s.action, // UI 显示文字用
+                    // ... 其他 UI 属性保持不变 ...
                 })),
                 time: GameStore.time,
-                logs: GameStore.logs // 同步日志
+                logs: GameStore.logs
             }
         };
         
@@ -82,6 +99,11 @@ self.onmessage = (e: MessageEvent) => {
     const { type, payload } = e.data;
 
     switch (type) {
+        case 'INIT_SAB':
+            // 接收主线程发来的共享内存，并初始化 Worker 端的 GameStore
+            GameStore.initSharedMemory(payload.buffer);
+            console.log("[Worker] Shared Memory Linked Successfully");
+            break;
         case 'INIT':
             // 接收初始地图数据
             if (payload.worldLayout) GameStore.worldLayout = payload.worldLayout;
@@ -145,6 +167,21 @@ self.onmessage = (e: MessageEvent) => {
             GameStore.loadSims(data.sims);
             GameStore.initIndex();
             GameStore.refreshFurnitureOwnership();
+            break;
+
+        // ✅ [新增] 处理开始新游戏 (生成默认地图和人口)
+        case 'START_NEW_GAME':
+            console.log("[Worker] Starting New Game...");
+            GameStore.rebuildWorld(true); // 加载默认地图
+            
+            // 生成初始人口 (和以前 initGame 的逻辑一样)
+            GameStore.spawnSingle();
+            GameStore.spawnSingle();
+            GameStore.spawnFamily();
+            GameStore.spawnFamily();
+            
+            // 记录日志
+            GameStore.addLog(null, `新世界已生成！当前人口: ${GameStore.sims.length}`, "sys");
             break;
             
         case 'REMOVE_SIM':

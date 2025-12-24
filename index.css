@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 这里可以把原来 index.html 里 style 标签下的自定义样式也搬过来 */
+html, body, #root {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background-color: #121212;
+            user-select: none;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #666;
+            }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }

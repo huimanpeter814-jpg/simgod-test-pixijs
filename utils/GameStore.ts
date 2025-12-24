@@ -1,4 +1,4 @@
-import { JOBS, CONFIG, ASSET_CONFIG } from '../constants'; 
+import { JOBS, CONFIG, ASSET_CONFIG, SAB_CONFIG, SAB_BYTE_LENGTH } from '../constants'; // <--- 加上 SAB_CONFIG, SAB_BYTE_LENGTH
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
 import { LogEntry, GameTime, Furniture, RoomDef, HousingUnit, WorldPlot, SimAction, AgeStage, EditorAction, EditorState } from '../types';
@@ -14,6 +14,121 @@ import { SocialLogic } from './logic/social';
 
 export class GameStore {
     static sims: Sim[] = [];
+    // === 🚀 零拷贝内存管理 (新增) ===
+    static sharedBuffer: SharedArrayBuffer;
+    static sharedView: Float32Array;
+    
+    // 映射表：Sim.id -> 内存索引 (0 ~ MAX_SIMS-1)
+    static simIndexMap: Map<string, number> = new Map();
+    // 回收池：存放空闲的索引
+    static availableIndices: number[] = [];
+
+    // 修改后：支持传入 buffer (Worker 用)
+    static initSharedMemory(existingBuffer?: SharedArrayBuffer) {
+        if (!existingBuffer && !self.crossOriginIsolated) {
+            console.error("❌ 无法使用 SharedArrayBuffer: 页面未处于跨域隔离环境。");
+            return;
+        }
+
+        if (existingBuffer) {
+            // Worker 模式：使用接收到的内存
+            console.log("[GameStore] Linking to Shared Memory (Worker Mode)...");
+            this.sharedBuffer = existingBuffer;
+        } else {
+            // 主线程模式：新建内存
+            console.log(`[GameStore] Allocating Shared Memory: ${SAB_BYTE_LENGTH} bytes...`);
+            this.sharedBuffer = new SharedArrayBuffer(SAB_BYTE_LENGTH);
+        }
+
+        this.sharedView = new Float32Array(this.sharedBuffer);
+        
+        // 重置回收池 (两端逻辑一致)
+        this.availableIndices = [];
+        for (let i = SAB_CONFIG.MAX_SIMS - 1; i >= 0; i--) {
+            this.availableIndices.push(i);
+        }
+        this.simIndexMap.clear();
+    }
+
+    // 为 Sim 分配一个内存位置
+    static allocSabIndex(simId: string): number {
+        // 如果已经有位置了，直接返回
+        if (this.simIndexMap.has(simId)) {
+            return this.simIndexMap.get(simId)!;
+        }
+
+        // 从回收池拿一个空位
+        const index = this.availableIndices.pop();
+        if (index === undefined) {
+            console.warn(`⚠️ 共享内存已满 (${SAB_CONFIG.MAX_SIMS} 人)，无法分配新位置！`);
+            return -1;
+        }
+
+        this.simIndexMap.set(simId, index);
+        return index;
+    }
+
+    // 回收 Sim 的内存位置 (当 Sim 离开或死亡时)
+    static freeSabIndex(simId: string) {
+        const index = this.simIndexMap.get(simId);
+        if (index !== undefined) {
+            // 1. 清空该位置的数据 (防止幽灵数据)
+            const start = index * SAB_CONFIG.STRUCT_SIZE;
+            const end = start + SAB_CONFIG.STRUCT_SIZE;
+            this.sharedView.fill(0, start, end);
+
+            // 2. 从映射表移除
+            this.simIndexMap.delete(simId);
+            
+            // 3. 归还到回收池
+            this.availableIndices.push(index);
+        }
+    }
+
+    // 1. [新增] 持有 Worker 引用，用于发送指令
+    static worker: Worker | null = null;
+
+    // 2. [新增] 统一修改速度的方法 (UI 应该调用这个，而不是直接改属性)
+    static setGameSpeed(speed: number) {
+        // 修改本地显示用的数值
+        this.time.speed = speed;
+        
+        // 通知 Worker 同步修改
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SET_SPEED', payload: speed });
+            
+            // 如果速度 > 0，确保 Worker 循环是启动状态
+            if (speed > 0) {
+                this.worker.postMessage({ type: 'START' });
+            }
+        }
+    }
+
+    // 3. [新增] 暂停/继续的快捷方法
+    static togglePause(isPaused: boolean) {
+        if (this.worker) {
+            if (isPaused) {
+                this.worker.postMessage({ type: 'PAUSE' });
+            } else {
+                this.worker.postMessage({ type: 'START' });
+            }
+        }
+    }
+    // 🚀 [新增] 请求 Worker 生成单人
+    static sendSpawnSingle() {
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SPAWN_SINGLE' });
+            this.addLog(null, "已请求生成新居民...", "sys");
+        }
+    }
+
+    // 🚀 [新增] 请求 Worker 生成家庭
+    static sendSpawnFamily(size?: number) {
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SPAWN_FAMILY', payload: { size } });
+            this.addLog(null, "已请求生成新家庭...", "sys");
+        }
+    }
     static particles: { x: number; y: number; life: number }[] = [];
     
     static time: GameTime = { totalDays: 1, year: 1, month: 1, hour: 8, minute: 0, speed: 2 };
@@ -68,6 +183,8 @@ export class GameStore {
 
     static removeSim(id: string) {
         this.sims = this.sims.filter(s => s.id !== id);
+        // ✅ [新增] 回收索引
+        this.freeSabIndex(id);
         // [新增] 清理所有人的社交记忆，防止坏死引用
         this.sims.forEach(s => {
             if (s.relationships[id]) {
@@ -664,6 +781,8 @@ export class GameStore {
             }
 
             sim.restoreState();
+            // ✅ [新增] 恢复索引
+            this.allocSabIndex(sim.id);
 
             return sim;
         });
@@ -690,6 +809,8 @@ export class GameStore {
         const sim = new Sim(config);
         
         this.sims.push(sim);
+        // ✅ [新增] 立即分配共享内存索引
+        this.allocSabIndex(sim.id);
         this.assignRandomHome(sim); 
         
         this.addLog(null, `[入住] 新居民 ${sim.name} (自定义) 搬入了城市。`, "sys");

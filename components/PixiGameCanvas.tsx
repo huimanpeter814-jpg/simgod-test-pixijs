@@ -7,7 +7,10 @@ import { GameStore } from '../utils/GameStore';
 import { PixiSimView } from '../utils/render/PixiSimView';
 import { PixiWorldBuilder } from '../utils/render/PixiWorldBuilder';
 import { gameLoopStep } from '../utils/GameLoop';
-import { PLOTS } from '../data/plots'; // 需要导入
+import { PLOTS } from '../data/plots'; 
+import { SAB_CONFIG } from '../constants'; 
+import { SaveManager } from '../managers/SaveManager'; 
+import { Sim } from '../utils/Sim'; // ✅ 新增这一行
 
 // 全局设置：像素风格缩放 (防止图片模糊)
 TextureStyle.defaultOptions.scaleMode = 'nearest';
@@ -110,26 +113,110 @@ const PixiGameCanvasComponent: React.FC = () => {
     // === Web Worker 驱动逻辑 ===
     useEffect(() => {
         
-        const workerCode = `
-            let lastTime = Date.now();
-            setInterval(() => {
-                const now = Date.now();
-                const dt = (now - lastTime) / 16.66;
-                lastTime = now;
-                self.postMessage(dt);
-            }, 16);
-        `;
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        const worker = new Worker(URL.createObjectURL(blob));
+        const worker = new Worker(new URL('../utils/simulationWorker.ts', import.meta.url), { type: 'module' });
+
+        // 🚀 [新增] 将 Worker 实例挂载到 GameStore，供 UI 调用
+        GameStore.worker = worker;
+        // ✅ 初始化共享内存 (如果还没初始化过)
+        if (!GameStore.sharedBuffer) {
+            GameStore.initSharedMemory();
+        }
+
+        // ✅ 发送内存给 Worker (握手)
+        worker.postMessage({ 
+            type: 'INIT_SAB', 
+            payload: { buffer: GameStore.sharedBuffer } 
+        });
+
+        // 🚀 [修改] 智能启动逻辑：由主线程读取存档，发送给 Worker
+        const saveData = SaveManager.loadFromSlot(1);
+        if (saveData) {
+            console.log("📂 Found save data, sending to worker...");
+            worker.postMessage({ 
+                type: 'LOAD_GAME', 
+                payload: saveData 
+            });
+        } else {
+            console.log("✨ No save found, starting new game...");
+            worker.postMessage({ type: 'START_NEW_GAME' });
+        }
+        // ✅ 启动循环
+        worker.postMessage({ type: 'START' });
 
         worker.onmessage = (e) => {
-            const dt = e.data;
-            if (GameStore.editor.mode === 'none') {
-                gameLoopStep(dt);
-            }
+                const { type, payload } = e.data;
+                
+                if (type === 'SYNC') {
+                    // [同步逻辑]
+                    // Worker 现在只发送非高频数据 (时间、日志、Sim列表元数据)
+                    GameStore.time = payload.time;
+                    
+                    // 处理日志 (防止日志跳变，可选优化)
+                    if (payload.logs && payload.logs.length > GameStore.logs.length) {
+                        GameStore.logs = payload.logs;
+                    }
+
+                    // 同步 Sim 列表 (处理出生/死亡)
+                    // 注意：因为位置数据已经在 SAB 里了，这里主要同步 id, action, bubble 等 UI 状态
+                    const serverSims = payload.sims;
+                    const serverIds = new Set(serverSims.map((s: any) => s.id));
+                    
+                    // 2. 同步：新增 或 更新
+                    serverSims.forEach((sData: any) => {
+                        let sim = GameStore.sims.find(s => s.id === sData.id);
+                        
+                        if (!sim) {
+                            // 创建新实例
+                            sim = new Sim({ ...sData, pos: { x: 0, y: 0 } });
+                            
+                            // 🚨🚨🚨 [核心修复] 强制覆盖 ID 🚨🚨🚨
+                            // 防止 Sim 构造函数自动生成新 ID，导致和 Server ID 不一致而被误删
+                            sim.id = sData.id; 
+                            
+                            GameStore.sims.push(sim);
+                            // 建议把这个 log 注释掉，否则正常运行后也会刷屏（因为这里是创建时触发）
+                            // console.log(`[Client] Synced new sim: ${sim.name}`);
+                        }
+
+                        if (sim) {
+                            sim.action = sData.action;
+                            sim.bubble = sData.bubble;
+                            sim.mood = sData.mood;
+                            sim.appearance = sData.appearance;
+                            
+                            // 更新索引
+                            if (sData.sabIndex !== undefined && sData.sabIndex !== -1) {
+                                GameStore.simIndexMap.set(sData.id, sData.sabIndex);
+                            }
+                        }
+                    });
+
+                    // 3. 清理：移除本地有但服务器没有的 Sim (防止幽灵)
+                    for (let i = GameStore.sims.length - 1; i >= 0; i--) {
+                        const localSim = GameStore.sims[i];
+                        if (!serverIds.has(localSim.id)) {
+                            // 销毁对应的 Pixi 视图
+                            const view = simViewsRef.current.get(localSim.id);
+                            if (view) {
+                                view.destroy();
+                                simViewsRef.current.delete(localSim.id);
+                            }
+                            // 从列表移除
+                            GameStore.sims.splice(i, 1);
+                            GameStore.simIndexMap.delete(localSim.id); // 清理索引
+                        }
+                    }
+
+                    // 通知 UI 更新
+                    GameStore.notify();
+                }
         };
 
-        return () => worker.terminate();
+        return () => {
+            // 🧹 [新增] 清理引用
+            GameStore.worker = null;
+            worker.terminate();
+        };
     }, []);
 
     // === B. 初始化 & 循环 ===
@@ -223,6 +310,28 @@ const PixiGameCanvasComponent: React.FC = () => {
             app.ticker.add(() => {
                 // 1. 绘制编辑器 UI (选中框、Ghost、手柄)
                 editorGraphics.clear();
+                // 🚀 [核心修改] 从 SharedArrayBuffer 读取位置
+                if (GameStore.sharedView) {
+                    GameStore.sims.forEach(sim => {
+                        // 1. 获取该 Sim 的内存座位号
+                        const index = GameStore.simIndexMap.get(sim.id);
+                        
+                        // 2. 如果有座位，直接从内存读数据
+                        if (index !== undefined) {
+                            const base = index * SAB_CONFIG.STRUCT_SIZE;
+                            
+                            const x = GameStore.sharedView[base + SAB_CONFIG.OFFSET_X];
+                            const y = GameStore.sharedView[base + SAB_CONFIG.OFFSET_Y];
+                            // const actionCode = GameStore.sharedView[base + SAB_CONFIG.OFFSET_ACTION]; 
+
+                            // 3. 只有当坐标有效时才更新 (防止刚分配还没写入时的 (0,0) 闪烁)
+                            if (x !== 0 || y !== 0) {
+                                sim.pos.x = x;
+                                sim.pos.y = y;
+                            }
+                        }
+                    });
+                }
                 if (GameStore.editor.mode !== 'none') {
                     // 绘制网格 (可选，稍微影响性能)
                     // editorGraphics.strokeStyle = { width: 1, color: 0xffffff, alpha: 0.1 };
