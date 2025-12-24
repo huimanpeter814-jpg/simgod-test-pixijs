@@ -189,6 +189,7 @@ export class GameStore {
         this.initIndex(); 
         this.refreshFurnitureOwnership(); 
         this.notify(); 
+        this.sendUpdateMap();
     }
 
     static showToast(msg: string) {
@@ -1089,11 +1090,31 @@ export class GameStore {
             sim.health = data.health;
             sim.homeId = data.homeId;
             sim.isPregnant = data.isPregnant;
-
+            if (data.hairColor) sim.hairColor = data.hairColor;
+            if (data.skinColor) sim.skinColor = data.skinColor;
+            if (data.clothesColor) sim.clothesColor = data.clothesColor;
+            if (data.pantsColor) sim.pantsColor = data.pantsColor;
+            if (data.traits) sim.traits = data.traits;
+            if (data.mbti) sim.mbti = data.mbti;
+            
             // 职业数据处理 (可能是简略版 {title}，也可能是完整版)
             // 使用合并更新，保留本地 Job 对象的默认结构
-            if (data.job) {
-                sim.job = { ...sim.job, ...data.job };
+            if (data.job && data.job.id) {
+            // 如果本地的职业 ID 和服务器发来的不一样（说明本地随机错了）
+                if (sim.job.id !== data.job.id) {
+                    // 从常量表里找到正确的职业配置（获取 salary, workHours 等静态数据）
+                    const jobDef = JOBS.find(j => j.id === data.job.id);
+                    if (jobDef) {
+                        // 使用正确的定义覆盖，并合并服务器传来的动态数据（如 title 可能被升职修改过）
+                        sim.job = { ...jobDef, ...data.job };
+                    } else {
+                        // 兜底
+                        sim.job = { ...sim.job, ...data.job };
+                    }
+                } else {
+                    // ID 一样，正常更新属性（比如 title 变了）
+                    sim.job = { ...sim.job, ...data.job };
+                }
             }
 
             // 2. === 详细属性 (只有被选中时 Worker 才会发送) ===

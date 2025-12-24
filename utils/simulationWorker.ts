@@ -78,8 +78,21 @@ const startLoop = () => {
                         action: s.action, // UI文字显示
                         bubble: s.bubble,
                         homeId: s.homeId, 
-                        job: { title: s.job?.title }, // 简略职业信息
+                        job: { id: s.job?.id, title: s.job?.title },
                         isPregnant: s.isPregnant,
+                        skinColor: s.skinColor,
+                        hairColor: s.hairColor,
+                        clothesColor: s.clothesColor,
+                        pantsColor: s.pantsColor,
+                        traits: s.traits,
+                        mbti: s.mbti,
+                        money: s.money,   
+                        height: s.height, 
+                        weight: s.weight, 
+                        partnerId: s.partnerId,    // 修复“已婚变单身”
+                        lifeGoal: s.lifeGoal,      // 修复目标显示
+                        orientation: s.orientation,// 修复性取向显示
+                        buffs: s.buffs.map(b => ({ id: b.id, type: b.type })),
                     };
 
                    

@@ -320,28 +320,8 @@ const PixiGameCanvasComponent: React.FC = () => {
             app.ticker.add(() => {
                 // 1. 绘制编辑器 UI (选中框、Ghost、手柄)
                 editorGraphics.clear();
-                // 🚀 [核心修改] 从 SharedArrayBuffer 读取位置
-                if (GameStore.sharedView) {
-                    GameStore.sims.forEach(sim => {
-                        // 1. 获取该 Sim 的内存座位号
-                        const index = GameStore.simIndexMap.get(sim.id);
-                        
-                        // 2. 如果有座位，直接从内存读数据
-                        if (index !== undefined) {
-                            const base = index * SAB_CONFIG.STRUCT_SIZE;
-                            
-                            const x = GameStore.sharedView[base + SAB_CONFIG.OFFSET_X];
-                            const y = GameStore.sharedView[base + SAB_CONFIG.OFFSET_Y];
-                            // const actionCode = GameStore.sharedView[base + SAB_CONFIG.OFFSET_ACTION]; 
-
-                            // 3. 只有当坐标有效时才更新 (防止刚分配还没写入时的 (0,0) 闪烁)
-                            if (x !== 0 || y !== 0) {
-                                sim.pos.x = x;
-                                sim.pos.y = y;
-                            }
-                        }
-                    });
-                }
+                
+                
                 if (GameStore.editor.mode !== 'none') {
                     // 绘制网格 (可选，稍微影响性能)
                     // editorGraphics.strokeStyle = { width: 1, color: 0xffffff, alpha: 0.1 };
