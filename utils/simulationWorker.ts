@@ -4,6 +4,24 @@ import { gameLoopStep } from './GameLoop';
 import { Sim } from './Sim';
 import { SAB_CONFIG, ACTION_CODE } from '../constants'; // 引入配置
 
+// 1. 🟢 [新增] 全局变量：记录上一次自动存档是第几天
+// 初始化为 1 (或 GameStore.time.totalDays)，防止刚开始游戏就存一次
+let lastAutoSaveDay = 1;
+
+// 2. 🟢 [新增] 辅助函数：收集全量存档数据 (避免 SAVE_GAME 和 自动存档 写两遍一样的代码)
+const collectSaveData = () => {
+    return {
+        version: 3.2,
+        timestamp: Date.now(),
+        time: GameStore.time,
+        logs: GameStore.logs,
+        sims: GameStore.sims,
+        worldLayout: GameStore.worldLayout,
+        rooms: GameStore.rooms,
+        furniture: GameStore.furniture
+    };
+};
+
 // 标记我们在 Worker 环境中，避免 GameStore 尝试创建 Worker
 // @ts-ignore
 self.isWorker = true;
@@ -29,6 +47,24 @@ const startLoop = () => {
     loopInterval = setInterval(() => {
         // 1. 执行逻辑计算 (保持不变)
         gameLoopStep(1); 
+
+        // 3. 🟢 [新增] 每日 0 点自动存档检测
+        // 逻辑：如果当前总天数 > 上次存档天数，说明刚刚跨过了午夜 0:00
+        if (GameStore.time.totalDays > lastAutoSaveDay) {
+            lastAutoSaveDay = GameStore.time.totalDays;
+            
+            // 构造数据
+            const saveData = collectSaveData();
+            
+            // 发送给主线程进行保存 (默认覆盖 Slot 1)
+            self.postMessage({ 
+                type: 'SAVE_DATA_READY', 
+                payload: { slot: 1, data: saveData } 
+            });
+            
+            // 往日志里写一条，让玩家知道存档了
+            GameStore.addLog(null, "🌙 夜深了，系统已自动保存进度。", "sys");
+        }
 
         // 2. 🚀 [新增] 将数据写入共享内存 (Zero Copy Sync)
         // 只有当内存初始化后才执行
@@ -99,7 +135,7 @@ const startLoop = () => {
                         partnerId: s.partnerId,    // 修复“已婚变单身”
                         lifeGoal: s.lifeGoal,      // 修复目标显示
                         orientation: s.orientation,// 修复性取向显示
-                        buffs: s.buffs.map(b => ({ id: b.id, type: b.type })),
+                        buffs: s.buffs.map(b => ({ id: b.id, type: b.type, label: b.label })),
                     };
 
                    
@@ -253,6 +289,9 @@ self.onmessage = (e: MessageEvent) => {
             GameStore.loadSims(data.sims);
             GameStore.initIndex();
             GameStore.refreshFurnitureOwnership();
+            // 4. 🟢 [新增] 读档后，更新 lastAutoSaveDay
+            // 否则如果读档是第 10 天，lastAutoSaveDay 还是 1，会立即触发一次不必要的存档
+            lastAutoSaveDay = GameStore.time.totalDays;
             // 🔥 [新增] 加载完后，把地图数据发回给主线程！
             self.postMessage({
                 type: 'INIT_MAP', // 使用专用类型
@@ -266,19 +305,12 @@ self.onmessage = (e: MessageEvent) => {
             break;
 
         case 'SAVE_GAME':
-             const slot = payload.slot;
+            const slot = payload.slot;
              // 收集全量数据
-             const saveData = {
-                 version: 3.2,
-                 timestamp: Date.now(),
-                 time: GameStore.time,
-                 logs: GameStore.logs,
-                 sims: GameStore.sims, // Worker 里的 sims 是全量的，包含所有细节！
-                 worldLayout: GameStore.worldLayout,
-                 rooms: GameStore.rooms,
-                 furniture: GameStore.furniture
-             };
+            // 5. 🟢 [优化] 使用上面的辅助函数
+             const saveData = collectSaveData();
              // 发回给主线程保存
+             
              self.postMessage({ type: 'SAVE_DATA_READY', payload: { slot, data: saveData } });
              break;
 
@@ -292,6 +324,8 @@ self.onmessage = (e: MessageEvent) => {
             GameStore.spawnSingle();
             GameStore.spawnFamily();
             GameStore.spawnFamily();
+            // 6. 🟢 [新增] 新游戏重置计数器
+            lastAutoSaveDay = GameStore.time.totalDays; // 通常是 1
             
             // 记录日志
             GameStore.addLog(null, `新世界已生成！当前人口: ${GameStore.sims.length}`, "sys");

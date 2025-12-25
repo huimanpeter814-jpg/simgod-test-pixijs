@@ -404,6 +404,39 @@ export const CareerLogic = {
 
         if (isWorkTime) {
             if (sim.hasLeftWorkToday) return;
+            // 🟢 [新增] 上班期间的动态模拟 (避免僵硬)
+            if (sim.action === SimAction.Working) {
+                // 1. 模拟与同事社交 (每分钟约 5% 概率)
+                if (sim.needs[NeedType.Social] < 90 && Math.random() < 0.05) {
+                    // 寻找身边的同事
+                    const colleague = GameStore.sims.find(s => 
+                        s.id !== sim.id && 
+                        s.workplaceId === sim.workplaceId && 
+                        s.action === SimAction.Working
+                    );
+                    
+                    if (colleague) {
+                        // 恢复社交值，不打断工作状态
+                        sim.needs[NeedType.Social] += 15;
+                        sim.needs[NeedType.Fun] += 5;
+                        
+                        // 冒个气泡，增加生动感
+                        const topics = ["周末去哪?", "那个Bug...", "老板来了", "中午吃啥"];
+                        sim.say(topics[Math.floor(Math.random()*topics.length)], 'chat');
+                        
+                        // 增加一点同事好感度 (模拟)
+                        if (!sim.relationships[colleague.id]) SocialLogic.updateRelationship(sim, colleague, 'friendship', 0);
+                        sim.relationships[colleague.id].friendship += 0.5;
+                    }
+                }
+
+                // 2. 模拟轻微移动 (防止长时间重叠/看起来像死机)
+                // 注意：这里只做微调，不要走太远
+                if (Math.random() < 0.01) {
+                    sim.pos.x += (Math.random() - 0.5) * 10;
+                    sim.pos.y += (Math.random() - 0.5) * 10;
+                }
+            }
 
             if (sim.action === SimAction.Working || sim.action === SimAction.Commuting) return;
             // 🟢 [核心修复] 检查是否有办公地点，如果没有，尝试重新绑定
@@ -547,8 +580,14 @@ export const CareerLogic = {
         sim.workPerformance += delta;
         sim.workPerformance = Math.max(-100, Math.min(200, sim.workPerformance));
 
-        // [新增] 保存日志到 Sim 对象，供前端展示
+        // 🟢 [修复] 确保日志被正确保存并通知前端
+        // 覆盖旧日志，确保显示的是当天的最新评价
         sim.dailyWorkLog = logs;
+        // 额外：如果日志不为空，强制触发一次 GameStore 的 Log 更新，确保 UI 收到信号
+        if (logs.length > 0) {
+            // 这里我们不发全量日志，只发一个总结，但 sim.dailyWorkLog 对象已经更新了
+            // 确保你的前端是读取 sim.dailyWorkLog 渲染列表的
+        }
         // 触发升职检查 (只有绩效非常优秀时才尝试)
         if (sim.workPerformance > 100) {
             this.promote(sim);

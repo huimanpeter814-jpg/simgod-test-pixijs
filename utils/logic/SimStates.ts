@@ -792,17 +792,62 @@ export class InteractionState extends BaseState {
         const obj = sim.interactionTarget;
         const f = 0.0008 * dt;
         const getRate = (mins: number) => (100 / (mins * 60)) * dt;
+        // 1. 衰减逻辑 (保持不变)
         const excludeDecay: NeedType[] = [];
         if (this.actionName === SimAction.Sleeping) excludeDecay.push(NeedType.Energy);
         if (this.actionName === SimAction.Eating) excludeDecay.push(NeedType.Hunger);
         if (this.actionName === SimAction.Talking) excludeDecay.push(NeedType.Social);
         this.decayNeeds(sim, dt, excludeDecay);
-        if (this.actionName === SimAction.Talking) { sim.needs[NeedType.Social] += getRate(RESTORE_TIMES[NeedType.Social]); }
+
+        // 2. 恢复逻辑
+        if (this.actionName === SimAction.Talking) { 
+            sim.needs[NeedType.Social] += getRate(RESTORE_TIMES[NeedType.Social]); 
+        }
         else if (obj) {
             let handler = INTERACTIONS[obj.utility];
-            if (!handler) { const prefixKey = Object.keys(INTERACTIONS).find(k => k.endsWith('_') && obj.utility && obj.utility.startsWith(k)); if (prefixKey) handler = INTERACTIONS[prefixKey]; }
-            if (!handler) handler = INTERACTIONS['default'];
-            if (handler && handler.onUpdate) { handler.onUpdate(sim, obj, f, getRate); }
+            
+            // 模糊匹配逻辑 (保持不变)
+            if (!handler) { 
+                const prefixKey = Object.keys(INTERACTIONS).find(k => k.endsWith('_') && obj.utility && obj.utility.startsWith(k)); 
+                if (prefixKey) handler = INTERACTIONS[prefixKey]; 
+            }
+            
+            // 如果找到了特定的 handler 且它有 onUpdate，就用它的
+            if (handler && handler.onUpdate) { 
+                handler.onUpdate(sim, obj, f, getRate); 
+            } 
+            // 🔴 [修复] 否则，尝试通用映射恢复
+            else {
+                // 尝试将 utility 映射为 NeedType (处理别名)
+                let targetNeed: NeedType | null = null;
+                const u = obj.utility;
+                
+                if (u === 'toilet' || u === 'wc') targetNeed = NeedType.Bladder;
+                else if (u === 'shower' || u === 'bath') targetNeed = NeedType.Hygiene;
+                else if (u === 'fridge' || u === 'stove') targetNeed = NeedType.Hunger;
+                else if (u === 'bed' || u === 'sofa') targetNeed = NeedType.Energy;
+                else if (u === 'tv' || u === 'computer' || u === 'bookshelf') targetNeed = NeedType.Fun;
+                // 如果 utility 本身就是标准 NeedType (如 'hunger', 'energy')
+                else if (Object.values(NeedType).includes(u as NeedType)) targetNeed = u as NeedType;
+
+                if (targetNeed) {
+                    const t = RESTORE_TIMES[targetNeed] || RESTORE_TIMES.default;
+                    if (sim.needs[targetNeed] !== undefined) {
+                        sim.needs[targetNeed] += getRate(t);
+                    }
+                    
+                    // 额外处理：洗澡/睡觉通常会完全补满舒适度
+                    if (targetNeed === NeedType.Energy || targetNeed === NeedType.Hygiene) {
+                         sim.needs[NeedType.Comfort] = 100;
+                    }
+                } else {
+                    // 如果实在匹配不到，使用 'default' handler 的逻辑 (作为最后的兜底)
+                     const defaultHandler = INTERACTIONS['default'];
+                     if (defaultHandler && defaultHandler.onUpdate) {
+                         defaultHandler.onUpdate(sim, obj, f, getRate);
+                     }
+                }
+            }
         }
         sim.actionTimer -= dt;
         if (sim.actionTimer <= 0) { sim.finishAction(); }

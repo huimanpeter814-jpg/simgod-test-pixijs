@@ -4,6 +4,16 @@ import { GameStore } from '../../../../utils/simulation';
 import { SimAction, NeedType, SimIntent } from '../../../../types';
 import { RelBar } from '../Shared';
 
+// 1. 在组件外部或内部定义一个辅助函数，用于格式化时间
+const formatDuration = (mins: number) => {
+    if (mins >= 60) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return m > 0 ? `${h}小时 ${m}分` : `${h}小时`;
+    }
+    return `${mins}分钟`;
+};
+
 // 状态映射表
 const STATUS_MAP: Record<string, string> = {
     [SimAction.Idle]: '发呆', 
@@ -157,16 +167,57 @@ export const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                 </div>
             </div>
 
-            {/* Buffs */}
+            {/* Buffs 区块 */}
             <div>
                 <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">状态 (Buffs)</div>
                 {sim.buffs.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                         {sim.buffs.map(b => (
-                            <span key={b.id} className={`text-[10px] px-2 py-1 rounded border ${b.type === 'good' ? 'bg-success/10 border-success/30 text-success' : 'bg-danger/10 border-danger/30 text-danger'}`}>{b.label}</span>
+                            // 使用 group 类来控制 hover 状态
+                            <div key={b.id} className="relative group">
+                                {/* Buff 标签主体 */}
+                                <div className={`
+                                    cursor-help text-[10px] px-2 py-1 rounded border transition-all duration-200
+                                    ${b.type === 'good' 
+                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
+                                        : b.type === 'bad' 
+                                            ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+                                            : 'bg-slate-500/10 border-slate-500/30 text-slate-400 hover:bg-slate-500/20'
+                                    }
+                                `}>
+                                    {b.label}
+                                </div>
+
+                                {/* 🟢 [新增] 悬浮 Tooltip */}
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max hidden group-hover:block z-50 pointer-events-none">
+                                    <div className="bg-gray-900/95 backdrop-blur-sm text-gray-200 text-[10px] rounded px-3 py-2 shadow-xl border border-white/10 flex flex-col gap-1 min-w-[100px]">
+                                        {/* Tooltip 标题 */}
+                                        <div className={`font-bold border-b border-white/10 pb-1 mb-0.5 ${
+                                            b.type === 'good' ? 'text-emerald-400' : b.type === 'bad' ? 'text-rose-400' : 'text-slate-300'
+                                        }`}>
+                                            {b.label}
+                                        </div>
+                                        
+                                        {/* 详细信息 */}
+                                        <div className="flex justify-between gap-4 text-[9px] text-gray-400">
+                                            <span>来源:</span>
+                                            <span className="text-gray-200">{b.source || '未知'}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-4 text-[9px] text-gray-400">
+                                            <span>持续:</span>
+                                            <span className="text-gray-200 font-mono">{formatDuration(b.duration)}</span>
+                                        </div>
+
+                                        {/* 底部小箭头装饰 */}
+                                        <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-gray-900/95"></div>
+                                    </div>
+                                </div>
+                            </div>
                         ))}
                     </div>
-                ) : <span className="text-[10px] text-gray-600 italic">无特殊状态</span>}
+                ) : (
+                    <span className="text-[10px] text-gray-600 italic">无特殊状态</span>
+                )}
             </div>
 
             {/* 人际关系 */}

@@ -157,11 +157,38 @@ export const SchoolLogic = {
 
         if (inKindergarten) {
             if (isDaycareTime) {
-                // 上学时间：维持在校状态，补充需求
-                if (sim.action === SimAction.Idle) sim.changeState(new SchoolingState());
-                if (sim.needs.social < 80) sim.needs.social += 0.5;
-                if (sim.needs.fun < 80) sim.needs.fun += 0.5;
-                if (sim.needs.hunger < 50) sim.needs.hunger = 90; 
+                // 🟢 [重构] 幼儿园内部行为逻辑
+                // 不再强制锁定 SchoolingState，而是允许互动
+                
+                // 1. 自动补满严重缺乏的需求 (幼儿园福利)
+                if (sim.needs.hunger < 30) {
+                    // 尝试呼叫老师喂食 (依赖 decision.ts 的广播)
+                    if (DecisionLogic.triggerHungerBroadcast(sim)) return;
+                    // 如果老师没空，自动补一点防止饿死
+                    sim.needs.hunger += 10; 
+                }
+
+                // 2. 只有在空闲时才决定下一步
+                if (sim.action === SimAction.Idle || sim.action === SimAction.Schooling) {
+                    if (sim.needs.fun < 60) {
+                        // 找玩具玩 (限制在当前地块)
+                        // 我们可以借用 DecisionLogic，但强制 limitToCurrentPlot
+                        // 这里简单实现：
+                        sim.say("玩玩具! 🧸", 'fun');
+                        sim.needs.fun += 5;
+                        sim.changeState(new SchoolingState()); // 暂时用 SchoolingState 模拟玩耍，你可以换成 Playing
+                    } else if (sim.needs.social < 60) {
+                        sim.say("找小朋友玩~", 'chat');
+                        sim.needs.social += 5;
+                        sim.changeState(new SchoolingState());
+                    } else {
+                        // 没事做就乖乖上课/睡觉
+                        if (sim.action !== SimAction.Schooling) sim.changeState(new SchoolingState());
+                    }
+                }
+                
+                // 保持一些基础恢复
+                if (sim.needs.social < 90) sim.needs.social += 0.05;
             } else {
                 // 放学时间：如果在校但没被接，叫家长来接 (Pick-up)
                 if (sim.action !== SimAction.BeingEscorted && sim.action !== SimAction.Waiting) {
