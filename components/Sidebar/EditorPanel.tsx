@@ -187,18 +187,6 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         GameStore.notify();
     };
 
-    const handleEnterBuildMode = () => {
-        if (selectedPlotId) {
-            // 调用上一轮我们在 EditorManager 加的方法
-            // @ts-ignore
-            if (GameStore.editor.enterBuildMode) {
-                // @ts-ignore
-                GameStore.editor.enterBuildMode(selectedPlotId);
-            } else {
-                console.error("EditorManager.enterBuildMode method missing!");
-            }
-        }
-    };
 
     const handleExitBuildMode = () => {
         // @ts-ignore

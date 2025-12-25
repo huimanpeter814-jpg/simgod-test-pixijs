@@ -10,6 +10,7 @@ import { PLOTS } from '../data/plots';
 import { SAB_CONFIG } from '../constants'; 
 import { SaveManager } from '../managers/SaveManager'; 
 import { Sim } from '../utils/Sim'; // ✅ 新增这一行
+import { Furniture } from '../types';
 
 // 全局设置：像素风格缩放 (防止图片模糊)
 TextureStyle.defaultOptions.scaleMode = 'nearest';
@@ -382,9 +383,10 @@ const PixiGameCanvasComponent: React.FC = () => {
                     let ghost: Container | null = null;
                     
                     // 1. 获取要渲染的物体数据
-                    let targetFurniture = GameStore.editor.placingFurniture;
+                    let targetFurniture: Partial<Furniture> | null = GameStore.editor.placingFurniture;
                     if (!targetFurniture && GameStore.editor.selectedFurnitureId) {
-                         targetFurniture = GameStore.furniture.find(f => f.id === GameStore.editor.selectedFurnitureId);
+                         const found = GameStore.furniture.find(f => f.id === GameStore.editor.selectedFurnitureId);
+                         targetFurniture = found || null; 
                     }
 
                     if (targetFurniture) {
@@ -417,7 +419,7 @@ const PixiGameCanvasComponent: React.FC = () => {
                     }
                 }
                 
-                if (GameStore.editor.mode !== 'none') {
+                if ((GameStore.editor.mode as string) !== 'none') {
                     // 绘制网格 (可选，稍微影响性能)
                     // editorGraphics.strokeStyle = { width: 1, color: 0xffffff, alpha: 0.1 };
                     // ... grid loop
@@ -598,9 +600,8 @@ const PixiGameCanvasComponent: React.FC = () => {
         // A. 右键 (button 2) -> 始终允许拖拽
         // B. Space 键 + 左键 -> 始终允许拖拽
         // C. [修复] 普通模式(mode='none') -> 允许左键直接拖拽 (恢复原习惯)
-        const isNormalMode = GameStore.editor.mode === 'none';
+        const isNormalMode = (GameStore.editor.mode as string) === 'none';
         const isCameraAction = e.button === 2 || (e.button === 0 && (isSpacePressed.current || isNormalMode));
-
         if (isCameraAction) {
             isDraggingCamera.current = true;
             if (containerRef.current) containerRef.current.style.cursor = 'grabbing';
@@ -671,7 +672,7 @@ const PixiGameCanvasComponent: React.FC = () => {
             }
 
             // --- C. 选择模式 (Select Mode) - 仅在非放置模式下触发 ---
-            if (GameStore.editor.mode !== 'none') {
+            if ((GameStore.editor.mode as string) !== 'none') {
                 
                 // ==========================
                 // 1. 检测 Resize Handle (调整大小手柄)
