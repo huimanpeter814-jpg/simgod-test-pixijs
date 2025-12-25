@@ -346,42 +346,70 @@ const PixiGameCanvasComponent: React.FC = () => {
                 } else {
                     spotlightGraphics.clear();
                 }
-                // === 2. 网格绘制 ===
+                // === 2. 网格绘制 (修复：增加全局网格绘制) ===
                 if (gridLayerRef.current) {
-                    if (activeId) drawActivePlotGrid(gridLayerRef.current, worldContainer.scale.x);
-                    else gridLayerRef.current.clear();
+                    const activeId = GameStore.editor.activePlotId;
+                    if (activeId) {
+                        drawActivePlotGrid(gridLayerRef.current, worldContainer.scale.x);
+                    } else if (GameStore.editor.mode === 'plot') {
+                        // ✅ 新增：在世界编辑模式下绘制全局网格
+                        drawGrid(gridLayerRef.current, CONFIG.CANVAS_W, CONFIG.CANVAS_H, worldContainer.scale.x);
+                    } else {
+                        gridLayerRef.current.clear();
+                    }
                 }
 
-                // === 3. 拖拽预览 (Ghost) ===
+                // === 3. 拖拽预览 (Ghost) (修复：支持已有物体的拖拽预览) ===
                 while (previewLayer.children.length > 0) previewLayer.children[0].destroy();
-                if (GameStore.editor.previewPos && (isDraggingObject.current || isStickyDragging.current || GameStore.editor.placingFurniture)) {
+
+                // 只要处于拖拽状态，或者有放置模板，就显示 Ghost
+                if (GameStore.editor.previewPos && (isDraggingObject.current || isStickyDragging.current || GameStore.editor.placingFurniture || GameStore.editor.placingTemplateId)) {
                     const { x, y } = GameStore.editor.previewPos;
                     let ghost: Container | null = null;
-                    // 1. 放置/拖拽家具
-                    let targetFurniture: Partial<Furniture> | null = GameStore.editor.placingFurniture;
-                    if (!targetFurniture && GameStore.editor.selectedFurnitureId) {
-                        targetFurniture = GameStore.furniture.find(f => f.id === GameStore.editor.selectedFurnitureId) || null; 
+                    
+                    // Case A: 正在放置新家具
+                    if (GameStore.editor.placingFurniture) {
+                         ghost = PixiWorldBuilder.createFurniture({ ...GameStore.editor.placingFurniture, x: 0, y: 0, id: 'ghost' } as any);
                     }
-                    if (targetFurniture) {
-                        ghost = PixiWorldBuilder.createFurniture({ ...targetFurniture, x: 0, y: 0, id: 'ghost' } as any);
+                    // Case B: 正在移动已有家具 (新增)
+                    else if (GameStore.editor.selectedFurnitureId && GameStore.editor.mode === 'furniture') {
+                         const original = GameStore.furniture.find(f => f.id === GameStore.editor.selectedFurnitureId);
+                         if (original) ghost = PixiWorldBuilder.createFurniture({ ...original, x: 0, y: 0, id: 'ghost' });
                     }
-                
-                    // 2. 放置地皮
+                    // Case C: 正在放置新地皮
                     else if (GameStore.editor.placingTemplateId) {
                         const tpl = PLOTS[GameStore.editor.placingTemplateId];
                         const w = tpl ? tpl.width : 300;
                         const h = tpl ? tpl.height : 300;
                         const g = new Graphics();
-                        g.rect(0, 0, w, h).stroke({ width: 2, color: 0xffffff });
+                        g.rect(0, 0, w, h).stroke({ width: 2, color: 0xffffff }); // 绘制白色边框
+                        g.rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.1 }); // 填充淡白色
                         ghost = new Container();
                         ghost.addChild(g);
+                    }
+                    // Case D: 正在移动已有地皮 (新增)
+                    else if (GameStore.editor.selectedPlotId && GameStore.editor.mode === 'plot') {
+                        const p = GameStore.worldLayout.find(x => x.id === GameStore.editor.selectedPlotId);
+                        if (p) {
+                            const w = p.width || 300;
+                            const h = p.height || 300;
+                            const g = new Graphics();
+                            g.rect(0, 0, w, h).stroke({ width: 2, color: 0x00ffff }); // 选中时用青色
+                            g.rect(0, 0, w, h).fill({ color: 0x00ffff, alpha: 0.1 });
+                            ghost = new Container();
+                            ghost.addChild(g);
+                        }
                     }
                     if (ghost) {
                         ghost.x = x; 
                         ghost.y = y; 
-                        ghost.alpha = 0.7; // 稍微透明
-                        const tint = GameStore.editor.isValidPlacement ? 0x00ff00 : 0xff0000; // 合法绿，非法红
-                        ghost.children.forEach(c => { if ((c as any).tint !== undefined) (c as any).tint = tint; });
+                        ghost.alpha = 0.6; // 半透明
+                        const tint = GameStore.editor.isValidPlacement ? 0x00ff00 : 0xff0000;
+                        // 尝试给子对象染色
+                        ghost.children.forEach(c => { 
+                            if ((c as any).tint !== undefined) (c as any).tint = tint; 
+                            // Graphics 染色比较麻烦，这里简化处理，主要靠 alpha
+                        });
                         previewLayer.addChild(ghost);
                     }
                 }
@@ -464,8 +492,11 @@ const PixiGameCanvasComponent: React.FC = () => {
 
     const handleMouseDown = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
+        // 🛑 修复：更严格的 UI 穿透检测
+        // 如果点击的目标不是 canvas 所在的 div，也不是 canvas 本身，说明点击了覆盖在上面的 UI
+        // 只有当 pointer-events: none 的时候，UI 下方的点击才会透传给 div，此时 e.target 可能是 div
+        // 如果 e.target 是 UI 按钮元素，说明 UI 拦截了点击，我们应该忽略
         const isCanvas = target === containerRef.current || target.tagName === 'CANVAS';
-        
         if (!isCanvas) {
             // 点击了 UI，直接忽略，不执行任何 Canvas 选中/取消选中逻辑
             return;
@@ -588,17 +619,21 @@ const PixiGameCanvasComponent: React.FC = () => {
                 // 选中了物体
                 if (hitType === 'plot') GameStore.editor.selectedPlotId = hitObj.id;
                 else if (hitType === 'furniture') GameStore.editor.selectedFurnitureId = hitObj.id;
-                // 开启拖拽
+                else if (hitType === 'floor') GameStore.editor.selectedRoomId = hitObj.id;
+
+                // 开启普通拖拽 (按住不放)
                 GameStore.editor.isDragging = true;
                 isDraggingObject.current = true;
                 GameStore.editor.dragOffset = { x: worldX - hitObj.x, y: worldY - hitObj.y };
-                GameStore.editor.previewPos = { x: hitObj.x, y: hitObj.y };
-                // 强制更新一次 Ghost 位置
+                GameStore.editor.previewPos = { x: hitObj.x, y: hitObj.y }; // 立即更新 Ghost 位置
                 GameStore.editor.updatePreviewPos(worldX, worldY);
             } else {
-                GameStore.editor.selectedPlotId = null;
-                GameStore.editor.selectedFurnitureId = null;
-                GameStore.editor.selectedRoomId = null;
+                // 点击空白处取消选中
+                if (!activeResizeHandle.current) {
+                    GameStore.editor.selectedPlotId = null;
+                    GameStore.editor.selectedFurnitureId = null;
+                    GameStore.editor.selectedRoomId = null;
+                }
             }
             GameStore.notify();
         }
@@ -707,18 +742,37 @@ const PixiGameCanvasComponent: React.FC = () => {
 
         // Sticky Drag Mode Logic
         if (GameStore.editor.mode !== 'none' && GameStore.editor.isDragging) {
-            if (isClick && !isStickyDragging.current && !GameStore.editor.placingTemplateId && !GameStore.editor.placingFurniture) {
-               isStickyDragging.current = true;
-               return;
-           }
+            // 如果是点击 (没有拖动距离)
+            if (isClick) {
+                // 1. 如果正在放置新物品 (模板/家具库)，点击一次后进入连续放置或吸附模式 (保持原样)
+                if (GameStore.editor.placingTemplateId || GameStore.editor.placingFurniture) {
+                     if (!isStickyDragging.current) {
+                         isStickyDragging.current = true;
+                         return;
+                     }
+                }
+                // 2. 🛑 如果是已存在的物体 (Selecting)，点击只负责选中，不应该进入 Sticky Drag
+                // 这样用户选中后，可以通过 UI 点击 "进入装修"，而不会被物体粘在鼠标上卡住
+                else {
+                    // 纯选中，结束拖拽状态
+                    GameStore.editor.isDragging = false;
+                    isDraggingObject.current = false;
+                    GameStore.editor.previewPos = null;
+                    refreshWorld();
+                    return; 
+                }
+            }
+            
+            // 如果是真正的拖拽后松开 (Drop)
             if (!isClick && !isStickyDragging.current) {
-                // 拖拽结束
                 GameStore.editor.isDragging = false;
-                const finalPos = GameStore.editor.previewPos || {x: 0, y: 0};
+                // 执行移动结算
                 if (GameStore.editor.mode === 'furniture' && GameStore.editor.selectedFurnitureId) {
                     GameStore.finalizeMove('furniture', GameStore.editor.selectedFurnitureId, dragStartPos.current);
                 } else if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId) {
                     GameStore.finalizeMove('plot', GameStore.editor.selectedPlotId, dragStartPos.current);
+                } else if (GameStore.editor.mode === 'floor' && GameStore.editor.selectedRoomId) {
+                    GameStore.finalizeMove('room', GameStore.editor.selectedRoomId, dragStartPos.current);
                 }
                 isDraggingObject.current = false;
                 refreshWorld();

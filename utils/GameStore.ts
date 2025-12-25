@@ -1088,7 +1088,13 @@ export class GameStore {
     // ✅ [新增] 处理 Worker 发来的同步数据
     static handleWorkerSync(payload: any) {
         // 1. 同步时间
-        this.time = payload.time;
+        // 🛑 修复：如果在编辑器模式下，强制保持本地的时间流速为 0，防止被 Worker 的同步数据覆盖导致时间继续流动
+        if (this.editor.mode !== 'none') {
+            const preservedSpeed = 0;
+            this.time = { ...payload.time, speed: preservedSpeed };
+        } else {
+            this.time = payload.time;
+        }
 
         // 2. 同步日志 (合并或替换)
         // 注意：为了避免日志跳动，可以只追加新的，或者直接替换 UI 展示用的数组
