@@ -882,6 +882,20 @@ export class NannyState extends BaseState {
     update(sim: Sim, dt: number) {
         this.workTimer += dt;
 
+        // 🟢 [修复] 防卡死检测：如果保姆位于 (0,0) 附近，强制瞬移到家庭或地图中心
+        if (sim.pos.x < 10 && sim.pos.y < 10) {
+            const home = sim.getHomeLocation();
+            if (home) {
+                sim.pos = { x: home.x, y: home.y };
+            } else {
+                // 如果找不到家，先瞬移到地图中间防止卡在左上角
+                sim.pos = { x: 1500, y: 1000 }; 
+            }
+            // 瞬移后重置状态，让她重新思考
+            sim.path = [];
+            sim.target = null;
+        }
+
         // [核心修复] 智能下班判断
         // 1. 如果家里有家长，且工作时间足够 -> 下班 (保留)
         const parentsHome = GameStore.sims.some(s => s.homeId === sim.homeId && !s.isTemporary && s.ageStage !== AgeStage.Infant && s.ageStage !== AgeStage.Toddler && s.isAtHome());
@@ -938,15 +952,22 @@ export class NannyState extends BaseState {
             }
         }
 
-        // 如果没事做，随机闲逛
+        // 🟢 [修复] 闲逛逻辑增强
         this.wanderTimer -= dt;
         if (this.wanderTimer <= 0) {
             this.wanderTimer = 300 + Math.random() * 300;
             const home = sim.getHomeLocation();
+            
             if (home) {
                 const tx = home.x + (Math.random() - 0.5) * 100;
                 const ty = home.y + (Math.random() - 0.5) * 100;
                 sim.target = { x: tx, y: ty };
+            } else {
+                // [兜底] 如果没有家 (getHomeLocation失败)，就原地附近随机走，不要去 (0,0)
+                sim.target = { 
+                    x: Math.max(100, sim.pos.x + (Math.random()-0.5)*200),
+                    y: Math.max(100, sim.pos.y + (Math.random()-0.5)*200)
+                };
             }
         }
         if (sim.target) sim.moveTowardsTarget(dt);
@@ -1015,10 +1036,6 @@ export class PickingUpState extends BaseState {
         if (distSq <= 3600 || arrived || isStuckButClose) {
             sim.say("抓到你了！", 'family');
             
-            // 绑定与状态切换逻辑 (保持原有逻辑)
-            child.carriedBySimId = sim.id;
-            child.changeState(new BeingEscortedState());
-            
             const kindergarten = GameStore.worldLayout.find(p => {
                 const tpl = PLOTS[p.templateId];
                 return tpl && tpl.type === 'kindergarten';
@@ -1049,11 +1066,16 @@ export class PickingUpState extends BaseState {
                 sim.say("去幼儿园~", "family");
             } else {
                 sim.say("没学校去...", "bad");
+                sim.carryingSimId = null; // 确保清除引用
                 sim.changeState(new IdleState());
                 return;
             }
 
-            sim.changeState(new EscortingState(targetPos));
+            if (targetPos) {
+                child.carriedBySimId = sim.id; // 正式绑定
+                child.changeState(new BeingEscortedState());
+                sim.changeState(new EscortingState(targetPos));
+            }
         }
     }
 }
@@ -1069,6 +1091,12 @@ export class EscortingState extends BaseState {
     }
 
     enter(sim: Sim) {
+        // [防御] 如果目的地是 (0,0)，说明上一步逻辑有误，强行纠正回 Idle
+        if (this.dest.x === 0 && this.dest.y === 0) {
+            console.warn("Escorting to (0,0) detected, aborting.");
+            sim.changeState(new IdleState());
+            return;
+        }
         sim.target = this.dest;
         sim.path = [];
     }

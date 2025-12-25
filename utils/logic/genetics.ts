@@ -256,23 +256,36 @@ export const FamilyGenerator = {
             console.log(`[Genetics] Generated Solo Sim: ${sim.name}`);
             return [sim];
         }
-        // [核心修复] 如果因为没有房子导致家庭无家可归 (homeId === null)
-        // 强制所有成员生成为成年人，防止出现“流浪的未成年人家庭”
+        // 🔴 [核心修复] 无家可归家庭的逻辑修复
+        // 原逻辑：生成一堆无关系的成年人。
+        // 新逻辑：依然生成成年人（避免婴儿流浪），但赋予他们兄弟姐妹或夫妻关系。
         if (!homeId) {
-            console.log("[Genetics] No home found, forcing all members to be adults to avoid homeless minors.");
+            console.log("[Genetics] No home found, generating a homeless family unit.");
             const moneyPerAdult = Math.floor(baseMoney / count);
+            const homelessMembers: Sim[] = [];
+            
             for (let i = 0; i < count; i++) {
                 let config = FamilyGenerator.generateSimConfig(
                     homeX + i * 20, homeY, familySurname, familyId, AgeStage.Adult, null, moneyPerAdult
                 );
                 config.familyLore = FamilyGenerator.generateFamilyLore(familySurname, wealthClass, 'Standard') + " 暂时无家可归，相依为命。";
-                members.push(new Sim(config));
+                
+                // 强制异性以便结婚 (前两个)
+                if (i === 1) config.gender = homelessMembers[0].gender === 'M' ? 'F' : 'M';
+                
+                homelessMembers.push(new Sim(config));
             }
-            // 简单绑定关系
-            if (count >= 2) SocialLogic.marry(members[0], members[1], true);
+
+            // 1. 前两个结婚
+            if (count >= 2) SocialLogic.marry(homelessMembers[0], homelessMembers[1], true);
             
-            // 直接返回，跳过后续的家庭类型生成
-            return members;
+            // 2. 剩下的人设定为户主(0号)的兄弟姐妹，避免成为路人
+            for (let i = 2; i < homelessMembers.length; i++) {
+                SocialLogic.setKinship(homelessMembers[0], homelessMembers[i], 'sibling');
+                SocialLogic.setKinship(homelessMembers[i], homelessMembers[0], 'sibling');
+            }
+            
+            return homelessMembers;
         }
         
         // 🆕 生成家庭背景故事
@@ -436,16 +449,31 @@ export const FamilyGenerator = {
             }
         }
 
-        // 处理兄弟姐妹关系 (所有同辈孩子之间)
+        // 🔴 [核心修复] 兄弟姐妹判定逻辑重写
+        // 原逻辑：只要是"某人的孩子"就互为兄弟，这导致父子（在三代同堂中）被误判为兄弟。
+        // 新逻辑：按“父母ID”分组，只有同父母的人才是兄弟姐妹。
+        
+        // 1. 收集所有未成年人/子女
         const children = members.filter(m => 
-            [AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen, AgeStage.Adult].includes(m.ageStage) &&
-            members.some(parent => parent.childrenIds.includes(m.id))
+            [AgeStage.Infant, AgeStage.Toddler, AgeStage.Child, AgeStage.Teen, AgeStage.Adult].includes(m.ageStage)
         );
 
         for (let i = 0; i < children.length; i++) {
             for (let j = i + 1; j < children.length; j++) {
-                SocialLogic.setKinship(children[i], children[j], 'sibling');
-                SocialLogic.setKinship(children[j], children[i], 'sibling');
+                const c1 = children[i];
+                const c2 = children[j];
+
+                // 检查是否共享至少一个父母
+                const c1Parents = [c1.fatherId, c1.motherId].filter(Boolean);
+                const c2Parents = [c2.fatherId, c2.motherId].filter(Boolean);
+                
+                if (c1Parents.length > 0 && c2Parents.length > 0) {
+                    const hasCommonParent = c1Parents.some(id => c2Parents.includes(id));
+                    if (hasCommonParent) {
+                        SocialLogic.setKinship(c1, c2, 'sibling');
+                        SocialLogic.setKinship(c2, c1, 'sibling');
+                    }
+                }
             }
         }
 

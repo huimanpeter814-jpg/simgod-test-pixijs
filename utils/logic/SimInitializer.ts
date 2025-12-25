@@ -59,7 +59,27 @@ export const SimInitializer = {
     initialize(sim: Sim, config: SimInitConfig) {
         sim.id = Math.random().toString(36).substring(2, 11);
         sim.familyId = config.familyId || sim.id;
-        sim.homeId = config.homeId || null;
+        // 🔴 [核心修改] 住所初始化与婴幼儿保护逻辑
+        if (config.homeId) {
+            sim.homeId = config.homeId;
+        } else {
+            sim.homeId = null;
+            // 🚨 严格规则：所有婴幼儿必须出生在有房子的家庭里
+            const stage = config.ageStage || AgeStage.Adult;
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(stage)) {
+                console.error(`🚨 [SimInitializer] 严重违规: 试图创建一个无家可归的婴幼儿 (${sim.id})！`);
+                
+                // [强制修正策略]
+                // 为了防止游戏崩溃或产生永远卡在(0,0)的Bug婴儿，强制将其“催熟”为儿童
+                // 儿童虽然也需要家，但至少有基本的行动能力，不会像婴儿一样瘫痪
+                config.ageStage = AgeStage.Child; 
+                sim.ageStage = AgeStage.Child;
+                
+                // 此时还没初始化名字，所以只能打Log
+                console.warn(` -> 已自动将该角色修正为 Child 阶段以避免逻辑死锁。`);
+            }
+        }
+
         sim.workplaceId = config.workplaceId; 
 
         sim.pos = {

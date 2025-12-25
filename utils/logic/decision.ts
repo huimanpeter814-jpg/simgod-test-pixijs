@@ -951,12 +951,22 @@ export const DecisionLogic = {
              }
              // 防止幼儿离家出走
              if (!sim.isAtHome() && sim.homeId && sim.action === SimAction.Idle) {
-                 // 简单的自动回家指令
-                 sim.setPlan(SimIntent.SURVIVE, [{
-                     type: 'WALK',
-                     targetPos: sim.getHomeLocation() || {x:0,y:0},
-                     desc: '回家'
-                 }]);
+                 const homeLoc = sim.getHomeLocation();
+                 // 🟢 [修复] 只有当成功获取到家的坐标时，才下达回家指令
+                 // 避免 getHomeLocation() 返回 null 时导致孩子走向 (0,0)
+                 if (homeLoc) {
+                     sim.setPlan(SimIntent.SURVIVE, [{
+                         type: 'WALK',
+                         targetPos: homeLoc,
+                         desc: '回家'
+                     }]);
+                     return; // 既然决定回家，就直接返回，不再执行后续思考
+                 } else {
+                     // 如果有 homeId 但找不到坐标 (说明房子可能被删了)，
+                     // 或者真的无家可归，就不要乱跑了，呆在原地发呆等待救援
+                     // 可以在这里加一个 WAIT 或者是求助气泡
+                     // sim.say("家呢...?", 'bad');
+                 }
              }
         }
 

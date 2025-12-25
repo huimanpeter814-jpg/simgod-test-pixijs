@@ -708,7 +708,14 @@ export const CareerLogic = {
             GameStore.addLog(sim, `早退结算工资 +$${actualPay}`, 'money');
         }
         sim.hasLeftWorkToday = true;
+        // 🟢 [修复] 必须手动更新 dailyWorkLog，否则前端无法显示当天的考评详情
+        if (!sim.dailyWorkLog) sim.dailyWorkLog = [];
         
+        // 清空旧日志还是追加？通常早退意味着当天工作的结束，我们可以追加一条惩罚记录
+        sim.dailyWorkLog.push({ 
+            factor: "早退行为", 
+            score: -15 
+        });
         sim.workPerformance -= 15;
         
         sim.target = null;

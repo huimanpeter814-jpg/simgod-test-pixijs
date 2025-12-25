@@ -10,7 +10,7 @@ export const NeedsLogic = {
         // 🆕 [需求] 如果是NPC或保姆，需求值不衰减
         if (sim.isNPC || sim.job.id === 'nanny') return;
 
-        const f = 0.0008 * dt; // 时间流逝系数
+        const f = 0.00015 * dt; // 时间流逝系数
 
         if (!exclude.includes(NeedType.Energy)) 
             sim.needs[NeedType.Energy] -= BASE_DECAY[NeedType.Energy] * sim.metabolism.energy * f;
@@ -103,7 +103,7 @@ export const NeedsLogic = {
             sim.health -= 0.05 * f * 10;
             
             // [修复] 增加濒死打断逻辑：如果正在扣血，且还在工作/上学/睡觉，强制停止！
-            if (sim.health < 90) { // 健康开始受损时
+            if (sim.health < 60) { // 健康开始受损时
                 // 定义需要被打断的长时状态
                 const longActions = ['working', 'sleeping', 'studying', 'school'];
                 // 简单的状态判断（你需要根据你的 SimAction 枚举调整）
