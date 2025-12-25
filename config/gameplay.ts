@@ -8,7 +8,7 @@ export const TIME_CONFIG = {
 
 // 画布与基础颜色配置
 export const CONFIG = {
-    CANVAS_W: 3200, 
+    CANVAS_W: 5862, 
     CANVAS_H: 2147, 
     COLORS: {
         skin: ['#fcece3', '#f0d3c3', '#e0bda5', '#bfa088', '#8f6e56'],

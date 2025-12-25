@@ -191,6 +191,11 @@ export interface EditorState {
   } | null;
 
   previewPos: { x: number, y: number } | null;
+
+  gridSize: number;       // 网格大小，默认 50 或 10
+  showGrid: boolean;      // 是否显示网格
+  isValidPlacement: boolean; // 当前预览位置是否合法（用于显示红/绿）
+  snapToGrid: boolean;    // 是否开启吸附
 }
 
 export interface EditorAction {

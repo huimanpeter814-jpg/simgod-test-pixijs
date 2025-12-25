@@ -6,6 +6,11 @@ export class EditorManager implements EditorState {
     mode: 'none' | 'plot' | 'furniture' | 'floor' = 'none';
     activeTool: 'camera' | 'select' = 'select';
 
+    gridSize: number = 50; 
+    showGrid: boolean = true;
+    snapToGrid: boolean = true;
+    isValidPlacement: boolean = true;
+
     selectedPlotId: string | null = null;
     selectedFurnitureId: string | null = null;
     selectedRoomId: string | null = null;
@@ -50,6 +55,39 @@ export class EditorManager implements EditorState {
         GameStore.refreshFurnitureOwnership();
         GameStore.sendUpdateMap();
         GameStore.notify();
+    }
+    // [新增] 删除当前选中的物体
+    deleteCurrentSelection() {
+        if (this.mode === 'furniture' && this.selectedFurnitureId) {
+            this.removeFurniture(this.selectedFurnitureId);
+            this.selectedFurnitureId = null;
+        } else if (this.mode === 'plot' && this.selectedPlotId) {
+            this.removePlot(this.selectedPlotId);
+            this.selectedPlotId = null;
+        } else if (this.mode === 'floor' && this.selectedRoomId) {
+            this.removeRoom(this.selectedRoomId);
+            this.selectedRoomId = null;
+        }
+        GameStore.notify();
+    }
+
+    // 1. 优化：检查放置位置是否合法 (简单的 AABB 碰撞检测)
+    checkPlacementValidity(x: number, y: number, w: number, h: number): boolean {
+        // 简单示例：如果是家具，不能和其他家具重叠
+        if (this.mode === 'furniture') {
+            const rect = { x, y, w, h };
+            // 排除自己（如果是移动模式）
+            const others = GameStore.furniture.filter(f => f.id !== this.selectedFurnitureId);
+            
+            for (const other of others) {
+                if (x < other.x + other.w && x + w > other.x &&
+                    y < other.y + other.h && y + h > other.y) {
+                    return false; // 重叠了
+                }
+            }
+        }
+        // 这里可以扩展更多逻辑，比如必须在地板上等
+        return true;
     }
 
     cancelChanges() {
@@ -246,9 +284,17 @@ export class EditorManager implements EditorState {
         GameStore.triggerMapUpdate();
     }
 
-    placeFurniture(x: number, y: number) {
+    // 2. 优化：放置家具逻辑，增加连续放置支持
+    placeFurniture(x: number, y: number, keepPlacing: boolean = false) {
         const tpl = this.placingFurniture;
         if (!tpl) return;
+        
+        // 检查合法性
+        if (!this.isValidPlacement) {
+            GameStore.showToast("❌ 这里不能放置物品");
+            return;
+        }
+
         const newItem = { 
             ...tpl, 
             id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`, 
@@ -261,9 +307,68 @@ export class EditorManager implements EditorState {
         GameStore.initIndex();
         GameStore.refreshFurnitureOwnership();
         
-        this.placingFurniture = null; this.isDragging = false; this.interactionState = 'idle';
-        this.selectedFurnitureId = newItem.id;
+        if (!keepPlacing) {
+            this.placingFurniture = null; 
+            this.isDragging = false; 
+            this.interactionState = 'idle';
+            this.selectedFurnitureId = newItem.id; // 选中刚放置的
+        } else {
+            // 连续放置模式：不清除 placingFurniture
+             GameStore.showToast("按住 Shift 可连续放置");
+        }
+
         GameStore.triggerMapUpdate();
+    }
+
+    // 3. 优化：更新预览位置（包含吸附和合法性检查）
+    updatePreviewPos(worldX: number, worldY: number) {
+        // 只要是在放置模式（有模板或有家具）或者正在拖拽，就计算预览位置
+        const isPlacing = this.placingFurniture || this.placingTemplateId;
+        
+        if (!this.isDragging && !isPlacing) return;
+
+        let w = 100, h = 100;
+        // 获取当前操作对象的尺寸
+        if (this.mode === 'furniture') {
+            const tpl = this.placingFurniture || GameStore.furniture.find(f => f.id === this.selectedFurnitureId);
+            if (tpl) { w = tpl.w ?? 100; h = tpl.h ?? 100; }
+        } else if (this.mode === 'plot') {
+             if (this.placingTemplateId) {
+                 const tpl = PLOTS[this.placingTemplateId];
+                 if (tpl) { w = tpl.width; h = tpl.height; }
+             } else if (this.selectedPlotId) {
+                 const p = GameStore.worldLayout.find(x => x.id === this.selectedPlotId);
+                 if (p) { w = p.width || 300; h = p.height || 300; }
+             }
+        }
+
+        // 计算吸附
+        let finalX = worldX;
+        let finalY = worldY;
+
+        // 如果是新放置（Placing），预览位置以鼠标为中心或左上角
+        // 这里假设 dragOffset 在 startPlacing 时已经设置好。
+        // 如果是悬停状态（isDragging=false），我们需要动态计算一个“虚拟”的 dragOffset，通常设为中心
+        let offsetX = this.dragOffset.x;
+        let offsetY = this.dragOffset.y;
+
+        if (!this.isDragging && isPlacing) {
+            offsetX = w / 2;
+            offsetY = h / 2;
+        }
+
+        if (this.snapToGrid) {
+            finalX = Math.round((worldX - offsetX) / this.gridSize) * this.gridSize;
+            finalY = Math.round((worldY - offsetY) / this.gridSize) * this.gridSize;
+        } else {
+            finalX = worldX - offsetX;
+            finalY = worldY - offsetY;
+        }
+
+        this.previewPos = { x: finalX, y: finalY };
+        
+        // 实时更新合法性状态
+        this.isValidPlacement = this.checkPlacementValidity(finalX, finalY, w, h);
     }
 
     createCustomRoom(rect: {x: number, y: number, w: number, h: number}, pattern: string, color: string, label: string, hasWall: boolean) {

@@ -668,7 +668,8 @@ export class GameStore {
     static startDrawingPlot(templateId: string) { this.editor.startDrawingPlot(templateId); }
     static startPlacingFurniture(template: Partial<Furniture>) { this.editor.startPlacingFurniture(template); }
     static startDrawingFloor(pattern: string, color: string, label: string, hasWall: boolean) { this.editor.startDrawingFloor(pattern, color, label, hasWall); }
-    
+    static deleteSelection() { this.editor.deleteCurrentSelection(); }
+
     static placePlot(x: number, y: number) { this.editor.placePlot(x, y); this.triggerMapUpdate(); }
     static createCustomPlot(rect: any, templateId: string) { this.editor.createCustomPlot(rect, templateId); this.triggerMapUpdate(); }
     static placeFurniture(x: number, y: number) { this.editor.placeFurniture(x, y); this.triggerMapUpdate(); }

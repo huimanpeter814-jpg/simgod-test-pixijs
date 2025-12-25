@@ -256,7 +256,6 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         <div className="flex flex-col gap-2 p-2 border-r border-white/10 bg-[#1e222e]">
             {/* 压缩工具栏按钮尺寸 w-8 h-8 (32px) */}
             <button onClick={() => handleToolChange('select')} className={`w-8 h-8 rounded flex items-center justify-center text-sm ${activeTool === 'select' ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`} title="选择 (V)">👆</button>
-            <button onClick={() => handleToolChange('camera')} className={`w-8 h-8 rounded flex items-center justify-center text-sm ${activeTool === 'camera' ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`} title="漫游 (H)">✋</button>
             <div className="h-px bg-white/10 my-0.5"></div>
             <button onClick={handleRotate} className="w-8 h-8 rounded flex items-center justify-center text-sm bg-white/5 text-gray-400 hover:text-warning hover:bg-white/10" title="旋转 (R)">🔄</button>
             <button onClick={handleDelete} className="w-8 h-8 rounded flex items-center justify-center text-sm bg-white/5 text-gray-400 hover:text-danger hover:bg-white/10" title="删除 (Del)">🗑️</button>
