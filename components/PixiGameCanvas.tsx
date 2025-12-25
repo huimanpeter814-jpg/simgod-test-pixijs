@@ -562,7 +562,13 @@ const PixiGameCanvasComponent: React.FC = () => {
 
         // 1. Camera Pan
         if (isDraggingCamera.current) {
-            if (Math.abs(dx) > 0 || Math.abs(dy) > 0) isCameraLocked.current = false;
+            // 如果拖动距离超过 1px，则视为有意拖动，取消当前选中
+            if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                if (GameStore.selectedSimId) {
+                    GameStore.selectedSimId = null;
+                    GameStore.notify();
+                }
+            }
             world.x += dx;
             world.y += dy;
             return;
@@ -616,44 +622,6 @@ const PixiGameCanvasComponent: React.FC = () => {
         }
     };
     
-    // 修正后的 MouseMove 逻辑，包含悬停检测
-    const onMouseMove = (e: React.MouseEvent) => {
-        const dx = e.clientX - lastMousePos.current.x;
-        const dy = e.clientY - lastMousePos.current.y;
-        
-        // 1. 镜头拖拽
-        if (isDraggingCamera.current && worldContainerRef.current) {
-            if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
-                if (GameStore.selectedSimId) {
-                    GameStore.selectedSimId = null;
-                    GameStore.notify();
-                }
-            }
-            worldContainerRef.current.x += dx;
-            worldContainerRef.current.y += dy;
-        }
-
-        // 2. ✨ 悬停检测 (Hover Check)
-        if (GameStore.editor.mode === 'none' && worldContainerRef.current && containerRef.current) {
-            const world = worldContainerRef.current;
-            const rect = containerRef.current.getBoundingClientRect();
-            // 将屏幕坐标转换为世界坐标
-            const worldX = (e.clientX - rect.left - world.x) / world.scale.x;
-            const worldY = (e.clientY - rect.top - world.y) / world.scale.y;
-
-            // 使用空间哈希网格查询碰撞
-            const hit = GameStore.worldGrid.queryHit(worldX, worldY);
-            if (hit && hit.type === 'furniture') {
-                hoveredTarget.current = hit.ref;
-                if(containerRef.current) containerRef.current.style.cursor = 'pointer';
-            } else {
-                hoveredTarget.current = null;
-                if(containerRef.current && !isDraggingCamera.current) containerRef.current.style.cursor = 'default';
-            }
-        }
-
-        lastMousePos.current = { x: e.clientX, y: e.clientY };
-    };
     
     const handleMouseUp = (e: React.MouseEvent) => {
         const dragDist = Math.sqrt(Math.pow(e.clientX - dragStartMousePos.current.x, 2) + Math.pow(e.clientY - dragStartMousePos.current.y, 2));

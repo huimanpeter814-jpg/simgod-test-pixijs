@@ -45,50 +45,7 @@ export const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
 
     return (
         <>
-            {/* 1. 资产状况 (保留并增强) */}
-            <div>
-                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">资产状况</div>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                    {/* ... (保留总资产和预算的显示代码) ... */}
-                    <div className="bg-white/5 p-2 rounded border border-white/5">
-                        <div className="text-[10px] text-gray-400">总资产</div>
-                        <div className="text-lg font-bold text-warning">${sim.money}</div>
-                    </div>
-                    <div className="bg-white/5 p-2 rounded border border-white/5">
-                        <div className="text-[10px] text-gray-400">今日预算</div>
-                        <div className="text-sm font-bold text-gray-300">${sim.dailyBudget || 0}</div>
-                    </div>
-                </div>
-
-                {/* 🟢 [新增] 收支明细列表 */}
-                <div className="bg-black/20 rounded border border-white/5 overflow-hidden">
-                    <div className="flex justify-between items-center px-2 py-1.5 bg-white/5 border-b border-white/5">
-                        <span className="text-[10px] text-gray-400">今日明细</span>
-                        <div className="flex gap-2 text-[9px]">
-                            <span className="text-success">In: ${sim.dailyIncome}</span>
-                            <span className="text-gray-600">|</span>
-                            <span className="text-danger">Out: ${sim.dailyExpense}</span>
-                        </div>
-                    </div>
-                    <div className="max-h-[120px] overflow-y-auto custom-scrollbar p-1">
-                        {sim.dailyTransactions && sim.dailyTransactions.length > 0 ? (
-                            sim.dailyTransactions.map((t, idx) => (
-                                <div key={idx} className="flex justify-between items-center text-[10px] py-1 px-1 border-b border-white/5 last:border-0 hover:bg-white/5">
-                                    <div className="flex gap-2">
-                                        <span className="font-mono text-gray-500">{t.time}</span>
-                                        <span className="text-gray-300">{t.reason}</span>
-                                    </div>
-                                    <span className={`font-mono font-bold ${t.type === 'income' ? 'text-success' : 'text-danger'}`}>
-                                        {t.type === 'income' ? '+' : '-'}${t.amount}
-                                    </span>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="text-[10px] text-gray-600 text-center py-4 italic">今日暂无收支</div>
-                        )}
-                    </div>
-                </div>
-            </div>
+            
 
             {/* 当前状态 */}
             <div>

@@ -98,6 +98,8 @@ export class Sim {
     job!: Job; 
     dailyIncome: number = 0; // 确保有默认值
     dailyExpense: number = 0; // 确保有默认值
+    // [新增] 每日工作绩效详情
+    dailyWorkLog: { factor: string, score: number }[] = [];
     
     // 🟢 [新增] 今日收支明细数组
     dailyTransactions: { time: string, amount: number, reason: string, type: 'income' | 'expense' }[] = [];
@@ -225,43 +227,43 @@ export class Sim {
         this.prevPos.x = this.pos.x;
         this.prevPos.y = this.pos.y;
         
-        // 每分钟更新逻辑 (低频)
-        // if (minuteChanged) {
-        //     SchoolLogic.checkKindergarten(this); 
-        //     NeedsLogic.updateBuffs(this, 1); 
-        //     NeedsLogic.updateMood(this); 
-        //     NeedsLogic.checkHealth(this, dt);
+        //每分钟更新逻辑 (低频)
+        if (minuteChanged) {
+            SchoolLogic.checkKindergarten(this); 
+            NeedsLogic.updateBuffs(this, 1); 
+            NeedsLogic.updateMood(this); 
+            NeedsLogic.checkHealth(this, dt);
             
-        //     LifeCycleLogic.checkDeath(this, dt); 
-        //     this.checkSchedule();
+            LifeCycleLogic.checkDeath(this, dt); 
+            this.checkSchedule();
             
-        //     // 怀孕逻辑
-        //     if (this.isPregnant) { 
-        //         this.pregnancyTimer -= 1; 
-        //         if (this.pregnancyTimer <= 0) this.giveBirth(); 
-        //         else if (this.pregnancyTimer % 60 === 0 && Math.random() > 0.8) this.say("宝宝踢我了...", 'act'); 
-        //     }
+            // 怀孕逻辑
+            if (this.isPregnant) { 
+                this.pregnancyTimer -= 1; 
+                if (this.pregnancyTimer <= 0) this.giveBirth(); 
+                else if (this.pregnancyTimer % 60 === 0 && Math.random() > 0.8) this.say("宝宝踢我了...", 'act'); 
+            }
             
-        //     // 零花钱
-        //     if (GameStore.time.hour === 6 && GameStore.time.minute === 0) { 
-        //         SchoolLogic.giveAllowance(this); 
-        //     }
+            // 零花钱
+            if (GameStore.time.hour === 6 && GameStore.time.minute === 0) { 
+                SchoolLogic.giveAllowance(this); 
+            }
             
-        //     // 负面状态检查
-        //     if (this.needs[NeedType.Social] < 20 && !this.hasBuff('lonely')) { this.addBuff(BUFFS.lonely); this.say("好孤独...", 'bad'); }
-        //     if (this.needs[NeedType.Fun] < 20 && !this.hasBuff('bored')) { this.addBuff(BUFFS.bored); this.say("无聊透顶...", 'bad'); }
-        //     if (this.needs[NeedType.Hygiene] < 20 && !this.hasBuff('smelly')) { this.addBuff(BUFFS.smelly); this.say("身上有味了...", 'bad'); }
+            // 负面状态检查
+            if (this.needs[NeedType.Social] < 20 && !this.hasBuff('lonely')) { this.addBuff(BUFFS.lonely); this.say("好孤独...", 'bad'); }
+            if (this.needs[NeedType.Fun] < 20 && !this.hasBuff('bored')) { this.addBuff(BUFFS.bored); this.say("无聊透顶...", 'bad'); }
+            if (this.needs[NeedType.Hygiene] < 20 && !this.hasBuff('smelly')) { this.addBuff(BUFFS.smelly); this.say("身上有味了...", 'bad'); }
             
-        //     // [保姆生成逻辑优化]
-        //     if (this.homeId && [AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage) && this.isAtHome() && !this.carriedBySimId && this.action !== SimAction.Waiting && this.action !== SimAction.BeingEscorted) {
-        //         const parentsHome = GameStore.sims.some(s => (s.id === this.motherId || s.id === this.fatherId) && s.homeId === this.homeId && s.isAtHome());
-        //         if (!parentsHome) { 
-        //             // 检查是否已经有保姆/NPC在服务
-        //             const hasNanny = GameStore.sims.some(s => s.homeId === this.homeId && (s.isTemporary || s.isNPC)); 
-        //             if (!hasNanny) GameStore.spawnNanny(this.homeId, 'home_care'); 
-        //         }
-        //     }
-        // }
+            // [保姆生成逻辑优化]
+            if (this.homeId && [AgeStage.Infant, AgeStage.Toddler].includes(this.ageStage) && this.isAtHome() && !this.carriedBySimId && this.action !== SimAction.Waiting && this.action !== SimAction.BeingEscorted) {
+                const parentsHome = GameStore.sims.some(s => (s.id === this.motherId || s.id === this.fatherId) && s.homeId === this.homeId && s.isAtHome());
+                if (!parentsHome) { 
+                    // 检查是否已经有保姆/NPC在服务
+                    const hasNanny = GameStore.sims.some(s => s.homeId === this.homeId && (s.isTemporary || s.isNPC)); 
+                    if (!hasNanny) GameStore.spawnNanny(this.homeId, 'home_care'); 
+                }
+            }
+        }
 
         // [修改] 移除婴幼儿自动跟随逻辑，响应用户需求 "婴幼儿取消跟随状态"
         /*

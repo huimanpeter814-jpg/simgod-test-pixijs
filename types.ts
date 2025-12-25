@@ -261,6 +261,11 @@ export interface Job {
   requiredTags?: string[]; 
 }
 
+export interface WorkLogItem {
+    factor: string; // 评分因素，如 "心情极佳"
+    score: number;  // 分值，如 +3
+}
+
 export interface Buff {
   id: string;
   label: string;
@@ -351,6 +356,8 @@ export interface SimData {
   dailyExpense: number;
   dailyIncome: number; 
   isSideHustle?: boolean;
+  // [新增] 每日工作表现详情 (记录上一天/当天的具体加减分项)
+  dailyWorkLog: WorkLogItem[];
   
   royalty?: { amount: number, daysLeft: number };
   hasFreshIngredients?: boolean;

@@ -7,6 +7,7 @@ import { InspectorFace } from './InspectorFace';
 import { StatusTab } from './tabs/StatusTab';
 import { FamilyTab } from './tabs/FamilyTab';
 import { AttrTab } from './tabs/AttrTab';
+import { CareerTab } from './tabs/CareerTab';
 
 interface InspectorProps {
     selectedId: string | null;
@@ -14,8 +15,7 @@ interface InspectorProps {
 }
 
 const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
-    const [tab, setTab] = useState<'status' | 'attr' | 'memories' | 'family'>('status');
-    
+    const [tab, setTab] = useState<'status' | 'attr' | 'memories' | 'family' | 'career'>('status');
     // 拖拽相关状态
     const panelRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ x: window.innerWidth - 360, y: 80 });
@@ -118,7 +118,13 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
 
             {/* Tabs */}
             <div className="flex border-b border-white/10 shrink-0" onMouseDown={(e) => e.stopPropagation()}>
-                {[{ id: 'status', label: '状态' }, { id: 'attr', label: '属性' }, { id: 'family', label: '族谱' }, { id: 'memories', label: `记忆 (${sim.memories.length})` }].map(t => (
+                {[
+                    { id: 'status', label: '状态' }, 
+                    { id: 'attr', label: '档案' }, // 改个名字更好听
+                    { id: 'career', label: '生涯' }, // 新增 Tab
+                    { id: 'family', label: '族谱' }, 
+                    { id: 'memories', label: `记忆 (${sim.memories.length})` }
+                ].map(t => (
                     <button key={t.id} onClick={() => setTab(t.id as any)} className={`flex-1 py-2 text-[10px] font-bold transition-colors uppercase ${tab === t.id ? 'bg-white/10 text-white border-b-2 border-accent' : 'text-gray-500 hover:text-gray-300'}`}>{t.label}</button>
                 ))}
             </div>
@@ -131,6 +137,7 @@ const Inspector: React.FC<InspectorProps> = ({ selectedId, sims }) => {
                 {tab === 'status' && <StatusTab sim={sim} />}
                 {tab === 'family' && <FamilyTab sim={sim} sims={sims} />}
                 {tab === 'attr' && <AttrTab sim={sim} />}
+                {tab === 'career' && <CareerTab sim={sim} />}
                 {tab === 'memories' && (
                     <div className="flex flex-col gap-2">
                         {sim.memories.length > 0 ? sim.memories.map(mem => (
