@@ -56,7 +56,7 @@ export const StatusTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                     </div>
                     <div className="bg-white/5 p-2 rounded border border-white/5">
                         <div className="text-[10px] text-gray-400">今日预算</div>
-                        <div className="text-sm font-bold text-gray-300">${sim.dailyBudget}</div>
+                        <div className="text-sm font-bold text-gray-300">${sim.dailyBudget || 0}</div>
                     </div>
                 </div>
 

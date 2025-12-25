@@ -379,9 +379,18 @@ export const CareerLogic = {
             return;
         }
 
+        // 🟢 [核心修复] 引入“生物钟偏差” (Personal Offset)
+        // 利用 sim.id 的哈希值生成一个 -15 到 +15 分钟的固定偏差
+        // 这样每个人的通勤时间点都是固定的，但人与人之间是错开的
+        const idSum = sim.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const minuteOffset = (idSum % 31) - 15; // -15 ~ +15 分钟
+        const hourOffset = minuteOffset / 60;
+
         const currentHour = GameStore.time.hour + GameStore.time.minute / 60;
-        const jobStart = sim.job.startHour;
-        const jobEnd = sim.job.endHour;
+        
+        // 应用偏差
+        const jobStart = sim.job.startHour + hourOffset; 
+        const jobEnd = sim.job.endHour + hourOffset;
 
         const preTimeHours = (sim.commutePreTime || 30) / 60;
         let commuteStart = jobStart - preTimeHours;

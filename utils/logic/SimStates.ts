@@ -69,14 +69,48 @@ export class TransitionState extends BaseState {
     }
 }
 
+// 🟢 [新增] 简单的闲逛状态 (如果还没有的话)
+export class WanderingState extends BaseState {
+    actionName = SimAction.Wandering;
+    duration = 0;
+    
+    enter(sim: Sim) {
+        this.duration = 100 + Math.random() * 200;
+        // 随机找个附近点
+        const dist = 50 + Math.random() * 100;
+        const angle = Math.random() * Math.PI * 2;
+        sim.target = {
+            x: Math.max(0, Math.min(GameStore.worldLayout[0]?.width || 2000, sim.pos.x + Math.cos(angle) * dist)),
+            y: Math.max(0, Math.min(GameStore.worldLayout[0]?.height || 2000, sim.pos.y + Math.sin(angle) * dist))
+        };
+        //sim.say("...", 'normal'); // 或者是哼着歌
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        const arrived = sim.moveTowardsTarget(dt);
+        this.duration -= dt;
+        if (arrived || this.duration <= 0) {
+            sim.changeState(new IdleState());
+        }
+    }
+}
+
 // --- 🟢 [核心修改] 空闲状态 ---
 export class IdleState extends BaseState {
     actionName = SimAction.Idle;
+    // 🟢 [新增] 记录连续失败次数
+    idleCycles = 0;
 
     enter(sim: Sim) {
         sim.target = null;
         sim.interactionTarget = null;
         sim.path = [];
+        // 🟢 [修复] 增加进入空闲时的随机延迟
+        // 之前这里没有设置 decisionTimer，导致如果上个状态结束时 timer 为 0，
+        // 所有 Sim 会在同一帧立刻触发 decideAction，导致“集体行动”。
+        // 现在给予 0~60 帧 (约0-1秒) 的随机偏差。
+        sim.decisionTimer = Math.random() * 60;
     }
 
     update(sim: Sim, dt: number) {
@@ -93,6 +127,8 @@ export class IdleState extends BaseState {
         if (sim.decisionTimer > 0) {
             sim.decisionTimer -= dt;
         } else {
+            // 记录当前状态是否改变
+            const oldAction = sim.action;
             // 3. 婴幼儿特殊保护逻辑
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
                 if (sim.isAtHome() || !sim.getHomeLocation()) {
@@ -109,13 +145,32 @@ export class IdleState extends BaseState {
                 // 4. 成年人/儿童：触发AI决策生成新意图
                 DecisionLogic.decideAction(sim);
             }
+            // 🟢 [核心修复] 防呆检测
+            // 如果决策完了，状态还是 Idle (说明没找到事做)，就增加计数
+            if (sim.action === SimAction.Idle) {
+                this.idleCycles++;
+                
+                // 如果连续 2 次都没找到事做，或者随机概率触发，强制去闲逛
+                // 这样市民就会动起来，而不是一直站桩
+                if (this.idleCycles > 1 || Math.random() < 0.3) {
+                    this.idleCycles = 0; // 重置
+                    sim.changeState(new WanderingState()); // 强制闲逛
+                    return;
+                }
+                
+                // 没找到事做，给个气泡反馈 (调试用，如果太频繁可以注释掉)
+                // if (Math.random() < 0.1) sim.say("无聊...", 'sys');
+                
+                // 稍微延长下一次思考时间，避免高频空转
+                sim.decisionTimer = 60 + Math.random() * 100;
+            } else {
+                    // 成功切换了状态 (比如去工作、去睡觉了)
+                    this.idleCycles = 0;
+                }
             
-            // 重置思考冷却 (1~2秒)
-            sim.decisionTimer = 60 + Math.random() * 60;
         }
     }
 }
-
 
 // --- 🟢 [核心修改] 等待状态 ---
 export class WaitingState extends BaseState {

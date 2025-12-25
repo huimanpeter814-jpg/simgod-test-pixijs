@@ -1,4 +1,4 @@
-import { JOBS, CONFIG, ASSET_CONFIG, SAB_CONFIG, SAB_BYTE_LENGTH } from '../constants'; // <--- 加上 SAB_CONFIG, SAB_BYTE_LENGTH
+import { JOBS, CONFIG, ASSET_CONFIG, SAB_CONFIG, SAB_BYTE_LENGTH, ACTION_CODE } from '../constants'; // <--- 加上 SAB_CONFIG, SAB_BYTE_LENGTH
 import { PLOTS } from '../data/plots'; 
 import { WORLD_LAYOUT, STREET_PROPS } from '../data/world'; 
 import { LogEntry, GameTime, Furniture, RoomDef, HousingUnit, WorldPlot, SimAction, AgeStage, EditorAction, EditorState } from '../types';
@@ -11,6 +11,13 @@ import { SaveManager, GameSaveData } from '../managers/SaveManager';
 import { NannyState, PickingUpState } from './logic/SimStates';
 import { SimInitConfig } from './logic/SimInitializer';
 import { SocialLogic } from './logic/social';
+import SimulationWorker from './simulationWorker?worker';
+
+// 生成反向映射表 (用于把 SAB 里的数字 1 变回 "idle")
+const ACTION_NAMES = Object.entries(ACTION_CODE).reduce((acc, [key, val]) => {
+    acc[val] = key;
+    return acc;
+}, {} as Record<number, string>);
 
 export class GameStore {
     static sims: Sim[] = [];
@@ -84,6 +91,55 @@ export class GameStore {
             this.availableIndices.push(index);
         }
     }
+
+    // 🟢 [新增] 核心启动方法：封装所有底层初始化逻辑
+    static async boot() {
+        // 防止重复初始化 (React StrictMode 可能会调用两次)
+        if (this.worker) {
+            console.log("⚠️ GameStore already booted, skipping...");
+            return;
+        }
+
+        console.log("🚀 Booting GameStore...");
+
+        // 1. 创建 Worker
+        this.worker = new SimulationWorker();
+
+        // 2. 绑定消息监听 (收敛到一个地方处理)
+        this.worker.onmessage = (e) => {
+            const { type, payload } = e.data;
+            if (type === 'SYNC_STATE') {
+                this.handleWorkerSync(payload);
+            } else {
+                this.handleWorkerMessage(type, payload);
+            }
+        };
+
+        // 3. 初始化共享内存 (SAB)
+        this.initSharedMemory();
+        this.worker.postMessage({ 
+            type: 'INIT_SHARED_MEMORY', 
+            payload: this.sharedBuffer 
+        });
+
+        // 4. 构建/加载世界数据
+        // 如果本地没有数据（例如第一次打开），先构建默认世界
+        if (this.worldLayout.length === 0) {
+            console.log("构建默认世界数据...");
+            this.rebuildWorld(true);
+        }
+
+        // 5. 🔥 [关键] 立即同步地图给 Worker
+        // 确保 Worker 里的 AI 一醒来就有路可走
+        this.sendUpdateMap();
+
+        // 6. 启动游戏流程 (读取存档或新开局)
+        await this.initGameFlow();
+        
+        console.log("✅ GameStore booted successfully.");
+    }
+
+    
 
     // 1. [新增] 持有 Worker 引用，用于发送指令
     static worker: Worker | null = null;
@@ -222,23 +278,28 @@ export class GameStore {
         }
     }
 
-    // ✅ [新增] 3. 任何原本直接修改数据的操作，都要变成 send...
-    // 比如：GameStore.spawnNanny(...) 现在应该改为：
-    static sendSpawnNanny(homeId: string) {
+    // ✅ [新增] 发送保姆生成指令 (完整参数支持)
+    static sendSpawnNanny(homeId: string, task: 'home_care' | 'drop_off' | 'pick_up' = 'home_care', targetChildId?: string) {
         if (this.worker) {
-            this.worker.postMessage({ type: 'SPAWN_NANNY', payload: homeId });
+            this.worker.postMessage({
+                type: 'SPAWN_NANNY',
+                payload: {
+                    homeId,
+                    task,
+                    targetChildId
+                }
+            });
+            this.showToast("已呼叫家庭保姆...");
         }
     }
 
     static removeSim(id: string) {
-        // [修复] 主线程拦截
+        // 🛑 [拦截]
         if (this.worker) {
             this.worker.postMessage({ type: 'REMOVE_SIM', payload: id });
-            // 可以在这里先做个 UI 上的乐观删除（可选），但为了保险起见，建议等 Sync
-            // 如果你想让 UI 反应快一点，可以暂时在这里把 selectedSimId 置空
+            // UI 层面可以做个乐观更新，先把选中态清空，防止报错
             if (this.selectedSimId === id) this.selectedSimId = null;
-            this.notify();
-            return; // 🛑
+            return;
         }
 
         // --- Worker 逻辑 ---
@@ -265,6 +326,11 @@ export class GameStore {
     }
 
     static spawnNanny(homeId: string, task: 'home_care' | 'drop_off' | 'pick_up' = 'home_care', targetChildId?: string) {
+        // 🛑 [修复] 主线程拦截：如果是主线程调用，直接转发给 Worker，自己不执行
+        if (this.worker) {
+            this.sendSpawnNanny(homeId, task, targetChildId);
+            return;
+        }
         // [修改] 检查是否已经有 NPC 或 临时工
         let nanny = this.sims.find(s => s.homeId === homeId && (s.isTemporary || s.isNPC));
         const home = this.housingUnits.find(u => u.id === homeId);
@@ -313,6 +379,16 @@ export class GameStore {
     }
     
     static assignRandomHome(sim: Sim, preferredTypes?: string[]) {
+        // 🛑 [拦截] 主线程如果误调用了这个方法（通常不会直接调用，但为了保险），
+        // 应该发送 ASSIGN_HOME 指令。但注意：assignRandomHome 需要 sim 对象，
+        // 而主线程跟 Worker 通信只能传 ID。
+        // 所以建议把主线程的调用点改为：GameStore.sendAssignHome(sim.id)
+        
+        // 这里做一个兼容处理：
+        if (this.worker) {
+            this.sendAssignHome(sim.id);
+            return;
+        }
         let targetTypes = preferredTypes || [];
         if (targetTypes.length === 0) {
             if (sim.ageStage === AgeStage.Elder) targetTypes = ['elder_care', 'apartment', 'public_housing'];
@@ -860,10 +936,10 @@ export class GameStore {
     }
 
     static spawnFamily(size?: number) {
-        // [修复] 主线程拦截
+        // 🛑 [拦截] 主线程只发指令
         if (this.worker) {
-            this.worker.postMessage({ type: 'SPAWN_FAMILY', payload: { size } });
-            return; // 🛑
+            this.sendSpawnFamily(size);
+            return;
         }
 
         // --- Worker 逻辑 ---
@@ -881,20 +957,21 @@ export class GameStore {
     }
 
     static spawnSingle() {
+        // 🛑 [拦截]
         if (this.worker) {
-             this.worker.postMessage({ type: 'SPAWN_SINGLE' });
-             return; // 🛑
-        }
+            this.sendSpawnSingle();
+            return;
+       }
         this.spawnFamily(1);
     }
 
     static spawnCustomSim(config: SimInitConfig) {
-        // [修复] 主线程逻辑：只发指令，不执行逻辑
+        // 🛑 [拦截]
         if (this.worker) {
+            // 注意：这里需要一个新的消息类型 SPAWN_CUSTOM
             this.worker.postMessage({ type: 'SPAWN_CUSTOM', payload: config });
-            // 可以加个 Toast 提示用户正在处理
             this.showToast("正在创建角色...");
-            return; // 🛑 关键：直接返回，不要执行下面的 new Sim()
+            return; 
         }
 
         // --- 以下是 Worker 才会执行的逻辑 ---
@@ -914,6 +991,12 @@ export class GameStore {
     }
 
     static spawnCustomFamily(configs: any[]) {
+        // 🛑 [拦截]
+        if (this.worker) {
+            this.worker.postMessage({ type: 'SPAWN_CUSTOM_FAMILY', payload: configs });
+            this.showToast("正在创建家庭...");
+            return;
+        }
         if (configs.length === 0) return;
 
         const newSims: Sim[] = [];
@@ -1130,14 +1213,13 @@ export class GameStore {
             if (data.needs) sim.needs = data.needs;
             if (data.buffs) sim.buffs = data.buffs;
 
+            // 🟢 修改后：(逐项检查，防止覆盖)
             // 经济系统
-            if (data.money !== undefined) {
-                sim.money = data.money;
-                sim.dailyBudget = data.dailyBudget;
-                sim.dailyIncome = data.dailyIncome;
-                sim.dailyExpense = data.dailyExpense;
-                sim.dailyTransactions = data.dailyTransactions;
-            }
+            if (data.money !== undefined) sim.money = data.money;
+            if (data.dailyBudget !== undefined) sim.dailyBudget = data.dailyBudget;
+            if (data.dailyIncome !== undefined) sim.dailyIncome = data.dailyIncome;
+            if (data.dailyExpense !== undefined) sim.dailyExpense = data.dailyExpense;
+            if (data.dailyTransactions !== undefined) sim.dailyTransactions = data.dailyTransactions;
 
             // AI 决策大脑 (显示在 Inspector 的 Header 或调试区)
             if (data.currentIntent) {
@@ -1248,12 +1330,12 @@ export class GameStore {
         }
     }
 
-    // ✅ [新增] 注入共享内存读取器
+    // 注入共享内存读取器
     private static injectSabGetters(sim: any, index: number) {
         (sim as any)._sabIndex = index;
         const view = this.sharedView;
         
-        // 覆盖 pos 属性
+        // 1. 位置实时同步 (已有)
         Object.defineProperty(sim, 'pos', {
             get: () => {
                 const base = index * SAB_CONFIG.STRUCT_SIZE;
@@ -1264,7 +1346,19 @@ export class GameStore {
             },
             configurable: true
         });
-
+        // 2. 🟢 [新增] 动作实时同步
+        // 这样即使 postMessage 慢了，动画切换也是 0 延迟的
+        Object.defineProperty(sim, 'action', {
+            get: () => {
+                const base = index * SAB_CONFIG.STRUCT_SIZE;
+                const code = view[base + SAB_CONFIG.OFFSET_ACTION];
+                return ACTION_NAMES[code] || 'idle';
+            },
+            // Setter 也要保留，防止 handleWorkerSync 覆盖时报错，
+            // 虽然有了 getter 后 setter 通常无效，但为了兼容性可以留空
+            set: (val) => { /* no-op */ },
+            configurable: true
+        });
         // 如果需要，也可以覆盖 action (将数字转回字符串)
         // 注意：这需要你有 ACTION_CODE 的反向映射表
         // Object.defineProperty(sim, 'action', { ... }) 

@@ -19,6 +19,10 @@ GameStore.worldLayout = [];
 
 const TARGET_FPS = 30; // 逻辑帧率可以锁定在 30 或 60
 const TICK_RATE = 1000 / TARGET_FPS;
+// 定义同步频率：每隔多少个逻辑帧同步一次 UI 数据
+// 如果 TARGET_FPS 是 30，这里设为 3，意味着 UI 同步率为 10 FPS (足够了)
+const UI_SYNC_INTERVAL = 3;
+let tickCount = 0;
 
 const startLoop = () => {
     if (loopInterval) clearInterval(loopInterval);
@@ -57,7 +61,10 @@ const startLoop = () => {
         // ⚠️ 关键优化：既然位置已经通过 SAB 同步了，payload 里就不需要发那么详细的数据了
         // 但为了保持兼容性，同时也为了让主线程知道 "哪个 ID 对应 哪个 SAB Index"，
         // 我们需要在 payload 里带上 index 信息。
-        
+        // === 2. UI 数据同步 (降频处理) ===
+        tickCount++;
+        if (tickCount % UI_SYNC_INTERVAL === 0) {
+            // 只有在这个 block 里的代码才会消耗序列化性能
         const syncData = {
             type: 'SYNC',
             payload: {
@@ -165,7 +172,7 @@ const startLoop = () => {
             }
         };
         self.postMessage(syncData);
-
+    }
     }, TICK_RATE);
 };
 
@@ -208,7 +215,7 @@ self.onmessage = (e: MessageEvent) => {
             break;
 
         case 'SPAWN_FAMILY':
-            GameStore.spawnFamily(payload.size);
+            GameStore.spawnFamily(payload?.size);
             break;
 
         case 'SPAWN_SINGLE':
@@ -306,23 +313,17 @@ self.onmessage = (e: MessageEvent) => {
 
         // ✅ [新增] 处理分配住址
         case 'ASSIGN_HOME':
-            {
-                const sim = GameStore.sims.find(s => s.id === payload);
-                if (sim) {
-                    // 这里直接调用 Worker 端 GameStore 的原有逻辑
-                    // 因为 Worker 拥有完整的 worldLayout 和 housingUnits 数据
-                    GameStore.assignRandomHome(sim);
-                    
-                    // 强制 Worker 立即同步一次日志和 Toast 回去 (可选)
-                    // 下一次 gameLoopStep 也会自动同步
-                }
-            }
+            const sim = GameStore.sims.find(s => s.id === payload);
+            if (sim) GameStore.assignRandomHome(sim);
             break;
             
         // ✅ [新增] 处理生成保姆
         case 'SPAWN_NANNY':
-             GameStore.spawnNanny(payload); // payload is homeId
-             break;
+             // 解构 payload 中的参数
+            const { homeId, task, targetChildId } = e.data.payload;
+            // 调用 Worker 端的 GameStore 执行实际逻辑
+            GameStore.spawnNanny(homeId, task, targetChildId);
+            break;
             
         case 'REMOVE_SIM':
             GameStore.removeSim(payload);

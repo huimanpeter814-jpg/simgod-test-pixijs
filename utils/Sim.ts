@@ -423,7 +423,31 @@ export class Sim {
     // 快捷状态切换方法
     startCommuting() { this.changeState(new CommutingState()); }
     startMovingToInteraction() { this.changeState(new MovingState(SimAction.Moving)); }
-    startWandering() { this.changeState(new MovingState(SimAction.Wandering)); }
+    // 🟢 [修复] 闲逛必须设置一个随机目标，否则 MovingState 会立刻结束
+    startWandering() { 
+        // 1. 在当前位置附近随机找一个点 (100~300像素范围)
+        const dist = 100 + Math.random() * 200;
+        const angle = Math.random() * Math.PI * 2;
+        
+        let tx = this.pos.x + Math.cos(angle) * dist;
+        let ty = this.pos.y + Math.sin(angle) * dist;
+
+        // 2. 简单的地图边界限制 (防止走出黑虚空)
+        // 获取地图尺寸 (Worker 端 GameStore.worldLayout 应该已有数据)
+        // 假设默认地块大小叠加，或者简单限制在 0-2500 范围内
+        const boundW = 2500; 
+        const boundH = 2000;
+        
+        tx = Math.max(50, Math.min(boundW - 50, tx));
+        ty = Math.max(50, Math.min(boundH - 50, ty));
+
+        // 3. 设置目标并切换状态
+        this.target = { x: tx, y: ty };
+        this.changeState(new MovingState(SimAction.Wandering)); 
+        
+        // 偶尔冒个泡
+        if (Math.random() < 0.05) this.say("🎵", 'normal');
+    }
     enterWorkingState() { this.changeState(new WorkingState()); }
     enterInteractionState(actionName: string) { this.changeState(new InteractionState(actionName)); }
 }
