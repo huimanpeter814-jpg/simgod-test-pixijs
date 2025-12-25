@@ -656,9 +656,39 @@ export class GameStore {
     static get history() { return this.editor.history; } 
     static get redoStack() { return this.editor.redoStack; }
 
-    static enterEditorMode() { this.editor.enterEditorMode(); }
-    static confirmEditorChanges() { this.editor.confirmChanges(); }
-    static cancelEditorChanges() { this.editor.cancelChanges(); }
+    // ✅ 修改：进入编辑模式时，发送暂停指令
+    static enterEditorMode() { 
+        this.togglePause(true); // 暂停游戏逻辑 (Worker)
+        this.editor.enterEditorMode(); 
+    }
+    // ✅ 修改：保存并退出时，强制清理所有视觉状态
+    static confirmEditorChanges() { 
+        this.editor.confirmChanges(); 
+        
+        // [新增] 强制重置状态，防止聚光灯/网格残留
+        this.editor.activePlotId = null;      // 关掉聚光灯
+        this.editor.mode = 'none';            // 关掉网格和编辑框
+        this.editor.selectedPlotId = null;    // 清除选中
+        this.editor.selectedFurnitureId = null;
+        this.editor.selectedRoomId = null;
+
+        this.togglePause(false); 
+        this.notify(); // 立即通知渲染层更新
+    }
+    // ✅ 修改：取消并退出时，同样强制清理
+    static cancelEditorChanges() { 
+        this.editor.cancelChanges(); 
+        
+        // [新增] 强制重置状态
+        this.editor.activePlotId = null;
+        this.editor.mode = 'none';
+        this.editor.selectedPlotId = null;
+        this.editor.selectedFurnitureId = null;
+        this.editor.selectedRoomId = null;
+
+        this.togglePause(false); 
+        this.notify();
+    }
     static resetEditorState() { this.editor.resetState(); }
     static clearMap() { this.editor.clearMap(); }
     static recordAction(action: EditorAction) { this.editor.recordAction(action); }

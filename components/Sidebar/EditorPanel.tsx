@@ -403,8 +403,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
 
     return (
         <div 
-            onMouseDown={(e) => e.stopPropagation()} // 防止点击穿透到画布
-            className="fixed bottom-0 left-0 right-0 h-[260px] flex z-50 shadow-2xl animate-[slideUp_0.2s_ease-out] select-none"
+            onMouseDown={(e) => e.stopPropagation()} // 阻止事件冒泡 (保持原有逻辑)
+            // ✅ 修改：在 className 末尾添加 pointer-events-auto
+            className="fixed bottom-0 left-0 right-0 h-[260px] flex z-50 shadow-2xl animate-[slideUp_0.2s_ease-out] select-none pointer-events-auto"
         >
             {renderTools()}
             {renderTabs()}
