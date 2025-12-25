@@ -125,6 +125,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
     const [historyLen, setHistoryLen] = useState(0);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
 
     // [新增] 专门的进入装修处理函数
     const handleEnterBuildMode = () => {
@@ -168,22 +169,10 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
 
     // 2. 核心操作 Wrapper
     const handleSwitchMode = (targetMode: 'plot' | 'furniture' | 'floor') => {
-        // 守卫：如果在世界模式，不能切到家具/地板
-        if (!activePlotId && (targetMode === 'furniture' || targetMode === 'floor')) {
-            alert("请先选择一块地皮并点击【进入装修】！");
-            return;
-        }
-        // 守卫：如果在建筑模式，不能切到地皮
-        if (activePlotId && targetMode === 'plot') {
-            return;
-        }
-
-        // 修改 UI Tab 状态
-        // 实际的 GameStore.editor.mode 会在 startPlacingXXX 时自动设置
-        // 这里主要用于切换 UI 面板的显示内容
-        // 我们不直接修改 GameStore.editor.mode，而是等待具体操作触发
-        // 但为了 UI Tab 高亮，我们可以手动触发一次空状态重置
-        GameStore.editor.mode = targetMode; 
+        // 确保 UI 点击不会违规操作
+        if (!isBuildMode && targetMode !== 'plot') return;
+        if (isBuildMode && targetMode === 'plot') return;
+        GameStore.editor.mode = targetMode;
         GameStore.notify();
     };
 
@@ -209,7 +198,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
             {/* 模式切换 / 返回按钮 */}
             {isBuildMode ? (
                 <button 
-                    onClick={handleExitBuildMode}
+                    onClick={() => GameStore.editor.exitBuildMode()}
                     className="w-10 h-10 mb-2 rounded bg-blue-600 hover:bg-blue-500 text-white flex flex-col items-center justify-center shadow-lg border border-white/20"
                     title="返回世界地图"
                 >
@@ -233,30 +222,18 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
     const renderTabs = () => (
         <div className="flex flex-col w-20 bg-[#1e222e] border-r border-white/10">
             {!isBuildMode && (
-                <button 
-                    onClick={() => handleSwitchMode('plot')}
-                    className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${currentMode === 'plot' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                    <span className="text-xl">🗺️</span>
-                    <span className="text-xs font-bold">地皮</span>
+                <button onClick={() => handleSwitchMode('plot')} className={`flex-1 ... ${currentMode === 'plot' ? 'bg-white/10' : ''}`}>
+                    <span className="text-xl">🗺️</span><span className="text-xs">地皮</span>
                 </button>
             )}
             
             {isBuildMode && (
                 <>
-                    <button 
-                        onClick={() => handleSwitchMode('furniture')}
-                        className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${currentMode === 'furniture' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    >
-                        <span className="text-xl">🪑</span>
-                        <span className="text-xs font-bold">家具</span>
+                    <button onClick={() => handleSwitchMode('furniture')} className={`flex-1 ... ${currentMode === 'furniture' ? 'bg-white/10' : ''}`}>
+                        <span className="text-xl">🪑</span><span className="text-xs">家具</span>
                     </button>
-                    <button 
-                        onClick={() => handleSwitchMode('floor')}
-                        className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${currentMode === 'floor' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    >
-                        <span className="text-xl">🧱</span>
-                        <span className="text-xs font-bold">硬装</span>
+                    <button onClick={() => handleSwitchMode('floor')} className={`flex-1 ... ${currentMode === 'floor' ? 'bg-white/10' : ''}`}>
+                        <span className="text-xl">🧱</span><span className="text-xs">硬装</span>
                     </button>
                 </>
             )}
@@ -401,7 +378,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                                 
                                 {/* 醒目的进入按钮 */}
                                 <button 
-                                    onClick={handleEnterBuildMode}
+                                    onClick={() => GameStore.editor.enterBuildMode(selectedPlotId)}
                                     className="w-full mt-2 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold rounded shadow-lg flex items-center justify-center gap-2 transform active:scale-95 transition-all border border-white/20"
                                 >
                                     <span>🔨 进入装修</span>
