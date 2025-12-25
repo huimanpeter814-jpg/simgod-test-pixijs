@@ -158,6 +158,10 @@ export interface WorldPlot {
 export interface EditorState {
   mode: 'none' | 'plot' | 'furniture' | 'floor'; 
   activeTool: 'camera' | 'select';
+  // [新增] 当前正在编辑的地皮 ID。
+  // 如果为 null，表示在“世界编辑器”模式（只能操作地皮）；
+  // 如果有值，表示在“建筑编辑器”模式（只能在该地皮内操作家具/地板）。
+  activePlotId: string | null;
   selectedPlotId: string | null;
   selectedFurnitureId: string | null;
   selectedRoomId: string | null;

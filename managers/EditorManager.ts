@@ -6,7 +6,9 @@ export class EditorManager implements EditorState {
     mode: 'none' | 'plot' | 'furniture' | 'floor' = 'none';
     activeTool: 'camera' | 'select' = 'select';
 
-    gridSize: number = 50; 
+    activePlotId: string | null = null;
+
+    gridSize: number = 10; 
     showGrid: boolean = true;
     snapToGrid: boolean = true;
     isValidPlacement: boolean = true;
@@ -73,6 +75,25 @@ export class EditorManager implements EditorState {
 
     // 1. 优化：检查放置位置是否合法 (简单的 AABB 碰撞检测)
     checkPlacementValidity(x: number, y: number, w: number, h: number): boolean {
+        // 1. 如果处于建筑模式，必须检查是否在地皮范围内
+        if (this.activePlotId) {
+            const plot = GameStore.worldLayout.find(p => p.id === this.activePlotId);
+            if (!plot) return false; // 地皮丢了？非法
+
+            // 计算相对位置或绝对位置的包含关系
+            // 假设 x,y 是世界坐标
+            // 稍微放宽 1px 避免浮点数精度问题
+            const plotRight = plot.x + (plot.width || 300) - 1;
+            const plotBottom = plot.y + (plot.height || 300) - 1;
+            const itemRight = x + w;
+            const itemBottom = y + h;
+
+            // 严格包含检测：物体必须完全在地皮内
+            if (x < plot.x || y < plot.y || itemRight > plotRight || itemBottom > plotBottom) {
+                // GameStore.showToast("超出地皮边界"); // 可选：太频繁提示会烦
+                return false; 
+            }
+        }
         // 简单示例：如果是家具，不能和其他家具重叠
         if (this.mode === 'furniture') {
             const rect = { x, y, w, h };
@@ -149,7 +170,7 @@ export class EditorManager implements EditorState {
     resetState() {
         this.mode = 'none';
         this.activeTool = 'select'; 
-        this.selectedPlotId = null;
+        this.selectedPlotId = null; // 在建筑模式下，可能不需要选中地皮概念，或者选中即 active
         this.selectedFurnitureId = null;
         this.selectedRoomId = null;
         this.placingTemplateId = null;
@@ -160,6 +181,30 @@ export class EditorManager implements EditorState {
         this.interactionState = 'idle';
         this.resizeHandle = null;
         this.previewPos = null;
+    }
+
+    // [新增] 进入特定地皮的建筑模式
+    enterBuildMode(plotId: string) {
+        const plot = GameStore.worldLayout.find(p => p.id === plotId);
+        if (!plot) return;
+
+        this.activePlotId = plotId;
+        this.selectedPlotId = null; // 进入内部后，不再处于选中地皮本身的状态
+        // [新增] 自动切换到家具模式，让 UI Tab 自动变
+        this.mode = 'furniture'; 
+        this.activeTool = 'select';
+        
+        // 可以在这里加个 Toast 提示
+        GameStore.showToast(`正在装修: ${plot.customName || '未命名地皮'}`);
+        GameStore.notify();
+    }
+
+    // [新增] 退出建筑模式，返回世界编辑器
+    exitBuildMode() {
+        this.activePlotId = null;
+        this.resetState();
+        GameStore.showToast("返回世界地图");
+        GameStore.notify();
     }
 
     clearMap() {
@@ -174,6 +219,11 @@ export class EditorManager implements EditorState {
     }
 
     startPlacingPlot(templateId: string) {
+        // 如果正在编辑某块地皮内部，禁止放置新地皮
+        if (this.activePlotId) {
+            GameStore.showToast("请先退出建筑模式");
+            return;
+        }
         this.mode = 'plot';
         this.placingTemplateId = templateId;
         this.placingFurniture = null;
@@ -206,6 +256,11 @@ export class EditorManager implements EditorState {
     }
 
     startPlacingFurniture(template: Partial<Furniture>) {
+        // 如果没有进入地皮，禁止放置家具
+        if (!this.activePlotId) {
+            GameStore.showToast("请先选择一块地皮进入建筑模式");
+            return;
+        }
         this.mode = 'furniture';
         this.placingFurniture = { ...template, rotation: 0 };
         this.placingTemplateId = null;
@@ -220,6 +275,10 @@ export class EditorManager implements EditorState {
     }
 
     startDrawingFloor(pattern: string, color: string, label: string, hasWall: boolean = false) {
+        if (!this.activePlotId) {
+            GameStore.showToast("请先选择一块地皮进入建筑模式");
+            return;
+        }
         this.mode = 'floor';
         this.drawingFloor = { startX: 0, startY: 0, currX: 0, currY: 0, pattern, color, label, hasWall };
         this.placingTemplateId = null;
@@ -363,6 +422,23 @@ export class EditorManager implements EditorState {
         } else {
             finalX = worldX - offsetX;
             finalY = worldY - offsetY;
+        }
+
+        // [新增] 强制边界约束 (Clamping)
+        // 让物体即使鼠标移出去了，预览框也卡在地皮边缘，提升手感
+        if (this.activePlotId) {
+            const plot = GameStore.worldLayout.find(p => p.id === this.activePlotId);
+            if (plot) {
+                const minX = plot.x;
+                const minY = plot.y;
+                const maxX = plot.x + (plot.width || 300) - w;
+                const maxY = plot.y + (plot.height || 300) - h;
+
+                // 限制 finalX/Y 在有效区间内
+                // 如果物体比地皮还大，就取 minX (但这在 checkPlacementValidity 会报错，这里主要是为了UI不乱跑)
+                finalX = Math.max(minX, Math.min(finalX, maxX));
+                finalY = Math.max(minY, Math.min(finalY, maxY));
+            }
         }
 
         this.previewPos = { x: finalX, y: finalY };

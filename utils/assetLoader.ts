@@ -1,4 +1,4 @@
-import { Assets, Texture } from 'pixi.js';
+import { Assets, Texture, Rectangle } from 'pixi.js';
 
 // 缓存：路径 -> HTMLImageElement (给 React UI 用)
 const imageCache = new Map<string, HTMLImageElement>();
@@ -60,4 +60,62 @@ export const getAsset = (path: string | undefined): HTMLImageElement | null => {
     img.src = path;
     imageCache.set(path, img); // <--- 防止内存泄漏的关键行
     return img;
+};
+
+// [新增] 切片纹理缓存：防止每次渲染都 new Texture，造成内存浪费
+// Key 格式: "路径_列_行_宽_高"
+const slicedCache = new Map<string, Texture>();
+
+/**
+ * 获取图集中的特定切片 (Sprite Sheet Slicer)
+ * @param path 图集文件的路径 (例如: '/src/assets/tilesets/furniture_bed.png')
+ * @param col 列号 (X轴方向第几格，从0开始)
+ * @param row 行号 (Y轴方向第几格，从0开始)
+ * @param w 切片宽度 (默认 48)
+ * @param h 切片高度 (默认 48)
+ */
+export const getSlicedTexture = (
+    path: string | undefined, 
+    col: number, 
+    row: number, 
+    w: number = 48, 
+    h: number = 48
+): Texture => {
+    if (!path) return Texture.EMPTY;
+
+    // 1. 优先检查缓存
+    const cacheKey = `${path}_${col}_${row}_${w}_${h}`;
+    if (slicedCache.has(cacheKey)) {
+        return slicedCache.get(cacheKey)!;
+    }
+
+    // 2. 获取原图 BaseTexture
+    // 注意：Assets.get 获取的是整个大图的 Texture
+    if (!Assets.cache.has(path)) {
+        console.warn(`[AssetLoader] Tileset not loaded: ${path}`);
+        return Texture.EMPTY;
+    }
+    const baseTex = Assets.get(path);
+
+    // 3. 计算切片坐标
+    const x = col * w;
+    const y = row * h;
+
+    // 越界检查
+    if (x + w > baseTex.width || y + h > baseTex.height) {
+        console.warn(`[AssetLoader] Slice out of bounds: ${path} [${col},${row}]`);
+        return Texture.EMPTY;
+    }
+
+    // 4. 创建切片 (Frame)
+    // 使用 Pixi 的 Texture 构造函数创建引用原图的新纹理
+    const rect = new Rectangle(x, y, w, h);
+    
+    // 兼容 Pixi v7/v8: 使用 baseTex.source (v8) 或 baseTex.baseTexture (v7)
+    const source = baseTex.source || baseTex.baseTexture; 
+    const slicedTex = new Texture({ source: source, frame: rect });
+
+    // 5. 存入缓存并返回
+    slicedCache.set(cacheKey, slicedTex);
+    return slicedTex;
 };

@@ -50,6 +50,10 @@ const PixiGameCanvasComponent: React.FC = () => {
     const gridLayerRef = useRef<Graphics | null>(null); // [新增] 网格层
     const isSpacePressed = useRef(false);
 
+    // [新增] 拖拽预览层（专门用于显示半透明物体）
+    const previewLayerRef = useRef<Container | null>(null); 
+    const dragGhostRef = useRef<Container | null>(null);
+
     // 绘制缩放手柄辅助函数
     const drawResizeHandles = (g: Graphics, x: number, y: number, w: number, h: number) => {
         const size = 10;
@@ -130,6 +134,38 @@ const PixiGameCanvasComponent: React.FC = () => {
         for (let y = startY; y <= endY; y += gridSize) {
             g.moveTo(startX, y).lineTo(endX, y).stroke();
         }
+    };
+
+    // === 核心逻辑：绘制网格 ===
+    // 只在 activePlot 范围内绘制网格
+    const drawActivePlotGrid = (g: Graphics, scale: number) => {
+        g.clear();
+        const activeId = GameStore.editor.activePlotId;
+        if (!activeId || !GameStore.editor.showGrid) return;
+
+        const plot = GameStore.worldLayout.find(p => p.id === activeId);
+        if (!plot) return;
+
+        // 获取地皮尺寸
+        const tpl = PLOTS[plot.templateId];
+        const w = plot.width ?? tpl?.width ?? 300;
+        const h = plot.height ?? tpl?.height ?? 300;
+        const gridSize = GameStore.editor.gridSize || 20;
+
+        g.strokeStyle = { width: 1 / scale, color: 0xffffff, alpha: 0.2 }; 
+
+        // 绘制垂直线
+        for (let x = 0; x <= w; x += gridSize) {
+            g.moveTo(plot.x + x, plot.y).lineTo(plot.x + x, plot.y + h).stroke();
+        }
+        // 绘制水平线
+        for (let y = 0; y <= h; y += gridSize) {
+            g.moveTo(plot.x, plot.y + y).lineTo(plot.x + w, plot.y + y).stroke();
+        }
+        
+        // 绘制地皮边界高亮
+        g.strokeStyle = { width: 2 / scale, color: 0xffff00, alpha: 0.5 };
+        g.rect(plot.x, plot.y, w, h).stroke();
     };
 
     // 监听刷新
@@ -227,22 +263,37 @@ const PixiGameCanvasComponent: React.FC = () => {
             appRef.current = app;
             appInstance = app;
 
+            // 在 worldContainer 下建立层级
             const worldContainer = new Container();
             worldContainer.sortableChildren = true;
             app.stage.addChild(worldContainer);
             worldContainerRef.current = worldContainer;
 
-            // [新增] 编辑器 UI 层 (绘制选中框等)
-            const editorGraphics = new Graphics();
-            editorGraphics.zIndex = 99999;
-            worldContainer.addChild(editorGraphics);
-            editorLayerRef.current = editorGraphics;
+            // 1. 地板/建筑层 (z: -100)
+            // 2. 网格层 (z: 0) -> [新增]
+            const gridGraphics = new Graphics();
+            gridGraphics.zIndex = 0;
+            worldContainer.addChild(gridGraphics);
+            gridLayerRef.current = gridGraphics;
 
+            // 3. 家具/人物层 (z: y坐标)
             const simLayer = new Container();
             simLayer.sortableChildren = true;
             simLayer.zIndex = 10000;
             worldContainer.addChild(simLayer);
             simLayerRef.current = simLayer;
+
+            // 4. 预览/Ghost层 (z: 90000) -> [新增]
+            const previewLayer = new Container();
+            previewLayer.zIndex = 90000;
+            worldContainer.addChild(previewLayer);
+            previewLayerRef.current = previewLayer;
+
+            // 5. 编辑器 UI 层 (框选线) (z: 99999)
+            const editorGraphics = new Graphics();
+            editorGraphics.zIndex = 99999;
+            worldContainer.addChild(editorGraphics);
+            editorLayerRef.current = editorGraphics;
 
             // UI Layer (Tooltip)
             const uiLayer = new Container();
@@ -295,6 +346,76 @@ const PixiGameCanvasComponent: React.FC = () => {
                 // 1. 绘制编辑器 UI (选中框、Ghost、手柄)
                 editorGraphics.clear();
                 
+                const activeId = GameStore.editor.activePlotId;
+                const mode = GameStore.editor.mode;
+                // --- A. 视觉压暗 (Dimming) ---
+                // 遍历所有家具和房间，如果不属于当前地皮，则变暗
+                if (activeId) {
+                    furnViewsRef.current.forEach((container, id) => {
+                        // 如果不属于当前 activeId，透明度设为 0.2
+                        container.alpha = id.startsWith(activeId) ? 1.0 : 0.2;
+                        // 且禁止交互(可选)
+                    });
+                    roomViewsRef.current.forEach((container, id) => {
+                        container.alpha = id.startsWith(activeId) ? 1.0 : 0.2;
+                    });
+                } else {
+                    // 恢复正常
+                    furnViewsRef.current.forEach(c => c.alpha = 1.0);
+                    roomViewsRef.current.forEach(c => c.alpha = 1.0);
+                }
+                // --- B. 绘制网格 ---
+                if (gridLayerRef.current && activeId) {
+                    drawActivePlotGrid(gridLayerRef.current, worldContainer.scale.x);
+                } else if (gridLayerRef.current) {
+                    gridLayerRef.current.clear();
+                }
+
+                // --- C. 拖拽预览 (Ghost) ---
+                // 清理旧 Ghost
+                while (previewLayer.children.length > 0) {
+                    previewLayer.children[0].destroy();
+                }
+                // 如果正在拖拽或放置，生成半透明预览
+                if (GameStore.editor.previewPos && (isDraggingObject.current || isStickyDragging.current || GameStore.editor.placingFurniture)) {
+                    const { x, y } = GameStore.editor.previewPos;
+                    let ghost: Container | null = null;
+                    
+                    // 1. 获取要渲染的物体数据
+                    let targetFurniture = GameStore.editor.placingFurniture;
+                    if (!targetFurniture && GameStore.editor.selectedFurnitureId) {
+                         targetFurniture = GameStore.furniture.find(f => f.id === GameStore.editor.selectedFurnitureId);
+                    }
+
+                    if (targetFurniture) {
+                        // 使用 WorldBuilder 快速创建一个临时的 Container
+                        // 注意：这里需要深拷贝或确保 createFurniture 不副作用
+                        ghost = PixiWorldBuilder.createFurniture({ 
+                            ...targetFurniture, 
+                            x: 0, y: 0, // 局部坐标归零，由 container 决定位置
+                            id: 'ghost',
+                        } as any);
+                    }
+
+                    if (ghost) {
+                        ghost.x = x;
+                        ghost.y = y;
+                        ghost.alpha = 0.6; // ✅ 半透明
+                        // 变色提示：合法绿色，非法红色
+                        const tintColor = GameStore.editor.isValidPlacement ? 0x00ff00 : 0xff0000;
+                        
+                        // 简单的染色逻辑 (给 Graphics 子对象染色)
+                        ghost.children.forEach(c => {
+                            if (c instanceof Sprite) c.tint = tintColor;
+                            else if (c instanceof Graphics) c.tint = tintColor;
+                        });
+                        
+                        previewLayer.addChild(ghost);
+                    } else {
+                        // 如果生成失败（比如是地皮），退化为线框
+                        // ... (保留之前的 rect 逻辑)
+                    }
+                }
                 
                 if (GameStore.editor.mode !== 'none') {
                     // 绘制网格 (可选，稍微影响性能)
@@ -485,8 +606,8 @@ const PixiGameCanvasComponent: React.FC = () => {
             if (containerRef.current) containerRef.current.style.cursor = 'grabbing';
             return; // 镜头操作时，阻断后续的编辑逻辑
         }
-        // 3. 左键编辑操作 (仅在编辑模式下继续)
-        if (e.button === 0) {
+        // [核心修复] 交互隔离
+        if (e.button === 0 && GameStore.editor.mode !== 'none') {
             
             // --- A. 放置模式 ---
             const isPlacing = isStickyDragging.current || GameStore.editor.placingFurniture || GameStore.editor.placingTemplateId;
@@ -600,24 +721,24 @@ const PixiGameCanvasComponent: React.FC = () => {
                 // ==========================
                 let hitObj: any = null;
                 let hitType = '';
+                // 如果处于建筑模式，强制只检测当前地皮内的物体
+                const activeId = GameStore.editor.activePlotId;
 
-                // 反向遍历 (从上层到下层查找，优先选中最上面的)
+                // 家具检测
                 if (GameStore.editor.mode === 'furniture') {
-                    hitObj = [...GameStore.furniture].reverse().find(f => 
-                        worldX >= f.x && worldX <= f.x + f.w && worldY >= f.y && worldY <= f.y + f.h
-                    );
+                    hitObj = [...GameStore.furniture].reverse().find(f => {
+                        // ✅ 过滤：如果 activeId 存在，必须匹配前缀
+                        if (activeId && !f.id.startsWith(activeId)) return false;
+                        return worldX >= f.x && worldX <= f.x + f.w && worldY >= f.y && worldY <= f.y + f.h;
+                    });
                     if (hitObj) hitType = 'furniture';
-                } 
+                }
+                // 地皮检测 (Build Mode 下通常禁止选其他地皮)
                 else if (GameStore.editor.mode === 'plot') {
-                    // 对于 Plot，我们通过检查是否点击了属于该 Plot 的 Room 来判定
-                    // 或者是点击了 Plot 范围内的任何区域
-                    // 这里为了简单，优先检测 Room 覆盖
-                    const room = GameStore.rooms.find(r => 
-                        worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h
-                    );
-                    if (room) {
-                        const plot = GameStore.worldLayout.find(p => room.id.startsWith(p.id));
-                        if (plot) { hitObj = plot; hitType = 'plot'; }
+                    // 如果在装修模式，禁止点选其他地皮，只能选当前地皮(通常没必要，除非要改大小)
+                    // 这里我们假设装修模式下不能选地皮本身，只能选 activePlot
+                    if (activeId) {
+                         // do nothing or select active plot
                     } else {
                         // 如果没点中 Room，检查是否点中了 Plot 基础底板
                          const plot = GameStore.worldLayout.find(p => {
