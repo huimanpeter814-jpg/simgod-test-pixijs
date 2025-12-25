@@ -70,11 +70,12 @@ const startLoop = () => {
         // 只有当内存初始化后才执行
         if (GameStore.sharedView) {
             GameStore.sims.forEach(s => {
-                // 确保该 Sim 分配了内存位置
-                // (Worker 是逻辑源头，所以由 Worker 负责调用 allocSabIndex)
-                const index = GameStore.allocSabIndex(s.id);
+                // 🛑 修改点：不再在循环里 alloc，而是直接获取
+                // 只有已分配索引的 Sim 才会同步位置，性能更高
+                const index = GameStore.simIndexMap.get(s.id);
                 
-                if (index !== -1) {
+                // 只有获取到有效的 index (非 undefined 且非 -1) 才写入
+                if (index !== undefined && index !== -1) {
                     const base = index * SAB_CONFIG.STRUCT_SIZE;
                     const view = GameStore.sharedView;
 
@@ -187,6 +188,8 @@ const startLoop = () => {
                         // baseData 里只有简略的 title，这里覆盖为完整对象以获取 level, salary, hours
                         baseData.job = s.job; 
                         baseData.workPerformance = s.workPerformance;
+                        // 🟢 [新增] 同步考评日志 (漏了这一行)
+                        baseData.dailyWorkLog = s.dailyWorkLog;
 
                         // === 社交与家庭 (FamilyTab / Inspector) ===
                         baseData.relationships = s.relationships; // 包含亲密度、恋爱关系
@@ -239,6 +242,9 @@ self.onmessage = (e: MessageEvent) => {
             break;
 
         case 'START':
+            // 🛡️ 防御性编程：防止有 Sim 漏掉索引 (比如暂停期间添加的)
+            // 游戏开始/恢复前，扫描一遍所有 Sim，确保都有位置
+            GameStore.sims.forEach(s => GameStore.allocSabIndex(s.id));
             startLoop();
             break;
 
@@ -289,6 +295,9 @@ self.onmessage = (e: MessageEvent) => {
             GameStore.loadSims(data.sims);
             GameStore.initIndex();
             GameStore.refreshFurnitureOwnership();
+            // 🟢 [新增] 读档后，必须为所有人重新分配 SAB 索引
+            // 因为 Worker 重启后内存是新的，索引映射表是空的
+            GameStore.sims.forEach(s => GameStore.allocSabIndex(s.id));
             // 4. 🟢 [新增] 读档后，更新 lastAutoSaveDay
             // 否则如果读档是第 10 天，lastAutoSaveDay 还是 1，会立即触发一次不必要的存档
             lastAutoSaveDay = GameStore.time.totalDays;
@@ -324,6 +333,8 @@ self.onmessage = (e: MessageEvent) => {
             GameStore.spawnSingle();
             GameStore.spawnFamily();
             GameStore.spawnFamily();
+            // 🟢 [新增] 确保生成的人都有索引
+            GameStore.sims.forEach(s => GameStore.allocSabIndex(s.id));
             // 6. 🟢 [新增] 新游戏重置计数器
             lastAutoSaveDay = GameStore.time.totalDays; // 通常是 1
             

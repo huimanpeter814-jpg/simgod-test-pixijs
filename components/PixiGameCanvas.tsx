@@ -119,8 +119,8 @@ const PixiGameCanvasComponent: React.FC = () => {
         // 这里为了简单，假设绘制一个足够大的区域
         const startX = -2000;
         const startY = -2000;
-        const endX = 5000;
-        const endY = 5000;
+        const endX = CONFIG.CANVAS_W + 1000; // 确保覆盖全图
+        const endY = CONFIG.CANVAS_H + 1000;
 
         g.strokeStyle = { width: 1 / scale, color: 0xffffff, alpha: alpha }; // 线条随缩放变细
 
@@ -193,8 +193,12 @@ const PixiGameCanvasComponent: React.FC = () => {
         GameStore.worker = worker;
 
         return () => {
-            // 🧹 [新增] 清理引用
+            // 🛑 必须清理 GameStore 的状态，防止残留数据污染下一次会话
             GameStore.worker = null;
+            GameStore.sims = []; 
+            GameStore.simIndexMap.clear(); 
+            GameStore.availableIndices = []; // 重置 SAB 索引池
+            // 如果有必要，甚至应该清空 worldLayout，因为新 Worker 会重新发一遍
             worker.terminate();
         };
     }, []);

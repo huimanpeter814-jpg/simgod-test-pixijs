@@ -107,7 +107,7 @@ export class PathFinder {
             return Math.abs(n1.x - n2.x) + Math.abs(n1.y - n2.y);
         };
 
-        const MAX_OPS = 2000; // 降低迭代上限，防止掉帧
+        const MAX_OPS = 15000; // 降低迭代上限，防止掉帧
         let ops = 0;
 
         let finalNode: Node | null = null;

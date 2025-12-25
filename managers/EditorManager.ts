@@ -458,36 +458,64 @@ export class EditorManager implements EditorState {
         const { x, y } = this.previewPos;
         let hasChange = false;
         
+        // 1. 移动地皮：采用 "销毁 -> 重建" 策略，确保绝对稳健
         if (entityType === 'plot') {
             const plot = GameStore.worldLayout.find(p => p.id === id);
+            
+            // 只有坐标真正发生变化时才执行
             if (plot && (plot.x !== x || plot.y !== y)) {
-                const dx = x - plot.x;
-                const dy = y - plot.y;
-                plot.x = x; plot.y = y; 
-                GameStore.rooms.forEach(r => { if(r.id.startsWith(`${id}_`)) { r.x += dx; r.y += dy; } });
-                GameStore.furniture.forEach(f => { if(f.id.startsWith(`${id}_`)) { f.x += dx; f.y += dy; } });
-                GameStore.housingUnits.forEach(u => { 
-                    if(u.id.startsWith(`${id}_`)) { u.x += dx; u.y += dy; if(u.maxX) u.maxX += dx; if(u.maxY) u.maxY += dy; } 
-                });
+                // A. 更新 Plot 自身坐标
+                plot.x = x; 
+                plot.y = y; 
+
+                // B. [关键改进] 清理该地皮下的所有旧关联对象
+                // 避免手动计算偏移量可能产生的 Bug
+                GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${id}_`));
+                GameStore.furniture = GameStore.furniture.filter(f => !f.id.startsWith(`${id}_`));
+                GameStore.housingUnits = GameStore.housingUnits.filter(h => !h.id.startsWith(`${id}_`));
+
+                // C. [关键改进] 调用核心生成器重新实例化
+                // 这会自动根据 templateId 重新生成房间、家具和 HousingUnit，位置绝对正确
+                GameStore.instantiatePlot(plot);
+                
                 hasChange = true; 
             }
-        } else if (entityType === 'furniture') {
+        } 
+        // 2. 移动家具：简单对象直接修改坐标
+        else if (entityType === 'furniture') {
             const furn = GameStore.furniture.find(f => f.id === id);
-            if (furn && (furn.x !== x || furn.y !== y)) { furn.x = x; furn.y = y; hasChange = true; }
-        } else if (entityType === 'room') {
+            if (furn && (furn.x !== x || furn.y !== y)) { 
+                furn.x = x; 
+                furn.y = y; 
+                hasChange = true; 
+            }
+        } 
+        // 3. 移动房间：简单对象直接修改坐标
+        else if (entityType === 'room') {
             const room = GameStore.rooms.find(r => r.id === id);
-            if (room && (room.x !== x || room.y !== y)) { room.x = x; room.y = y; hasChange = true; }
+            if (room && (room.x !== x || room.y !== y)) { 
+                room.x = x; 
+                room.y = y; 
+                hasChange = true; 
+            }
         }
 
+        // 4. 后处理：如果有变化，立即触发全系统更新
         if (hasChange) {
+            // 重建空间哈希网格
             GameStore.initIndex();
+            // 重新计算家具归属权（比如家具被移到了别人的地皮上）
             GameStore.refreshFurnitureOwnership();
+            // 🟢 修复时序 Bug：立即通知 Worker 更新地图，不要等 React 渲染
             GameStore.triggerMapUpdate();
         }
         
+        // 5. 重置编辑状态
         this.isDragging = false;
         this.interactionState = 'idle';
         this.previewPos = null;
+        
+        // 通知 UI 去掉高亮框等
         GameStore.notify();
     }
     

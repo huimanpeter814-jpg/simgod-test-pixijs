@@ -678,46 +678,13 @@ export class GameStore {
     static removeRoom(roomId: string) { this.editor.removeRoom(roomId); this.triggerMapUpdate(); }
     static removeFurniture(id: string) { this.editor.removeFurniture(id); this.triggerMapUpdate(); }
     static changePlotTemplate(plotId: string, templateId: string) { this.editor.changePlotTemplate(plotId, templateId); this.triggerMapUpdate(); }
-    static finalizeMove(type: 'plot'|'furniture'|'room', id: string, startPos: any) { 
-        if (!this.editor.previewPos) return;
-        const { x, y } = this.editor.previewPos;
-        let hasChange = false;
-        
-        if (type === 'plot') {
-            const plot = this.worldLayout.find(p => p.id === id);
-            // [核心修复] 如果坐标变了，彻底销毁旧的 -> 更新坐标 -> 重新生成
-            // 这样可以避免手动 += dx 导致的残影或同步问题
-            if (plot && (plot.x !== x || plot.y !== y)) {
-                // 1. 清除该地皮下的所有旧物体
-                this.rooms = this.rooms.filter(r => !r.id.startsWith(`${id}_`));
-                this.furniture = this.furniture.filter(f => !f.id.startsWith(`${id}_`));
-                this.housingUnits = this.housingUnits.filter(h => !h.id.startsWith(`${id}_`));
-
-                // 2. 更新坐标
-                plot.x = x; 
-                plot.y = y; 
-
-                // 3. 重新实例化
-                this.instantiatePlot(plot);
-                
-                hasChange = true; 
-            }
-        } else if (type === 'furniture') {
-            const furn = this.furniture.find(f => f.id === id);
-            if (furn && (furn.x !== x || furn.y !== y)) { furn.x = x; furn.y = y; hasChange = true; }
-        } else if (type === 'room') {
-            const room = this.rooms.find(r => r.id === id);
-            if (room && (room.x !== x || room.y !== y)) { room.x = x; room.y = y; hasChange = true; }
-        }
-
-        this.editor.isDragging = false;
-        this.editor.interactionState = 'idle';
-        this.editor.previewPos = null;
-
-        if (hasChange) {
-            this.triggerMapUpdate();
-        }
-    }
+    static finalizeMove(type: 'plot'|'furniture'|'room', id: string, startPos: any) {
+    // 直接调用 EditorManager 的方法，不要在这里重写一遍逻辑
+    this.editor.finalizeMove(type, id, startPos);
+    
+    // 或者，如果你喜欢 GameStore 版本的 instantiatePlot 逻辑（更稳健），
+    // 请把那个逻辑移到 EditorManager 里，然后 GameStore 只做转发。
+}
     static resizeEntity(type: 'plot'|'room', id: string, newRect: any) { this.editor.resizeEntity(type, id, newRect); this.triggerMapUpdate(); } 
     
     static furnitureByPlot: Map<string, Furniture[]> = new Map();
@@ -1272,7 +1239,8 @@ export class GameStore {
             
             // 工作表现 (如果有)
             if (data.workPerformance !== undefined) sim.workPerformance = data.workPerformance;
-
+            // 🟢 [新增] 接收考评日志 (漏了这一行)
+            if (data.dailyWorkLog) sim.dailyWorkLog = data.dailyWorkLog;
             // C. 🚨🚨🚨 [核心修改] 接收 SAB 索引 🚨🚨🚨
             // data.sabIndex 是 Worker 告诉我们的“座位号”
             if (data.sabIndex !== undefined && data.sabIndex !== -1) {

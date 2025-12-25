@@ -138,7 +138,7 @@ export const CareerTab: React.FC<{ sim: Sim }> = ({ sim }) => {
                         )}
 
                         <div className="p-3 grid grid-cols-2 gap-2 text-[10px] border-t border-white/5">
-                            <div><span className="text-gray-500 block">薪资</span><span className="text-warning font-mono">${sim.job.salary}/天</span></div>
+                            <div><span className="text-gray-500 block">薪资</span><span className="text-warning font-mono">${sim.job.salary}/月</span></div>
                             <div><span className="text-gray-500 block">工时</span><span className="text-gray-300 font-mono">{sim.job.startHour}:00 - {sim.job.endHour}:00</span></div>
                         </div>
 
