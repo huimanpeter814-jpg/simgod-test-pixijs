@@ -85,23 +85,37 @@ export class EditorManager implements EditorState {
         GameStore.notify();
     }
 
+
     cancelChanges() {
         if (this.snapshot) {
-            GameStore.worldLayout = this.snapshot.worldLayout;
-            GameStore.furniture = this.snapshot.furniture;
+            // 1. 强制深拷贝恢复世界布局 (确保包含被删除的地皮)
+            GameStore.worldLayout = JSON.parse(JSON.stringify(this.snapshot.worldLayout));
             
-            // 恢复房间逻辑：先生成默认，再覆盖自定义
-            const customRooms = this.snapshot.rooms;
-            GameStore.rebuildWorld(true); 
-            // 覆盖家具状态（包含位置移动）
-            GameStore.furniture = this.snapshot.furniture;
-            // 合并房间
+            // 2. 调用 rebuildWorld(true) 重建基础结构
+            // 这会根据恢复后的 worldLayout 重新生成所有的 Default Rooms, Default Furniture 和 HousingUnits
+            // 这一步至关重要，因为它会“复活”被删除地皮的基础显示（如草地/地板）
+            GameStore.rebuildWorld(true);
+            
+            // 3. 恢复家具 (覆盖 rebuildWorld 生成的默认家具)
+            // 这样可以保留进入编辑模式时的所有家具状态（包括位置、旋转、自定义家具）
+            GameStore.furniture = JSON.parse(JSON.stringify(this.snapshot.furniture));
+            
+            // 4. 恢复自定义房间并合并
+            // defaultRooms 是刚才 rebuildWorld 生成的（比如地皮自带的地板）
+            // customRooms 是快照里存的用户画的房间
             const defaultRooms = GameStore.rooms.filter(r => !r.isCustom);
+            const customRooms = this.snapshot.rooms || [];
             GameStore.rooms = [...defaultRooms, ...customRooms];
+
+            // 5. 重新计算归属权 (因为 furniture 被覆盖了，需要重新关联到新生成的 HousingUnits)
+            GameStore.refreshFurnitureOwnership();
         }
+
         this.snapshot = null;
         this.resetState();
-        GameStore.setGameSpeed(1); // 恢复游戏
+        GameStore.setGameSpeed(1); // 恢复游戏速度
+        
+        // 6. 最后触发一次全局更新，确保 Worker 和 UI 同步
         GameStore.triggerMapUpdate();
     }
 
@@ -413,9 +427,53 @@ export class EditorManager implements EditorState {
         }
     }
 
+
     removePlot(plotId: string) {
+        // 1. 先获取地皮信息，用于后续计算空间范围
+        const plot = GameStore.worldLayout.find(p => p.id === plotId);
+        
+        // 2. 从世界布局中移除地皮
         GameStore.worldLayout = GameStore.worldLayout.filter(p => p.id !== plotId);
-        GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${plotId}_`)); 
+        
+        // 3. 移除关联的 HousingUnits (这一步很重要，否则家具的归属权会出错)
+        GameStore.housingUnits = GameStore.housingUnits.filter(h => !h.id.startsWith(`${plotId}_`));
+
+        // 4. 移除房间 (包括模版自带的和空间范围内的自定义房间)
+        GameStore.rooms = GameStore.rooms.filter(r => {
+            // A. 移除模版自带房间 (ID 以 plotId_ 开头)
+            if (r.id.startsWith(`${plotId}_`)) return false;
+            
+            // B. 移除位于该地皮范围内的自定义房间
+            if (plot) {
+                const pw = plot.width || 300;
+                const ph = plot.height || 300;
+                // 简单的包含检测
+                if (r.x >= plot.x && r.x < plot.x + pw && r.y >= plot.y && r.y < plot.y + ph) {
+                    return false;
+                }
+            }
+            return true;
+        }); 
+
+        // 5. ✅ [核心修复] 移除家具
+        GameStore.furniture = GameStore.furniture.filter(f => {
+            // A. 移除模版自带家具 (ID 以 plotId_ 开头)
+            if (f.id.startsWith(`${plotId}_`)) return false;
+            
+            // B. 移除位于该地皮范围内的自定义家具
+            if (plot) {
+                const cx = f.x + f.w / 2;
+                const cy = f.y + f.h / 2;
+                const pw = plot.width || 300;
+                const ph = plot.height || 300;
+                // 检测家具中心点是否在地皮内
+                if (cx >= plot.x && cx < plot.x + pw && cy >= plot.y && cy < plot.y + ph) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
         this.selectedPlotId = null;
         GameStore.initIndex();
         GameStore.triggerMapUpdate();
