@@ -313,7 +313,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                             <button 
                                 key={item.id} 
                                 // 调用带尺寸参数的 startPlacingPlot
-                                onClick={() => GameStore.editor.startPlacingPlot(item.id, { w: item.w, h: item.h })} 
+                                onClick={() => GameStore.editor.startPlacingPlot(item.id, { w: item.w, h: item.h }, 'decor')}
                                 className="aspect-square bg-white/5 border border-white/10 hover:border-green-500/50 rounded p-2 flex flex-col items-center justify-center group"
                             >
                                 <div className="w-8 h-8 rounded-full mb-1 shadow-sm" style={{ backgroundColor: item.color }}></div>
@@ -326,7 +326,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                         {plotCategory === 'surface' && SURFACE_ITEMS.map(item => (
                             <button 
                                 key={item.id} 
-                                onClick={() => GameStore.editor.startPlacingPlot(item.id, { w: item.w, h: item.h })} 
+                                onClick={() => GameStore.editor.startPlacingPlot(item.id, { w: item.w, h: item.h }, 'surface')} 
                                 className="aspect-video bg-white/5 border border-white/10 hover:border-gray-500/50 rounded p-2 flex flex-col items-center justify-center group"
                             >
                                 <div className="w-full h-6 rounded mb-1 shadow-inner opacity-80" style={{ backgroundColor: item.color }}></div>
@@ -422,96 +422,121 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
     );
 
     // 右侧状态栏
-    const renderStatus = () => (
-        <div className="w-[200px] bg-[#1e222e] border-l border-white/10 p-3 flex flex-col gap-3">
-            {/* 状态卡片 */}
-            <div className={`rounded p-3 border ${activePlotId ? 'bg-blue-900/20 border-blue-500/50' : 'bg-black/30 border-white/10'}`}>
-                {activePlotId ? (
-                     // 装修模式状态 (保持不变)
-                    <>
-                        <div className="flex items-center gap-2 mb-2 text-blue-400 font-bold border-b border-blue-500/30 pb-1">
-                            <span className="text-xl">🏗️</span>
-                            <span>装修进行中</span>
-                        </div>
-                        <div className="text-[10px] text-gray-400">当前地块 ID:</div>
-                        <div className="text-xs font-mono text-white mb-2">{activePlotId.slice(-8)}</div>
-                        {selectedFurnitureId ? (
-                            <div className="text-yellow-400 text-[10px] animate-pulse">⚡ 已选中家具</div>
-                        ) : (
-                            <div className="text-gray-500 text-[10px]">可拖拽家具或修改地板</div>
-                        )}
-                    </>
-                ) : (
-                    // 世界模式状态 (修改部分)
-                    <>
-                        <div className="flex items-center gap-2 mb-2 text-green-400 font-bold border-b border-green-500/30 pb-1">
-                            <span className="text-xl">🌍</span>
-                            <span>世界视图</span>
-                        </div>
-                        {selectedPlotId ? (
-                            <div className="flex flex-col gap-2">
-                                <div className="text-[10px] text-gray-400">已选中地皮: <span className="font-mono text-white">{selectedPlotId.slice(-8)}</span></div>
-                                
-                                {/* 🟢 新增：名称编辑 */}
-                                <div>
-                                    <label className="text-[10px] text-gray-500 block mb-1">地皮名称</label>
-                                    <input 
-                                        type="text" 
-                                        value={editName}
-                                        onChange={(e) => {
-                                            setEditName(e.target.value);
-                                            // 实时更新
-                                            GameStore.editor.updatePlotMetadata(selectedPlotId, e.target.value, editType);
-                                        }}
-                                        className="w-full bg-black/50 border border-white/20 rounded px-2 py-1 text-xs text-white focus:border-green-500 outline-none"
-                                    />
-                                </div>
+    // 右侧状态栏
+    const renderStatus = () => {
+        // [新增] 判断当前编辑类型是否为特殊装饰类型
+        const isSpecialType = editType === 'decor' || editType === 'surface';
 
-                                {/* 🟢 新增：类型编辑 */}
-                                <div>
-                                    <label className="text-[10px] text-gray-500 block mb-1">用地类型</label>
-                                    <select 
-                                        value={editType}
-                                        onChange={(e) => {
-                                            setEditType(e.target.value);
-                                            // 实时更新
-                                            GameStore.editor.updatePlotMetadata(selectedPlotId, editName, e.target.value);
-                                        }}
-                                        className="w-full bg-black/50 border border-white/20 rounded px-1 py-1 text-xs text-white focus:border-green-500 outline-none"
-                                    >
-                                        <option value="residential">住宅用地</option>
-                                        <option value="commercial">商业用地</option>
-                                        <option value="public">公共设施</option>
-                                        <option value="decor">景观/装饰</option>
-                                        <option value="surface">地形/地表</option>
-                                    </select>
-                                </div>
-                                
-                                <div className="h-px bg-white/10 my-1"></div>
+        return (
+            <div className="w-[200px] bg-[#1e222e] border-l border-white/10 p-3 flex flex-col gap-3">
+                {/* 状态卡片 */}
+                <div className={`rounded p-3 border ${activePlotId ? 'bg-blue-900/20 border-blue-500/50' : 'bg-black/30 border-white/10'}`}>
+                    {activePlotId ? (
+                        // 装修模式状态
+                        <>
+                            <div className="flex items-center gap-2 mb-2 text-blue-400 font-bold border-b border-blue-500/30 pb-1">
+                                <span className="text-xl">🏗️</span>
+                                <span>装修进行中</span>
+                            </div>
+                            <div className="text-[10px] text-gray-400">当前地块 ID:</div>
+                            <div className="text-xs font-mono text-white mb-2">{activePlotId.slice(-8)}</div>
+                            {selectedFurnitureId ? (
+                                <div className="text-yellow-400 text-[10px] animate-pulse">⚡ 已选中家具</div>
+                            ) : (
+                                <div className="text-gray-500 text-[10px]">可拖拽家具或修改地板</div>
+                            )}
+                        </>
+                    ) : (
+                        // 世界模式状态
+                        <>
+                            <div className="flex items-center gap-2 mb-2 text-green-400 font-bold border-b border-green-500/30 pb-1">
+                                <span className="text-xl">🌍</span>
+                                <span>世界视图</span>
+                            </div>
+                            {selectedPlotId ? (
+                                <div className="flex flex-col gap-2">
+                                    <div className="text-[10px] text-gray-400">已选中地皮: <span className="font-mono text-white">{selectedPlotId.slice(-8)}</span></div>
+                                    
+                                    {/* 名称编辑 (始终允许) */}
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 block mb-1">地皮名称</label>
+                                        <input 
+                                            type="text" 
+                                            value={editName}
+                                            onChange={(e) => {
+                                                setEditName(e.target.value);
+                                                // 实时更新
+                                                // @ts-ignore
+                                                GameStore.editor.updatePlotMetadata(selectedPlotId, e.target.value, editType);
+                                            }}
+                                            className="w-full bg-black/50 border border-white/20 rounded px-2 py-1 text-xs text-white focus:border-green-500 outline-none"
+                                        />
+                                    </div>
 
-                                {/* 进入装修按钮 */}
-                                <button 
-                                    onClick={() => GameStore.editor.enterBuildMode(selectedPlotId)}
-                                    className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold rounded shadow-lg flex items-center justify-center gap-2 transform active:scale-95 transition-all border border-white/20"
-                                >
-                                    <span>🔨 进入装修</span>
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="text-gray-500 italic text-[10px] py-4 text-center">
-                                请在地图上点击选择<br/>地皮、装饰或路面
-                            </div>
-                        )}
-                    </>
-                )}
+                                    {/* [修改] 类型编辑区域 */}
+                                    {isSpecialType ? (
+                                        // 🟢 如果是装饰/地表，显示只读标签
+                                        <div className="mt-1">
+                                            <label className="text-[10px] text-gray-500 block mb-1">类型属性</label>
+                                            <div className="w-full bg-white/5 border border-white/10 rounded px-2 py-2 flex items-center gap-2">
+                                                <span className="text-lg">{editType === 'decor' ? '🌳' : '🧱'}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-bold text-gray-300">
+                                                        {editType === 'decor' ? '景观装饰' : '地形地表'}
+                                                    </span>
+                                                    <span className="text-[9px] text-gray-500">仅作装饰，不可经营</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        // 🟢 如果是普通地皮，显示原本的 Select (移除 decor/surface 选项)
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 block mb-1">用地类型</label>
+                                            <select 
+                                                value={editType}
+                                                onChange={(e) => {
+                                                    setEditType(e.target.value);
+                                                    // 实时更新
+                                                    // @ts-ignore
+                                                    GameStore.editor.updatePlotMetadata(selectedPlotId, editName, e.target.value);
+                                                }}
+                                                className="w-full bg-black/50 border border-white/20 rounded px-1 py-1 text-xs text-white focus:border-green-500 outline-none"
+                                            >
+                                                <option value="residential">住宅用地</option>
+                                                <option value="commercial">商业用地</option>
+                                                <option value="public">公共设施</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="h-px bg-white/10 my-1"></div>
+
+                                    {/* [修改] 只有非装饰类型才显示“进入装修”按钮 */}
+                                    {!isSpecialType && (
+                                        <button 
+                                            onClick={handleEnterBuildMode}
+                                            className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold rounded shadow-lg flex items-center justify-center gap-2 transform active:scale-95 transition-all border border-white/20"
+                                        >
+                                            <span>🔨 进入装修</span>
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="text-gray-500 italic text-[10px] py-4 text-center">
+                                    请在地图上点击选择<br/>地皮、装饰或路面
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+                {/* 底部操作区 */}
+                <div className="mt-auto grid grid-cols-2 gap-2">
+                    <button onClick={handleSave} className="bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-xs shadow-lg">✔ 保存退出</button>
+                    <button onClick={handleCancel} className="bg-white/10 hover:bg-white/20 text-white py-2 rounded font-bold text-xs">✕ 取消</button>
+                </div>
             </div>
-            {/* 底部操作区 */}
-            <div className="mt-auto grid grid-cols-2 gap-2">
-                <button onClick={handleSave} className="bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-xs shadow-lg">✔ 保存退出</button>
-                <button onClick={handleCancel} className="bg-white/10 hover:bg-white/20 text-white py-2 rounded font-bold text-xs">✕ 取消</button>
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div 

@@ -27,6 +27,8 @@ export class EditorManager implements EditorState {
     resizeHandle: 'nw' | 'ne' | 'sw' | 'se' | null = null;
     // [新增] 用于存储放置时的临时自定义尺寸
     placingSize: { w: number, h: number } | null = null;
+    // [新增] 用于记录当前放置物的类型 ('decor' | 'surface' | null)
+    placingType: string | null = null;
     
     drawingPlot: any = null;
     drawingFloor: any = null;
@@ -196,6 +198,7 @@ export class EditorManager implements EditorState {
         this.interactionState = 'idle';
         this.resizeHandle = null;
         this.previewPos = null;
+        this.placingType = null; // [新增] 重置类型
     }
 
 
@@ -211,15 +214,17 @@ export class EditorManager implements EditorState {
     }
 
     // 🟢 [修改] startPlacingPlot 支持传入自定义尺寸
-    startPlacingPlot(templateId: string, customSize?: { w: number, h: number }) {
+    startPlacingPlot(templateId: string, customSize?: { w: number, h: number }, customType?: string) {
         if (this.activePlotId) {
             GameStore.showToast("❌ 请先退出装修模式");
             return;
         }
         this.mode = 'plot';
         this.placingTemplateId = templateId;
+        this.placingType = customType || null; // [新增] 记录类型
+        
         this.isDragging = true; 
-        this.interactionState = 'carrying'; 
+        this.interactionState = 'carrying';
         
         let w = 300, h = 300;
         
@@ -296,36 +301,35 @@ export class EditorManager implements EditorState {
         const templateId = this.placingTemplateId || 'default_empty';
         const prefix = templateId.startsWith('road') ? 'road_custom_' : 'plot_';
         const newId = `${prefix}${Date.now()}`;
-        // 默认尺寸
         let w = 300, h = 300;
-        // 如果有模版数据
-        if (PLOTS[templateId]) {
-            w = PLOTS[templateId].width;
-            h = PLOTS[templateId].height;
-        }
-        // 如果有自定义放置尺寸（装饰物/地表）
-        if (this.placingSize) {
-            w = this.placingSize.w;
-            h = this.placingSize.h;
-        }
+        if (PLOTS[templateId]) { w = PLOTS[templateId].width; h = PLOTS[templateId].height; }
+        if (this.placingSize) { w = this.placingSize.w; h = this.placingSize.h; }
         const newPlot: WorldPlot = { 
             id: newId, 
             templateId: templateId, 
             x: x, 
             y: y,
-            width: w,    // 写入宽度
-            height: h,   // 写入高度
-            customName: this.placingSize ? '装饰/地表' : undefined // 可选：标记默认名字
+            width: w,
+            height: h,
+            // [修改] 如果有明确的 placingType，则直接设置；否则根据是否为自定义尺寸判断（保持兼容）
+            customType: this.placingType || undefined, 
+            // [修改] 默认名称逻辑优化
+            customName: this.placingType === 'decor' ? '景观装饰' : 
+                       (this.placingType === 'surface' ? '地形地表' : 
+                       (this.placingSize ? '装饰/地表' : undefined))
         };
         GameStore.worldLayout.push(newPlot);
         GameStore.instantiatePlot(newPlot); 
         GameStore.initIndex(); 
         
         this.placingTemplateId = null;
-        this.placingSize = null; // 重置
+        this.placingSize = null; 
+        this.placingType = null; // [新增] 重置
         this.isDragging = false;
         this.interactionState = 'idle';
         this.selectedPlotId = newId; 
+        
+        // 这一步会将带 customType 的数据同步给 Worker
         GameStore.triggerMapUpdate();
     }
 
