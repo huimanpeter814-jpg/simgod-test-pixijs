@@ -302,6 +302,8 @@ const PixiGameCanvasComponent: React.FC = () => {
                 ...ASSET_CONFIG.infant.outfits,
                 ...ASSET_CONFIG.infant.hairs,
                 ...(ASSET_CONFIG.face || []),
+                ...ASSET_CONFIG.furniture,
+                ...ASSET_CONFIG.world
             ]);
             setLoading(false);
 

@@ -16,6 +16,9 @@ const infantBodies =  import.meta.glob('/src/assets/bodies_infant/*.{png,jpg,jpe
 const infantHairs =  import.meta.glob('/src/assets/hairs_infant/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
 const infantOutfits =  import.meta.glob('/src/assets/outfits_infant/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
 
+// 🆕 新增：家具和世界构造资源 (48x48 SpriteSheets)
+const furnitureFiles = import.meta.glob('/src/assets/furniture/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
+const worldFiles = import.meta.glob('/src/assets/world_builder/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
 // 保留旧的 face 以防万一，但主要逻辑将切换到新的三层结构
 const faceFiles = import.meta.glob('/src/assets/face/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
 
@@ -40,6 +43,8 @@ export const ASSET_CONFIG = {
         outfits: getValues(infantOutfits),
         hairs: getValues(infantHairs),
     },
+    furniture: getValues(furnitureFiles),
+    world: getValues(worldFiles),
     bg: getValues(bgFiles),
     // 兼容旧字段，防止报错，但在新逻辑中可能不再主要使用
     face: getValues(faceFiles), 

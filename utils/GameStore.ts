@@ -421,7 +421,13 @@ export class GameStore {
                         id: 'base', x: 0, y: 0, w: w, h: h, 
                         label: plot.customName || '空地皮', 
                         color: plot.customColor || '#dcdcdc', 
-                        pixelPattern: 'simple' 
+                        pixelPattern: 'simple' ,
+                        // ✨ [新增] 将地皮(plot)上的贴图属性透传给房间(room)
+                        sheetPath: plot.sheetPath,
+                        tileX: plot.tileX,
+                        tileY: plot.tileY,
+                        tileW: plot.tileW,
+                        tileH: plot.tileH
                     }
                 ],
                 furniture: [],

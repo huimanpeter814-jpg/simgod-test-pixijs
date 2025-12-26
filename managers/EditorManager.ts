@@ -29,6 +29,7 @@ export class EditorManager implements EditorState {
     placingSize: { w: number, h: number } | null = null;
     // [新增] 用于记录当前放置物的类型 ('decor' | 'surface' | null)
     placingType: string | null = null;
+    placingData: any = null;
     
     drawingPlot: any = null;
     drawingFloor: any = null;
@@ -162,19 +163,31 @@ export class EditorManager implements EditorState {
                 return false; 
             }
         }
-        // 2. 世界模式：地皮不能重叠
-        else if (this.mode === 'plot') {
-            const others = GameStore.worldLayout.filter(p => p.id !== this.selectedPlotId);
+        // 🟢 2. 世界模式：家具与地皮的碰撞检测
+        else if (this.mode === 'furniture' && !this.activePlotId) {
+            // 简单的逻辑：允许放在任何地方，除了和其他地皮重叠的地方
+            // (你也可以把这个逻辑去掉，允许把路灯放进地皮里，看你需求)
+            const others = GameStore.worldLayout;
             for (const other of others) {
                 const ow = other.width || 300;
                 const oh = other.height || 300;
-                // AABB 重叠检测
-                if (x < other.x + ow && x + w > other.x &&
-                    y < other.y + oh && y + h > other.y) {
-                    return false;
-                }
+                // 如果跟某个地皮重叠了，不仅不让放，或者提示警告
+                // 这里暂时允许重叠，因为有时候需要在路边放东西稍微压一点线
             }
         }
+        // // 2. 世界模式：地皮不能重叠
+        // else if (this.mode === 'plot') {
+        //     const others = GameStore.worldLayout.filter(p => p.id !== this.selectedPlotId);
+        //     for (const other of others) {
+        //         const ow = other.width || 300;
+        //         const oh = other.height || 300;
+        //         // AABB 重叠检测
+        //         if (x < other.x + ow && x + w > other.x &&
+        //             y < other.y + oh && y + h > other.y) {
+        //             return false;
+        //         }
+        //     }
+        // }
         // 这里可以扩展更多逻辑，比如必须在地板上等
         return true;
     }
@@ -199,6 +212,7 @@ export class EditorManager implements EditorState {
         this.resizeHandle = null;
         this.previewPos = null;
         this.placingType = null; // [新增] 重置类型
+        this.placingData = null;
     }
 
 
@@ -214,14 +228,15 @@ export class EditorManager implements EditorState {
     }
 
     // 🟢 [修改] startPlacingPlot 支持传入自定义尺寸
-    startPlacingPlot(templateId: string, customSize?: { w: number, h: number }, customType?: string) {
+    startPlacingPlot(templateId: string, customSize?: { w: number, h: number }, customType?: string, extraData?: any) {
         if (this.activePlotId) {
             GameStore.showToast("❌ 请先退出装修模式");
             return;
         }
         this.mode = 'plot';
         this.placingTemplateId = templateId;
-        this.placingType = customType || null; // [新增] 记录类型
+        this.placingType = customType || null;
+        this.placingData = extraData || null;
         
         this.isDragging = true; 
         this.interactionState = 'carrying';
@@ -252,15 +267,22 @@ export class EditorManager implements EditorState {
     }
 
     startPlacingFurniture(template: Partial<Furniture>) {
-        if (!this.activePlotId) {
-            GameStore.showToast("❌ 请先选择地皮并【进入装修】");
-            return;
-        }
+        // if (!this.activePlotId) {
+        //     GameStore.showToast("❌ 请先选择地皮并【进入装修】");
+        //     return;
+        // }
+        // 🟢 新逻辑：无论在世界模式还是装修模式，都允许开始放置
         this.mode = 'furniture';
         this.placingFurniture = { ...template, rotation: 0 };
         this.isDragging = true;
         this.interactionState = 'carrying';
         this.dragOffset = { x: (template.w || 0) / 2, y: (template.h || 0) / 2 };
+        
+        // 如果在世界模式放置，提示一下用户
+        if (!this.activePlotId) {
+            GameStore.showToast("🌍 正在世界地图上放置物件");
+        }
+        
         GameStore.notify();
     }
 
@@ -312,11 +334,15 @@ export class EditorManager implements EditorState {
             width: w,
             height: h,
             // [修改] 如果有明确的 placingType，则直接设置；否则根据是否为自定义尺寸判断（保持兼容）
-            customType: this.placingType || undefined, 
-            // [修改] 默认名称逻辑优化
-            customName: this.placingType === 'decor' ? '景观装饰' : 
-                       (this.placingType === 'surface' ? '地形地表' : 
-                       (this.placingSize ? '装饰/地表' : undefined))
+            customType: this.placingType || undefined,
+            customName: this.placingType === 'decor' ? '景观装饰' : /* ... */ undefined,
+
+            // ✨ [新增] 将暂存的贴图数据写入地皮对象
+            sheetPath: this.placingData?.sheetPath,
+            tileX: this.placingData?.tileX,
+            tileY: this.placingData?.tileY,
+            tileW: this.placingData?.tileW,
+            tileH: this.placingData?.tileH
         };
         GameStore.worldLayout.push(newPlot);
         GameStore.instantiatePlot(newPlot); 
