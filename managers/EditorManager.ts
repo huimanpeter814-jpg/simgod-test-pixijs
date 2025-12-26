@@ -25,6 +25,8 @@ export class EditorManager implements EditorState {
 
     interactionState: 'idle' | 'carrying' | 'resizing' | 'drawing' = 'idle';
     resizeHandle: 'nw' | 'ne' | 'sw' | 'se' | null = null;
+    // [新增] 用于存储放置时的临时自定义尺寸
+    placingSize: { w: number, h: number } | null = null;
     
     drawingPlot: any = null;
     drawingFloor: any = null;
@@ -208,7 +210,8 @@ export class EditorManager implements EditorState {
         GameStore.triggerMapUpdate(); 
     }
 
-    startPlacingPlot(templateId: string) {
+    // 🟢 [修改] startPlacingPlot 支持传入自定义尺寸
+    startPlacingPlot(templateId: string, customSize?: { w: number, h: number }) {
         if (this.activePlotId) {
             GameStore.showToast("❌ 请先退出装修模式");
             return;
@@ -219,10 +222,18 @@ export class EditorManager implements EditorState {
         this.interactionState = 'carrying'; 
         
         let w = 300, h = 300;
-        if (templateId && PLOTS[templateId]) {
+        
+        // 优先使用传入的自定义尺寸
+        if (customSize) {
+            w = customSize.w;
+            h = customSize.h;
+            this.placingSize = customSize;
+        } else if (templateId && PLOTS[templateId]) {
             w = PLOTS[templateId].width;
             h = PLOTS[templateId].height;
+            this.placingSize = null;
         }
+        
         this.dragOffset = { x: w / 2, y: h / 2 };
         GameStore.notify();
     }
@@ -285,16 +296,49 @@ export class EditorManager implements EditorState {
         const templateId = this.placingTemplateId || 'default_empty';
         const prefix = templateId.startsWith('road') ? 'road_custom_' : 'plot_';
         const newId = `${prefix}${Date.now()}`;
-        const newPlot: WorldPlot = { id: newId, templateId: templateId, x: x, y: y };
+        // 默认尺寸
+        let w = 300, h = 300;
+        // 如果有模版数据
+        if (PLOTS[templateId]) {
+            w = PLOTS[templateId].width;
+            h = PLOTS[templateId].height;
+        }
+        // 如果有自定义放置尺寸（装饰物/地表）
+        if (this.placingSize) {
+            w = this.placingSize.w;
+            h = this.placingSize.h;
+        }
+        const newPlot: WorldPlot = { 
+            id: newId, 
+            templateId: templateId, 
+            x: x, 
+            y: y,
+            width: w,    // 写入宽度
+            height: h,   // 写入高度
+            customName: this.placingSize ? '装饰/地表' : undefined // 可选：标记默认名字
+        };
         GameStore.worldLayout.push(newPlot);
         GameStore.instantiatePlot(newPlot); 
         GameStore.initIndex(); 
         
         this.placingTemplateId = null;
+        this.placingSize = null; // 重置
         this.isDragging = false;
         this.interactionState = 'idle';
         this.selectedPlotId = newId; 
         GameStore.triggerMapUpdate();
+    }
+
+    // 🟢 [新增] 更新地皮元数据的方法
+    updatePlotMetadata(id: string, name: string, type: string) {
+        const plot = GameStore.worldLayout.find(p => p.id === id);
+        if (plot) {
+            plot.customName = name;
+            plot.customType = type;
+            // 通知 Worker 更新
+            GameStore.triggerMapUpdate();
+            GameStore.notify();
+        }
     }
 
     createCustomPlot(rect: {x: number, y: number, w: number, h: number}, templateId: string) {
@@ -355,7 +399,11 @@ export class EditorManager implements EditorState {
             const tpl = this.placingFurniture || GameStore.furniture.find(f => f.id === this.selectedFurnitureId);
             if (tpl) { w = tpl.w ?? 100; h = tpl.h ?? 100; }
         } else if (this.mode === 'plot') {
-             if (this.placingTemplateId) {
+             // 修改这里：优先读取 placingSize
+             if (this.placingSize) {
+                 w = this.placingSize.w;
+                 h = this.placingSize.h;
+             } else if (this.placingTemplateId) {
                  const tpl = PLOTS[this.placingTemplateId];
                  if (tpl) { w = tpl.width; h = tpl.height; }
              } else if (this.selectedPlotId) {
