@@ -60,26 +60,6 @@ export class PixiWorldBuilder {
             container.addChild(g);
         }
 
-        // ✨ 新增：显示地块名称
-        if (room.label && !room.label.startsWith('空地')) {
-            const text = new Text({
-                text: room.label,
-                style: {
-                    fontFamily: '"Microsoft YaHei", sans-serif',
-                    fontSize: 14,
-                    fill: 0xffffff,
-                    align: 'center',
-                    stroke: { color: 0x000000, width: 3 }, // 描边增加可读性
-                    fontWeight: 'bold',
-                }
-            });
-            text.anchor.set(0.5); // 中心对齐
-            text.x = w / 2;
-            text.y = h / 2;
-            text.alpha = 0.6; //稍微透明一点，不抢眼
-            container.addChild(text);
-        }
-
         return container;
     }
 

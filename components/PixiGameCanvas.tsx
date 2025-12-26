@@ -51,6 +51,9 @@ const PixiGameCanvasComponent: React.FC = () => {
     const gridLayerRef = useRef<Graphics | null>(null);
     const isSpacePressed = useRef(false);
 
+    // [新增] 专门用于记录地表绘制状态的 ref
+    const isPaintingSurface = useRef(false);
+
     // 绘制缩放手柄辅助函数
     const drawResizeHandles = (g: Graphics, x: number, y: number, w: number, h: number) => {
         const size = 10;
@@ -380,9 +383,14 @@ const PixiGameCanvasComponent: React.FC = () => {
                     }
                     // Case C: 正在放置新地皮
                     else if (GameStore.editor.placingTemplateId) {
-                        const tpl = PLOTS[GameStore.editor.placingTemplateId];
-                        const w = tpl ? tpl.width : 300;
-                        const h = tpl ? tpl.height : 300;
+                        let w = 300, h = 300;
+                        if (GameStore.editor.placingSize) {
+                            w = GameStore.editor.placingSize.w;
+                            h = GameStore.editor.placingSize.h;
+                        } else {
+                            const tpl = PLOTS[GameStore.editor.placingTemplateId];
+                            if (tpl) { w = tpl.width; h = tpl.height; }
+                        }
                         const g = new Graphics();
                         g.rect(0, 0, w, h).stroke({ width: 2, color: 0xffffff }); // 绘制白色边框
                         g.rect(0, 0, w, h).fill({ color: 0xffffff, alpha: 0.1 }); // 填充淡白色
@@ -524,6 +532,20 @@ const PixiGameCanvasComponent: React.FC = () => {
         }
 
         if (e.button === 0 && GameStore.editor.mode !== 'none') {
+            // 🆕 [新增/修改] 针对 Surface 类型的特殊处理
+            const isSurfaceMode = GameStore.editor.placingType === 'surface' || 
+                                  (GameStore.editor.placingTemplateId && GameStore.editor.placingTemplateId.startsWith('surface_'));
+
+            if (isSurfaceMode) {
+                // 开启画笔模式
+                isPaintingSurface.current = true;
+                // 立即画下第一笔
+                GameStore.editor.tryPaintPlotAt(worldX, worldY);
+                // 刷新视图
+                refreshWorld();
+                // 阻止进入后续的普通拖拽逻辑
+                return; 
+            }
             // A. 放置模式
             const isPlacing = isStickyDragging.current || GameStore.editor.placingFurniture || GameStore.editor.placingTemplateId;
             if (isPlacing) {
@@ -660,6 +682,18 @@ const PixiGameCanvasComponent: React.FC = () => {
             return;
         }
 
+        // 🆕 [新增] 持续涂抹检测
+        if (isPaintingSurface.current) {
+            // 只要鼠标没松开，移动到哪里就画到哪里
+            GameStore.editor.tryPaintPlotAt(worldX, worldY);
+            // 这里不调用 notify，因为 tryPaintPlotAt 内部已经 triggerMapUpdate 了
+            // 但为了让画面（如新添加的 Sprite）立即显示，可以调用局部刷新
+            // 注意：频繁 refreshWorld 开销较大，实际项目中可以用 Object Pool 或增量添加，
+            // 但考虑到是编辑器模式，直接 refreshWorld 逻辑最稳健。
+            refreshWorld(); 
+            return;
+        }
+
         if (GameStore.editor.mode !== 'none') {
             // A. 放置预览
             if (GameStore.editor.placingTemplateId || GameStore.editor.placingFurniture || GameStore.editor.isDragging) {
@@ -740,6 +774,13 @@ const PixiGameCanvasComponent: React.FC = () => {
                 refreshWorld();
                 return;
             }
+        }
+        // 🆕 [新增] 结束涂抹
+        if (isPaintingSurface.current) {
+            isPaintingSurface.current = false;
+            // 关键点：这里不要重置 GameStore.editor.placingTemplateId
+            // 这样用户松开鼠标后，依然处于“手中拿着地砖”的状态，可以去别的地方再次点击开始涂抹
+            return; 
         }
 
         // Sticky Drag Mode Logic

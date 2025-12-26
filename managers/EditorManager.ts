@@ -1,6 +1,7 @@
 import { GameStore } from '../utils/simulation';
 import { PLOTS } from '../data/plots';
 import { Furniture, WorldPlot, RoomDef, EditorAction, EditorState } from '../types';
+import { WORLD_SURFACE_ITEMS } from '../data/furnitureData';
 
 export class EditorManager implements EditorState {
     mode: 'none' | 'plot' | 'furniture' | 'floor' = 'none';
@@ -243,8 +244,17 @@ export class EditorManager implements EditorState {
         
         let w = 300, h = 300;
         
-        // 优先使用传入的自定义尺寸
-        if (customSize) {
+        // 🟢 [新增] 检查是否为地表素材，如果是，强制使用其定义的尺寸
+        const surfaceItem = WORLD_SURFACE_ITEMS.find(i => i.id === templateId);
+        if (surfaceItem) {
+            w = surfaceItem.w;
+            h = surfaceItem.h;
+            this.placingSize = { w, h }; // 记录尺寸，这很关键
+            // 自动标记类型，防止 UI 层漏传
+            if (!this.placingType) this.placingType = 'surface'; 
+        }
+        // [原有逻辑] 优先使用传入的自定义尺寸
+        else if (customSize) {
             w = customSize.w;
             h = customSize.h;
             this.placingSize = customSize;
@@ -253,7 +263,7 @@ export class EditorManager implements EditorState {
             h = PLOTS[templateId].height;
             this.placingSize = null;
         }
-        
+            
         this.dragOffset = { x: w / 2, y: h / 2 };
         GameStore.notify();
     }
@@ -369,6 +379,82 @@ export class EditorManager implements EditorState {
             GameStore.triggerMapUpdate();
             GameStore.notify();
         }
+    }
+
+    // 这种方法不重置 placingTemplateId，允许用户继续画
+    tryPaintPlotAt(worldX: number, worldY: number) {
+        if (!this.placingTemplateId) return;
+
+        // 1. 确认当前选中的是 Surface 类型 (通过 ID 前缀或者查找配置)
+        // 假设 WORLD_SURFACE_ITEMS 里的 ID 都是 surface_ 开头，或者你通过传入的 customType 判断
+        const isSurface = this.placingType === 'surface' || this.placingTemplateId.startsWith('surface_');
+        if (!isSurface) return;
+
+        // 2. 获取固定尺寸 (不支持缩放)
+        // 尝试从 WORLD_SURFACE_ITEMS 查找原始尺寸，如果找不到则默认 100
+        const surfaceConfig = WORLD_SURFACE_ITEMS.find(i => i.id === this.placingTemplateId);
+        const w = surfaceConfig ? surfaceConfig.w : 100;
+        const h = surfaceConfig ? surfaceConfig.h : 100;
+
+        // 3. 计算网格吸附坐标
+        // 地表通常必须严格对齐网格，这里假设 grid 为 w 或 h，或者统一用 this.gridSize
+        // 建议：对于地表，步进应该等于它的宽度，这样才能严丝合缝
+        const stepX = w; 
+        const stepY = h; 
+        
+        const gridX = Math.floor(worldX / stepX) * stepX;
+        const gridY = Math.floor(worldY / stepY) * stepY;
+
+        // 4. [关键] 检查该位置是否已经有同类型的地表 (去重)
+        // 防止鼠标在一个格子里微动时生成几百个对象
+        const alreadyExists = GameStore.worldLayout.some(p => 
+            p.x === gridX && p.y === gridY && p.customType === 'surface'
+            // 可选：如果你希望不同材质可以覆盖，就只判断位置；如果希望完全相同才不去重，就加上 templateId 判断
+        );
+
+        if (alreadyExists) {
+            // 4.1 进阶逻辑：如果是不同的材质，应该替换掉旧的
+            // 找到旧的并删除 (模拟 Sim 里的覆盖逻辑)
+            const existingIndex = GameStore.worldLayout.findIndex(p => p.x === gridX && p.y === gridY && p.customType === 'surface');
+            if (existingIndex !== -1) {
+                const existingPlot = GameStore.worldLayout[existingIndex];
+                // 如果材质一样，就什么都不做（省性能）
+                if (existingPlot.templateId === this.placingTemplateId) return;
+                
+                // 如果材质不一样，删掉旧的
+                GameStore.worldLayout.splice(existingIndex, 1);
+                // 注意：这里删除了数组元素，后续需要触发 Worker 更新
+            }
+        }
+
+        // 5. 创建新的地表 Plot
+        const newId = `surface_${gridX}_${gridY}_${Date.now()}`; // 保证 ID 唯一
+        const newPlot: WorldPlot = {
+            id: newId,
+            templateId: this.placingTemplateId,
+            x: gridX,
+            y: gridY,
+            width: w, // 🔒 强制使用固定宽高
+            height: h,
+            customType: 'surface', // 标记为地表
+            customName: surfaceConfig?.label || '地表',
+            // 传入贴图数据
+            sheetPath: this.placingData?.sheetPath,
+            tileX: this.placingData?.tileX,
+            tileY: this.placingData?.tileY,
+            tileW: this.placingData?.tileW,
+            tileH: this.placingData?.tileH
+        };
+
+        GameStore.worldLayout.push(newPlot);
+        GameStore.instantiatePlot(newPlot);
+        
+        // 6. 触发更新
+        // 注意：如果你画得非常快，这里可能会频繁触发 triggerMapUpdate。
+        // 在 Worker 架构下，建议加一个简单的防抖，或者由 Canvas 层控制频率。
+        // 但为了简单起见，这里直接调用。
+        GameStore.initIndex();
+        GameStore.triggerMapUpdate();
     }
 
     createCustomPlot(rect: {x: number, y: number, w: number, h: number}, templateId: string) {
