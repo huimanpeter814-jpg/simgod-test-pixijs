@@ -38,8 +38,8 @@ export class EditorManager implements EditorState {
 
     history: EditorAction[] = [];
     redoStack: EditorAction[] = [];
-    
     snapshot: any = null;
+    
 
     // 进入世界编辑模式
     enterEditorMode() {
@@ -63,9 +63,12 @@ export class EditorManager implements EditorState {
         const plot = GameStore.worldLayout.find(p => p.id === plotId);
         if (!plot) return;
 
+        // 确保游戏暂停 (防止装修时 Sims 乱跑)
+        GameStore.setGameSpeed(0); 
+
         this.activePlotId = plotId;
-        this.selectedPlotId = null; // 进入内部后，取消选中地皮本身
-        this.mode = 'furniture'; // 默认切到家具 Tab
+        this.selectedPlotId = null; 
+        this.mode = 'furniture'; 
         this.activeTool = 'select';
         
         GameStore.showToast(`正在装修: ${plot.customName || '未命名地皮'}`);
@@ -83,8 +86,10 @@ export class EditorManager implements EditorState {
 
     confirmChanges() {
         this.snapshot = null; 
+        this.history = []; // 清空历史
+        this.redoStack = [];
         this.resetState();
-        GameStore.setGameSpeed(1);
+        GameStore.setGameSpeed(1); // 恢复游戏
         GameStore.initIndex(); 
         GameStore.refreshFurnitureOwnership();
         GameStore.sendUpdateMap();
@@ -94,34 +99,33 @@ export class EditorManager implements EditorState {
 
     cancelChanges() {
         if (this.snapshot) {
-            // 1. 强制深拷贝恢复世界布局 (确保包含被删除的地皮)
+            // 1. 恢复世界布局
             GameStore.worldLayout = JSON.parse(JSON.stringify(this.snapshot.worldLayout));
             
-            // 2. 调用 rebuildWorld(true) 重建基础结构
-            // 这会根据恢复后的 worldLayout 重新生成所有的 Default Rooms, Default Furniture 和 HousingUnits
-            // 这一步至关重要，因为它会“复活”被删除地皮的基础显示（如草地/地板）
+            // 2. 重建基础结构 (家具和房间会被覆盖，但 HousingUnits 会重建)
             GameStore.rebuildWorld(true);
             
             // 3. 恢复家具 (覆盖 rebuildWorld 生成的默认家具)
-            // 这样可以保留进入编辑模式时的所有家具状态（包括位置、旋转、自定义家具）
             GameStore.furniture = JSON.parse(JSON.stringify(this.snapshot.furniture));
             
-            // 4. 恢复自定义房间并合并
-            // defaultRooms 是刚才 rebuildWorld 生成的（比如地皮自带的地板）
-            // customRooms 是快照里存的用户画的房间
+            // 4. 恢复房间
             const defaultRooms = GameStore.rooms.filter(r => !r.isCustom);
             const customRooms = this.snapshot.rooms || [];
             GameStore.rooms = [...defaultRooms, ...customRooms];
 
-            // 5. 重新计算归属权 (因为 furniture 被覆盖了，需要重新关联到新生成的 HousingUnits)
+            // 5. 重新计算归属
             GameStore.refreshFurnitureOwnership();
+
+            // 🟢 [关键修复] 立即强制同步给 Worker，防止 Worker 用旧数据覆盖回来
+            GameStore.sendUpdateMap();
         }
 
         this.snapshot = null;
+        this.history = [];
+        this.redoStack = [];
         this.resetState();
-        GameStore.setGameSpeed(1); // 恢复游戏速度
         
-        // 6. 最后触发一次全局更新，确保 Worker 和 UI 同步
+        GameStore.setGameSpeed(1); // 恢复游戏
         GameStore.triggerMapUpdate();
     }
 
@@ -129,18 +133,24 @@ export class EditorManager implements EditorState {
         // 世界模式：只能删地皮
         if (!this.activePlotId) {
             if (this.selectedPlotId) {
-                this.removePlot(this.selectedPlotId);
-                this.selectedPlotId = null;
+                // 🟢 记录操作
+                const plot = GameStore.worldLayout.find(p => p.id === this.selectedPlotId);
+                if (plot) {
+                    this.recordAction({ type: 'delete_plot', data: JSON.parse(JSON.stringify(plot)) });
+                    this.removePlot(this.selectedPlotId);
+                    this.selectedPlotId = null;
+                }
             }
-        } 
+        }
         // 建筑模式：只能删家具/房间
         else {
             if (this.selectedFurnitureId) {
-                this.removeFurniture(this.selectedFurnitureId);
-                this.selectedFurnitureId = null;
-            } else if (this.selectedRoomId) {
-                this.removeRoom(this.selectedRoomId);
-                this.selectedRoomId = null;
+                const f = GameStore.furniture.find(i => i.id === this.selectedFurnitureId);
+                if (f) {
+                    this.recordAction({ type: 'delete_furniture', data: JSON.parse(JSON.stringify(f)) });
+                    this.removeFurniture(this.selectedFurnitureId);
+                    this.selectedFurnitureId = null;
+                }
             }
         }
         GameStore.notify();
@@ -220,11 +230,16 @@ export class EditorManager implements EditorState {
     clearMap() {
         if (this.mode === 'none') return;
         if (!confirm('确定要清空所有地皮和家具吗？')) return;
+        
+        // 记录一个全清前的状态用于撤销（可选，这里为了简单先不加）
         GameStore.worldLayout = [];
         GameStore.furniture = []; 
         GameStore.rooms = [];
         GameStore.housingUnits = [];
         GameStore.initIndex();
+        
+        // 🟢 [修复] 必须同步 Worker
+        GameStore.sendUpdateMap();
         GameStore.triggerMapUpdate(); 
     }
 
@@ -356,6 +371,7 @@ export class EditorManager implements EditorState {
         };
         GameStore.worldLayout.push(newPlot);
         GameStore.instantiatePlot(newPlot); 
+        this.recordAction({ type: 'place_plot', data: newPlot });
         GameStore.initIndex(); 
         
         this.placingTemplateId = null;
@@ -385,60 +401,57 @@ export class EditorManager implements EditorState {
     tryPaintPlotAt(worldX: number, worldY: number) {
         if (!this.placingTemplateId) return;
 
-        // 1. 确认当前选中的是 Surface 类型 (通过 ID 前缀或者查找配置)
-        // 假设 WORLD_SURFACE_ITEMS 里的 ID 都是 surface_ 开头，或者你通过传入的 customType 判断
+        // 1. 确认当前选中的是 Surface 类型
         const isSurface = this.placingType === 'surface' || this.placingTemplateId.startsWith('surface_');
         if (!isSurface) return;
 
-        // 2. 获取固定尺寸 (不支持缩放)
-        // 尝试从 WORLD_SURFACE_ITEMS 查找原始尺寸，如果找不到则默认 100
+        // 2. 获取固定尺寸
         const surfaceConfig = WORLD_SURFACE_ITEMS.find(i => i.id === this.placingTemplateId);
         const w = surfaceConfig ? surfaceConfig.w : 100;
         const h = surfaceConfig ? surfaceConfig.h : 100;
 
         // 3. 计算网格吸附坐标
-        // 地表通常必须严格对齐网格，这里假设 grid 为 w 或 h，或者统一用 this.gridSize
-        // 建议：对于地表，步进应该等于它的宽度，这样才能严丝合缝
         const stepX = w; 
         const stepY = h; 
-        
         const gridX = Math.floor(worldX / stepX) * stepX;
         const gridY = Math.floor(worldY / stepY) * stepY;
 
-        // 4. [关键] 检查该位置是否已经有同类型的地表 (去重)
-        // 防止鼠标在一个格子里微动时生成几百个对象
+        // 4. 检查该位置是否已经有同类型的地表
         const alreadyExists = GameStore.worldLayout.some(p => 
             p.x === gridX && p.y === gridY && p.customType === 'surface'
-            // 可选：如果你希望不同材质可以覆盖，就只判断位置；如果希望完全相同才不去重，就加上 templateId 判断
         );
 
         if (alreadyExists) {
             // 4.1 进阶逻辑：如果是不同的材质，应该替换掉旧的
-            // 找到旧的并删除 (模拟 Sim 里的覆盖逻辑)
             const existingIndex = GameStore.worldLayout.findIndex(p => p.x === gridX && p.y === gridY && p.customType === 'surface');
             if (existingIndex !== -1) {
                 const existingPlot = GameStore.worldLayout[existingIndex];
-                // 如果材质一样，就什么都不做（省性能）
+                // 如果材质一样，就什么都不做
                 if (existingPlot.templateId === this.placingTemplateId) return;
                 
-                // 如果材质不一样，删掉旧的
+                // 🟢 [新增] 记录删除旧地表的操作 (为了能撤销回旧地表)
+                // 必须深拷贝，因为 splice 会移除它
+                this.recordAction({ 
+                    type: 'delete_plot', 
+                    data: JSON.parse(JSON.stringify(existingPlot)) 
+                });
+
+                // 删掉旧的
                 GameStore.worldLayout.splice(existingIndex, 1);
-                // 注意：这里删除了数组元素，后续需要触发 Worker 更新
             }
         }
 
         // 5. 创建新的地表 Plot
-        const newId = `surface_${gridX}_${gridY}_${Date.now()}`; // 保证 ID 唯一
+        const newId = `surface_${gridX}_${gridY}_${Date.now()}`; 
         const newPlot: WorldPlot = {
             id: newId,
             templateId: this.placingTemplateId,
             x: gridX,
             y: gridY,
-            width: w, // 🔒 强制使用固定宽高
+            width: w, 
             height: h,
-            customType: 'surface', // 标记为地表
+            customType: 'surface', 
             customName: surfaceConfig?.label || '地表',
-            // 传入贴图数据
             sheetPath: this.placingData?.sheetPath,
             tileX: this.placingData?.tileX,
             tileY: this.placingData?.tileY,
@@ -449,10 +462,10 @@ export class EditorManager implements EditorState {
         GameStore.worldLayout.push(newPlot);
         GameStore.instantiatePlot(newPlot);
         
+        // 🟢 [新增] 记录放置新地表的操作
+        this.recordAction({ type: 'place_plot', data: newPlot });
+
         // 6. 触发更新
-        // 注意：如果你画得非常快，这里可能会频繁触发 triggerMapUpdate。
-        // 在 Worker 架构下，建议加一个简单的防抖，或者由 Canvas 层控制频率。
-        // 但为了简单起见，这里直接调用。
         GameStore.initIndex();
         GameStore.triggerMapUpdate();
     }
@@ -473,7 +486,6 @@ export class EditorManager implements EditorState {
         const tpl = this.placingFurniture;
         if (!tpl) return;
         
-        // 检查合法性
         if (!this.isValidPlacement) {
             GameStore.showToast("❌ 这里不能放置物品");
             return;
@@ -488,6 +500,10 @@ export class EditorManager implements EditorState {
         } as Furniture;
         
         GameStore.furniture.push(newItem);
+        
+        // 🟢 记录操作
+        this.recordAction({ type: 'place_furniture', data: newItem });
+
         GameStore.initIndex();
         GameStore.refreshFurnitureOwnership();
         
@@ -495,12 +511,14 @@ export class EditorManager implements EditorState {
             this.placingFurniture = null; 
             this.isDragging = false; 
             this.interactionState = 'idle';
-            this.selectedFurnitureId = newItem.id; // 选中刚放置的
+            this.selectedFurnitureId = newItem.id; 
+            // 🟢 [修复] 强制切回选择工具，解决放置后无法点击的问题
+            this.activeTool = 'select';
         } else {
-            // 连续放置模式：不清除 placingFurniture
              GameStore.showToast("按住 Shift 可连续放置");
         }
 
+        // 同步给 Worker
         GameStore.triggerMapUpdate();
     }
 
@@ -691,7 +709,22 @@ export class EditorManager implements EditorState {
     finalizeMove(entityType: 'plot' | 'furniture' | 'room', id: string, startPos: {x:number, y:number}) {
         if (!this.previewPos) return;
         const { x, y } = this.previewPos;
-        let hasChange = false;
+        
+        // 检查是否有变动
+        if (x === startPos.x && y === startPos.y) {
+            this.isDragging = false;
+            this.interactionState = 'idle';
+            this.previewPos = null;
+            return;
+        }
+
+        // 🟢 记录移动操作
+        this.recordAction({
+            type: 'move',
+            entityType,
+            data: { id, x, y },     // 移动后的新位置
+            prevData: { id, ...startPos } // 移动前的旧位置
+        });
         
         // 1. 移动地皮：采用 "销毁 -> 重建" 策略，确保绝对稳健
         if (entityType === 'plot') {
@@ -724,8 +757,112 @@ export class EditorManager implements EditorState {
         GameStore.refreshFurnitureOwnership();
         GameStore.notify();
     }
+
+    recordAction(action: any) {
+        this.history.push(action);
+        this.redoStack = []; // 新操作会清空重做栈
+        if (this.history.length > 50) this.history.shift(); // 限制步数
+    }
+
+    undo() {
+        if (this.history.length === 0) return;
+        const action = this.history.pop();
+        if (!action) return;
+
+        this.redoStack.push(action);
+
+        // 执行反向操作
+        switch (action.type) {
+            case 'place_furniture':
+                // 撤销放置 -> 删除
+                if (action.data) this.removeFurniture(action.data.id);
+                break;
+            case 'delete_furniture':
+                // 撤销删除 -> 恢复
+                if (action.data) {
+                    GameStore.furniture.push(action.data);
+                    GameStore.initIndex();
+                    GameStore.triggerMapUpdate();
+                }
+                break;
+            case 'place_plot':
+                if (action.data) this.removePlot(action.data.id);
+                break;
+            case 'delete_plot':
+                if (action.data) {
+                    GameStore.worldLayout.push(action.data);
+                    GameStore.instantiatePlot(action.data);
+                    GameStore.initIndex();
+                    GameStore.triggerMapUpdate();
+                }
+                break;
+            case 'move':
+                // 撤销移动 -> 回到旧位置
+                // 🟢 [修复] 检查 entityType 和 prevData 是否存在
+                if (action.entityType && action.prevData) {
+                    this.applyMove(action.entityType, action.prevData.id, action.prevData.x, action.prevData.y);
+                }
+                break;
+        }
+        GameStore.notify();
+    }
+
+    redo() {
+        if (this.redoStack.length === 0) return;
+        const action = this.redoStack.pop();
+        if (!action) return;
+
+        this.history.push(action);
+
+        // 执行正向操作
+        switch (action.type) {
+            case 'place_furniture':
+                GameStore.furniture.push(action.data);
+                GameStore.initIndex();
+                GameStore.triggerMapUpdate();
+                break;
+            case 'delete_furniture':
+                this.removeFurniture(action.data.id);
+                break;
+            case 'place_plot':
+                GameStore.worldLayout.push(action.data);
+                GameStore.instantiatePlot(action.data);
+                GameStore.initIndex();
+                GameStore.triggerMapUpdate();
+                break;
+            case 'delete_plot':
+                this.removePlot(action.data.id);
+                break;
+            case 'move':
+                if (action.entityType && action.prevData) {
+                    this.applyMove(action.entityType, action.prevData.id, action.prevData.x, action.prevData.y);
+                }
+                break;
+        }
+        GameStore.notify();
+    }
+
+    // 辅助函数：应用移动
+    private applyMove(type: string, id: string, x: number, y: number) {
+        if (type === 'furniture') {
+            const f = GameStore.furniture.find(i => i.id === id);
+            if (f) { f.x = x; f.y = y; }
+        } else if (type === 'plot') {
+            // 地皮移动需要特殊处理（重建关联物体）
+            // 这里为了简单，直接复用 finalizeMove 的部分逻辑，或者直接修改坐标并 instantiate
+            const plot = GameStore.worldLayout.find(p => p.id === id);
+            if (plot) {
+                plot.x = x; plot.y = y;
+                // 清理并重建
+                GameStore.rooms = GameStore.rooms.filter(r => !r.id.startsWith(`${id}_`));
+                GameStore.furniture = GameStore.furniture.filter(f => !f.id.startsWith(`${id}_`));
+                GameStore.housingUnits = GameStore.housingUnits.filter(h => !h.id.startsWith(`${id}_`));
+                GameStore.instantiatePlot(plot);
+            }
+        }
+        GameStore.initIndex();
+        GameStore.refreshFurnitureOwnership();
+        GameStore.triggerMapUpdate();
+    }
     
-    recordAction(action: EditorAction) {}
-    undo() {}
-    redo() {}
 }

@@ -571,35 +571,27 @@ export class GameStore {
     static get redoStack() { return this.editor.redoStack; }
 
     static enterEditorMode() { 
-        this.togglePause(true); 
-        this.editor.enterEditorMode(); 
+        this.setGameSpeed(0);
+        this.editor.enterEditorMode();
     }
     static confirmEditorChanges() { 
         this.editor.confirmChanges(); 
-        
-        this.editor.activePlotId = null;      
-        this.editor.mode = 'none';            
-        this.editor.selectedPlotId = null;    
-        this.editor.selectedFurnitureId = null;
-        this.editor.selectedRoomId = null;
-
-        this.togglePause(false); 
-        this.notify(); 
+        // 退出编辑模式时恢复速度
+        this.setGameSpeed(1); 
+        this.notify();
     }
     static cancelEditorChanges() { 
         this.editor.cancelChanges(); 
-        
-        this.editor.activePlotId = null;
-        this.editor.mode = 'none';
-        this.editor.selectedPlotId = null;
-        this.editor.selectedFurnitureId = null;
-        this.editor.selectedRoomId = null;
-
-        this.togglePause(false); 
+        // 退出编辑模式时恢复速度
+        this.setGameSpeed(1); 
         this.notify();
     }
     static resetEditorState() { this.editor.resetState(); }
-    static clearMap() { this.editor.clearMap(); }
+    static clearMap() { 
+        this.editor.clearMap(); 
+        // 🟢 [修复] 强制发送更新给 Worker
+        this.sendUpdateMap();
+    }
     static recordAction(action: EditorAction) { this.editor.recordAction(action); }
     static undo() { this.editor.undo(); this.triggerMapUpdate(); } 
     static redo() { this.editor.redo(); this.triggerMapUpdate(); } 

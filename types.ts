@@ -217,9 +217,19 @@ export interface EditorState {
 }
 
 export interface EditorAction {
-    type: 'add' | 'remove' | 'move' | 'modify' | 'resize' | 'rotate';
-    entityType: 'plot' | 'furniture' | 'room';
-    id: string;
+    // 扩充操作类型
+    type: 'add' | 'remove' | 'move' | 'modify' | 'resize' | 'rotate' | 
+          'place_furniture' | 'delete_furniture' | 'place_plot' | 'delete_plot';
+    
+    // 设为可选，因为某些特定操作(如 place_furniture)可能不需要显式传这个
+    entityType?: 'plot' | 'furniture' | 'room';
+    
+    // 设为可选
+    id?: string;
+    
+    // 🆕 新增：用于存储操作主体数据 (如被放置的家具对象)
+    data?: any; 
+    
     prevData?: any; 
     newData?: any;  
 }

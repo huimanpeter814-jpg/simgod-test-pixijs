@@ -165,8 +165,8 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
 
     // 左侧工具栏
     const renderTools = () => (
-        <div className="flex flex-col gap-2 p-2 border-r border-white/10 bg-[#1e222e] items-center">
-            {/* 模式切换 / 返回按钮 */}
+        <div className="flex flex-col gap-2 p-2 border-r border-white/10 bg-[#1e222e] items-center overflow-y-auto custom-scrollbar">
+            {/* 返回/退出按钮 */}
             {isBuildMode ? (
                 <button 
                     onClick={() => GameStore.editor.exitBuildMode()}
@@ -184,8 +184,26 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
             <div className="w-full h-px bg-white/10 my-1"></div>
 
             <button onClick={() => GameStore.editor.setTool('select')} className={`w-8 h-8 rounded flex items-center justify-center ${activeTool === 'select' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`} title="选择 (V)">👆</button>
+            
+            {/* 🟢 撤销/重做 按钮 */}
+            <button onClick={() => GameStore.undo()} className="w-8 h-8 rounded flex items-center justify-center bg-white/5 text-gray-400 hover:text-white" title="撤销">
+                ⬅️
+            </button>
+            <button onClick={() => GameStore.redo()} className="w-8 h-8 rounded flex items-center justify-center bg-white/5 text-gray-400 hover:text-white" title="重做">
+                ➡️
+            </button>
+            
+            <div className="w-full h-px bg-white/10 my-1"></div>
+
             <button onClick={() => GameStore.editor.rotateSelection()} className="w-8 h-8 rounded flex items-center justify-center bg-white/5 text-gray-400 hover:text-white" title="旋转 (R)">🔄</button>
             <button onClick={() => GameStore.editor.deleteCurrentSelection()} className="w-8 h-8 rounded flex items-center justify-center bg-white/5 text-gray-400 hover:text-red-400" title="删除 (Del)">🗑️</button>
+            
+            {/* 🟢 清空地图按钮 */}
+            {!isBuildMode && (
+                <button onClick={() => GameStore.clearMap()} className="w-8 h-8 mt-2 rounded flex items-center justify-center bg-red-900/30 text-red-400 hover:bg-red-600 hover:text-white border border-red-800/50" title="清空地图">
+                    💣
+                </button>
+            )}
         </div>
     );
 
@@ -228,7 +246,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                     </div>
 
                     {/* 列表内容 */}
-                    <div className="grid grid-cols-4 gap-2 overflow-y-auto custom-scrollbar content-start">
+                    <div className="grid grid-cols-8 gap-2 overflow-y-auto custom-scrollbar content-start">
 
                  
                         {/* 1. 建筑列表 (原有逻辑) */}
@@ -497,9 +515,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
 
     return (
         <div 
-            onMouseDown={(e) => e.stopPropagation()} // 阻止事件冒泡 (保持原有逻辑)
-            // ✅ 修改：在 className 末尾添加 pointer-events-auto
-            className="fixed bottom-0 left-0 right-0 h-[260px] flex z-50 shadow-2xl animate-[slideUp_0.2s_ease-out] select-none pointer-events-auto"
+            onMouseDown={(e) => e.stopPropagation()} 
+            // 🟢 [修改] 样式：h-[260px] 改为 h-1/3 (屏幕三分之一)，并添加 max-h 限制
+            className="fixed bottom-0 left-0 right-0 h-1/3 max-h-[500px] min-h-[260px] flex z-50 shadow-2xl animate-[slideUp_0.2s_ease-out] select-none pointer-events-auto"
         >
             {renderTools()}
             {renderTabs()}
