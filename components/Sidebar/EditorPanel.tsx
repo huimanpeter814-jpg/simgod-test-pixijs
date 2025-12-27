@@ -8,6 +8,48 @@ interface EditorPanelProps {
     onClose: () => void; 
 }
 
+// 🎨 Sprite缩略图组件：利用 CSS 裁剪显示你在 data 里定义好的切片
+const ItemThumbnail = ({ item, size = 32 }: { item: any, size?: number }) => {
+    // 1. 获取你在 data 里配好的大图路径
+    const sheet = item.tileSheet || item.sheetPath;
+
+    // 2. 如果没配图集，就显示个色块（兜底）
+    if (!sheet || !item.tilePos) {
+        return <div style={{ width: size/2, height: size/2, background: item.color || '#888', borderRadius: 2 }} />;
+    }
+
+    // 3. 计算位置：利用你 data 里的 tilePos (网格坐标) * 48 (网格大小)
+    // 注意：这里假设你的图集都是 48x48 规格的，如果不是，可以在 item 里加个 gridSize 字段
+    const gridSize = 48; 
+    const bgX = -(item.tilePos.x * gridSize);
+    const bgY = -(item.tilePos.y * gridSize);
+    
+    // 4. 计算缩放：把切片缩放到 UI 按钮的大小
+    const itemW = item.tileSize?.w || gridSize;
+    const itemH = item.tileSize?.h || gridSize;
+    const scale = Math.min(size / itemW, size / itemH); // 保持比例适应框框
+
+    return (
+        <div style={{ width: size, height: size, position: 'relative', overflow: 'hidden', pointerEvents: 'none' }}>
+            <div 
+                style={{
+                    width: itemW,
+                    height: itemH,
+                    backgroundImage: `url(${sheet})`,
+                    backgroundPosition: `${bgX}px ${bgY}px`, // 👈 核心：CSS 这里用到了你的切片数据
+                    backgroundRepeat: 'no-repeat',
+                    transform: `scale(${scale})`, // 缩放以适应 UI 小格子
+                    transformOrigin: 'top left',
+                    position: 'absolute',
+                    left: (size - itemW * scale) / 2, // 居中
+                    top: (size - itemH * scale) / 2,
+                    imageRendering: 'pixelated' // 像素风必备
+                }}
+            />
+        </div>
+    );
+};
+
 // ==========================================
 // 🎨 常量定义 (颜色、家具目录等)
 // ==========================================
@@ -289,9 +331,12 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                                     'surface',
                                     item // 👈 ✨ [修改] 传递整个 item 作为第四个参数 (extraData)
                                 )} 
-                                className="aspect-video bg-white/5 border border-white/10 hover:border-gray-500/50 rounded p-2 flex flex-col items-center justify-center group"
+                                className="aspect-video bg-white/5 border border-white/10 hover:border-gray-500/50 rounded p-1 flex flex-col items-center justify-between group"
                             >
-                                <div className="w-full h-6 rounded mb-1 shadow-inner opacity-80" style={{ backgroundColor: item.color }}></div>
+                                {/* 🟢 使用 ItemThumbnail，尺寸设为 32 或更大 */}
+                                <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
+                                    <ItemThumbnail item={item} size={40} />
+                                </div>
                                 <span className="text-[10px] font-bold text-gray-300 group-hover:text-white">{item.label}</span>
                             </button>
                         ))}
@@ -317,7 +362,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                                     onClick={() => GameStore.startPlacingFurniture(item)}
                                     className="aspect-square bg-white/5 border border-white/10 hover:border-orange-500/50 rounded p-1 flex flex-col items-center justify-center group"
                                 >
-                                    <div className="w-6 h-6 rounded mb-1 shadow-sm" style={{ backgroundColor: item.color }}></div>
+                                    <div className="mb-1">
+                                        <ItemThumbnail item={item} size={40} />
+                                    </div>
                                     <span className="text-[9px] font-bold text-gray-300 group-hover:text-white truncate w-full text-center">{item.label}</span>
                                 </button>
                              ))
@@ -353,7 +400,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                                 className="aspect-square bg-white/5 border border-white/10 hover:border-white/40 hover:bg-white/10 rounded flex flex-col items-center justify-center p-1"
                                 title={item.label}
                             >
-                                <div className="w-6 h-6 rounded mb-1 shadow-sm" style={{background: item.color}}></div>
+                                <div className="mb-1">
+                                    <ItemThumbnail item={item} size={40} />
+                                </div>
                                 <span className="text-[9px] text-gray-400 scale-90 truncate w-full text-center">{item.label}</span>
                             </button>
                         ))}
