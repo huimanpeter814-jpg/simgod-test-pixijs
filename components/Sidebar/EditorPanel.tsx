@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GameStore } from '../../utils/simulation';
+import { GameStore } from '../../utils/GameStore';
 import { PLOTS } from '../../data/plots';
 import { Furniture } from '../../types';
 import { FURNITURE_CATALOG, WORLD_DECOR_ITEMS, WORLD_SURFACE_ITEMS } from '../../data/furnitureData';
@@ -79,13 +79,27 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    // 🟢 [新增] 处理文件选择
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            await GameStore.importMapFromFile(file);
+            // 清空 value 允许重复导入同一个文件
+            e.target.value = ''; 
+        }
+    };
+
     // 🟢 [新增] 地皮模式下的子分类状态
     const [plotCategory, setPlotCategory] = useState<'building' | 'decor' | 'surface' | 'props'>('building');
     
     // [新增] 本地状态用于编辑输入框 (防止输入卡顿)
     const [editName, setEditName] = useState('');
     const [editType, setEditType] = useState('');
-    
+
 
     // [新增] 专门的进入装修处理函数
     const handleEnterBuildMode = () => {
@@ -428,6 +442,35 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                                 <span className="text-xl">🌍</span>
                                 <span>世界视图</span>
                             </div>
+                            {/* 🟢 [新增] 地图导入导出区域 (仅在未选中任何物体时显示，或者始终显示在底部) */}
+                            {!selectedPlotId && !selectedFurnitureId && (
+                                <div className="flex flex-col gap-2 mb-2">
+                                    <div className="text-[10px] text-gray-500 mb-1">地图数据管理</div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button 
+                                            onClick={() => GameStore.exportCurrentMap()}
+                                            className="bg-white/5 hover:bg-white/10 border border-white/20 text-white py-1.5 rounded text-[10px] flex items-center justify-center gap-1 transition-colors"
+                                        >
+                                            📤 导出地图
+                                        </button>
+                                        <button 
+                                            onClick={handleImportClick}
+                                            className="bg-white/5 hover:bg-white/10 border border-white/20 text-white py-1.5 rounded text-[10px] flex items-center justify-center gap-1 transition-colors"
+                                        >
+                                            📥 导入地图
+                                        </button>
+                                        {/* 隐藏的文件输入框 */}
+                                        <input 
+                                            type="file" 
+                                            ref={fileInputRef} 
+                                            className="hidden" 
+                                            accept=".json"
+                                            onChange={handleFileChange}
+                                        />
+                                    </div>
+                                    <div className="h-px bg-white/10 my-1"></div>
+                                </div>
+                            )}
                             {selectedPlotId ? (
                                 <div className="flex flex-col gap-2">
                                     <div className="text-[10px] text-gray-400">已选中地皮: <span className="font-mono text-white">{selectedPlotId.slice(-8)}</span></div>

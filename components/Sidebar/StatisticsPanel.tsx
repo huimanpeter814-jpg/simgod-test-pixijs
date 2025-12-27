@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { GameStore, Sim } from '../../utils/simulation';
+import { GameStore } from '../../utils/GameStore';
+import { Sim } from '../../utils/Sim';
 import { JobType, NeedType, AgeStage } from '../../types';
 import { BUFFS, MBTI_TYPES, ORIENTATIONS } from '../../constants';
 

@@ -136,13 +136,17 @@ const PixiGameCanvasComponent: React.FC = () => {
         
         const gridSize = GameStore.editor.gridSize || 50;
         const alpha = 0.15; // 网格透明度
+
+        const rawStartX = -2000;
+        const rawStartY = -2000;
+        const endX = CONFIG.CANVAS_W + 1000;
+        const endY = CONFIG.CANVAS_H + 1000;
         
         // 优化：只绘制屏幕可见区域的网格，或者绘制一个覆盖全图的大网格
         // 这里为了简单，假设绘制一个足够大的区域
-        const startX = -2000;
-        const startY = -2000;
-        const endX = CONFIG.CANVAS_W + 1000; // 确保覆盖全图
-        const endY = CONFIG.CANVAS_H + 1000;
+        const startX = Math.floor(rawStartX / gridSize) * gridSize;
+        const startY = Math.floor(rawStartY / gridSize) * gridSize;
+
 
         g.strokeStyle = { width: 1 / scale, color: 0xffffff, alpha: alpha }; // 线条随缩放变细
 
@@ -481,6 +485,33 @@ const PixiGameCanvasComponent: React.FC = () => {
                     }
                     simLayerRef.current.sortChildren();
                 }
+                // === 6. 镜头跟随逻辑 (Camera Follow) ===
+                // 只有当：选中了 Sim 且 并没有正在拖拽镜头 时，才自动跟随
+                if (GameStore.selectedSimId && !isDraggingCamera.current && !activeResizeHandle.current && worldContainerRef.current) {
+                    const sim = GameStore.sims.find(s => s.id === GameStore.selectedSimId);
+                    
+                    // 确保 Sim 存在且坐标有效
+                    if (sim && !isNaN(sim.pos.x) && !isNaN(sim.pos.y)) {
+                        const world = worldContainerRef.current;
+                        const screenCenter = { x: app.screen.width / 2, y: app.screen.height / 2 };
+                        
+                        // 目标世界坐标
+                        const targetWorldX = sim.pos.x;
+                        const targetWorldY = sim.pos.y; // 你可以选择是否减去 sim.height/2 让头部居中
+                        
+                        // 计算目标容器位置：
+                        // Container.x = ScreenCenter.x - (TargetWorld.x * Scale)
+                        const targetContainerX = screenCenter.x - targetWorldX * world.scale.x;
+                        const targetContainerY = screenCenter.y - targetWorldY * world.scale.y;
+
+                        // 平滑移动 (Lerp)
+                        // factor 0.1 表示每帧移动 10% 的距离，制造平滑感
+                        // 如果觉得太慢可以改大，如果太抖可以改小
+                        const lerpFactor = 0.1;
+                        world.x = world.x + (targetContainerX - world.x) * lerpFactor;
+                        world.y = world.y + (targetContainerY - world.y) * lerpFactor;
+                    }
+                }
             });
         };
         initGame();
@@ -527,6 +558,7 @@ const PixiGameCanvasComponent: React.FC = () => {
         const isCameraAction = e.button === 2 || (e.button === 0 && (isSpacePressed.current || isNormalMode));
         if (isCameraAction) {
             isDraggingCamera.current = true;
+            GameStore.selectSim(null);
             if (containerRef.current) containerRef.current.style.cursor = 'grabbing';
             return;
         }
@@ -629,14 +661,34 @@ const PixiGameCanvasComponent: React.FC = () => {
                     if (hitObj) hitType = 'floor';
                 }
             } 
-            // [世界模式]：只能选地皮
-            else if (GameStore.editor.mode === 'plot') {
-                 // 简单 AABB 检测
-                 const plot = GameStore.worldLayout.find(p => {
-                    const w = p.width || 300; const h = p.height || 300;
-                    return worldX >= p.x && worldX <= p.x + w && worldY >= p.y && worldY <= p.y + h;
+            // 🟢 [修复] 世界模式：既能选家具(街道设施)，也能选地皮
+            // 注意：这里去掉了 else if (mode === 'plot') 的限制，只要不是建筑模式，都能选
+            else {
+                 // 1. 优先检测家具 (街道设施/World Props)
+                 // 我们反向遍历(从上层到下层)，优先选中最上面的
+                 const hitFurn = [...GameStore.furniture].reverse().find(f => {
+                    return worldX >= f.x && worldX <= f.x + f.w && worldY >= f.y && worldY <= f.y + f.h;
                  });
-                 if (plot) { hitObj = plot; hitType = 'plot'; }
+
+                 if (hitFurn) {
+                     hitObj = hitFurn;
+                     hitType = 'furniture';
+                     // ✨ 关键：选中家具时，自动把模式切为 furniture，这样后续的拖拽/预览逻辑才能正常工作
+                     GameStore.editor.mode = 'furniture';
+                 }
+                 // 2. 如果没点中家具，再检测地皮
+                 else {
+                     const plot = GameStore.worldLayout.find(p => {
+                        const w = p.width || 300; const h = p.height || 300;
+                        return worldX >= p.x && worldX <= p.x + w && worldY >= p.y && worldY <= p.y + h;
+                     });
+                     if (plot) { 
+                         hitObj = plot; 
+                         hitType = 'plot'; 
+                         // ✨ 关键：选中地皮时，自动把模式切为 plot
+                         GameStore.editor.mode = 'plot';
+                     }
+                 }
             }
 
             if (hitObj) {

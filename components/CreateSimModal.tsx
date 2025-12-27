@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { GameStore } from '../utils/simulation';
+import { GameStore } from '../utils/GameStore';
 import { SimInitConfig } from '../utils/logic/SimInitializer';
 import { CONFIG, ASSET_CONFIG, MBTI_TYPES, LIFE_GOALS, AGE_CONFIG, SURNAMES, GIVEN_NAMES, TRAIT_POOL, ZODIACS, ORIENTATIONS } from '../constants';
 import { AgeStage, SimAppearance } from '../types';

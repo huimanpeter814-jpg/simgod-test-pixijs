@@ -78,44 +78,33 @@ export const getSlicedTexture = (
     path: string | undefined, 
     col: number, 
     row: number, 
-    w: number = 48, 
-    h: number = 48
+    w: number, 
+    h: number,
+    gridBase: number = 48
 ): Texture => {
     if (!path) return Texture.EMPTY;
 
-    // 1. 优先检查缓存
-    const cacheKey = `${path}_${col}_${row}_${w}_${h}`;
-    if (slicedCache.has(cacheKey)) {
-        return slicedCache.get(cacheKey)!;
-    }
+    // key 加上 gridBase 防止冲突
+    const cacheKey = `${path}_${col}_${row}_${w}_${h}_${gridBase}`;
+    if (slicedCache.has(cacheKey)) return slicedCache.get(cacheKey)!;
 
-    // 2. 获取原图 BaseTexture
-    // 注意：Assets.get 获取的是整个大图的 Texture
-    if (!Assets.cache.has(path)) {
-        console.warn(`[AssetLoader] Tileset not loaded: ${path}`);
-        return Texture.EMPTY;
-    }
+    if (!Assets.cache.has(path)) return Texture.EMPTY;
     const baseTex = Assets.get(path);
 
-    // 3. 计算切片坐标
-    const x = col * w;
-    const y = row * h;
+    // ✨ 核心修改：位置 = 索引 * 基础步长
+    const x = col * gridBase;
+    const y = row * gridBase;
 
     // 越界检查
     if (x + w > baseTex.width || y + h > baseTex.height) {
-        console.warn(`[AssetLoader] Slice out of bounds: ${path} [${col},${row}]`);
+        console.warn(`[AssetLoader] Slice out of bounds: ${path}`);
         return Texture.EMPTY;
     }
 
-    // 4. 创建切片 (Frame)
-    // 使用 Pixi 的 Texture 构造函数创建引用原图的新纹理
     const rect = new Rectangle(x, y, w, h);
-    
-    // 兼容 Pixi v7/v8: 使用 baseTex.source (v8) 或 baseTex.baseTexture (v7)
-    const source = baseTex.source || baseTex.baseTexture; 
-    const slicedTex = new Texture({ source: source, frame: rect });
+    const source = baseTex.source || baseTex.baseTexture;
+    const slicedTex = new Texture({ source, frame: rect });
 
-    // 5. 存入缓存并返回
     slicedCache.set(cacheKey, slicedTex);
     return slicedTex;
 };

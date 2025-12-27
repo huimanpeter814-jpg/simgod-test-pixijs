@@ -123,12 +123,16 @@ export class GameStore {
     }
 
     static togglePause(isPaused: boolean) {
+        console.log(`[GameStore] togglePause: ${isPaused}, hasWorker: ${!!this.worker}`);
         if (this.worker) {
             if (isPaused) {
                 this.worker.postMessage({ type: 'PAUSE' });
             } else {
                 this.worker.postMessage({ type: 'START' });
             }
+        }else {
+            // 如果这里打印出来了，说明 EditorManager 拿到的 worker 是空的！
+            console.warn("[GameStore] ❌ Cannot pause, worker is null!");
         }
     }
 
@@ -533,10 +537,66 @@ export class GameStore {
         return {
             version: "2.0", 
             timestamp: Date.now(),
+            // worldLayout 包含了地皮、Surface(地表)、Decor(景观建筑)
             worldLayout: this.worldLayout,
+            // rooms 包含了所有房间定义
             rooms: this.rooms, 
+            // furniture 包含了所有家具（包括放在世界地图上的街道设施）
             furniture: this.furniture 
         };
+    }
+
+    // 🟢 [新增] 执行导出操作
+    static exportCurrentMap() {
+        const data = this.getMapData();
+        const dateStr = new Date().toISOString().slice(0, 10);
+        SaveManager.exportMapToFile(data, `SimGod_Map_${dateStr}.json`);
+        this.showToast("✅ 地图已导出！");
+    }
+
+    // 🟢 [新增] 执行导入操作
+    static async importMapFromFile(file: File) {
+        this.showToast("⏳ 正在读取地图文件...");
+        const data = await SaveManager.readMapFile(file);
+        
+        if (!data) {
+            this.showToast("❌ 文件格式无效或损坏");
+            return;
+        }
+
+        if (!confirm("⚠️ 警告：导入地图将覆盖当前世界的所有建筑和设施。\n确定要继续吗？")) {
+            return;
+        }
+
+        try {
+            // 1. 暂停 Worker
+            this.togglePause(true);
+
+            // 2. 覆盖数据
+            this.worldLayout = data.worldLayout || [];
+            this.rooms = data.rooms || [];
+            this.furniture = data.furniture || data.customFurniture || [];
+            
+            // 3. 重建索引和归属权
+            // 清空旧的 HousingUnits
+            this.housingUnits = []; 
+            // 重新实例化地皮逻辑 (这会重建 HousingUnits)
+            this.worldLayout.forEach(plot => this.instantiatePlot(plot));
+            
+            this.initIndex();
+            this.refreshFurnitureOwnership();
+
+            // 4. 同步给 Worker
+            this.sendUpdateMap();
+            
+            // 5. 触发 UI 刷新
+            this.triggerMapUpdate();
+            this.showToast("✅ 地图导入成功！");
+
+        } catch (e) {
+            console.error("Import map failed:", e);
+            this.showToast("❌ 导入过程发生错误");
+        }
     }
 
     static importMapData(rawJson: any) {

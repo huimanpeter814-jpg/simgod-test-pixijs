@@ -67,8 +67,8 @@ export class PixiWorldBuilder {
         const container = new Container();
         container.x = f.x;
         container.y = f.y;
-        const w = f.w || 50;
-        const h = f.h || 50;
+        const w = f.w || 48;
+        const h = f.h || 48;
 
         if (f.rotation) {
             container.pivot.set(w / 2, h / 2); 
@@ -77,33 +77,45 @@ export class PixiWorldBuilder {
             container.y += h / 2;
         }
 
-        // 🆕 逻辑：优先检查是否是 SpriteSheet 切片
-        if (f.sheetPath) {
-            // 使用 assetLoader 中的切片函数
-            // 默认尺寸设为 48 (符合你的素材规格)
+        if (f.tileSheet && f.tilePos) {
+            // [新增] 1. 图集切片渲染逻辑
+            
+            // 确定要从素材图中切多大 (默认 48x48，如果是 2x2 家具则是 96x96)
+            const sliceW = f.tileSize?.w || 48;
+            const sliceH = f.tileSize?.h || 48;
+            
+            // 素材图的基础网格步长 (用于计算 tilePos 对应的像素坐标)
+            const GRID_BASE = 48; 
+
+            // 调用 assetLoader 中的切片函数
             const texture = getSlicedTexture(
-                f.sheetPath, 
-                f.tileX || 0, 
-                f.tileY || 0, 
-                f.tileW || 48, 
-                f.tileH || 48
+                f.tileSheet, 
+                f.tilePos.x, 
+                f.tilePos.y, 
+                sliceW, 
+                sliceH,
+                GRID_BASE
             );
             
             const sprite = new Sprite(texture);
-            sprite.width = w;   // 拉伸到家具实际在游戏里的显示大小
+            
+            // ✨ 自动缩放：将切片素材 (如 96px) 缩放到游戏物体大小 (如 100px)
+            sprite.width = w;
             sprite.height = h;
+            
             container.addChild(sprite);
-        }
-        // 旧逻辑：检查单张大图
-        else if (f.imagePath && Assets.cache.has(f.imagePath)) {
+
+        } else if (f.imagePath && Assets.cache.has(f.imagePath)) {
+            // [原有] 2. 单张图片渲染逻辑
             const sprite = Sprite.from(f.imagePath);
             sprite.width = w;
             sprite.height = h;
             container.addChild(sprite);
-        } 
-        // 兜底：像素画绘制
-        else {
+
+        } else {
+            // [原有] 3. 程序化像素绘制 (兜底)
             const g = new Graphics();
+            // 调用 pixelArt.ts 中的逻辑，绘制占位符或程序化图案
             drawPixiFurniture(g, w, h, f);
             container.addChild(g);
         }

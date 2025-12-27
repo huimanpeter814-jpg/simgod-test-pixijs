@@ -5,7 +5,8 @@ import Inspector from './Inspector';
 import StatisticsPanel from './StatisticsPanel';
 import EditorPanel from './EditorPanel'; 
 import CreateSimModal from '../CreateSimModal'; // 🆕 引入捏人模态框
-import { GameStore, Sim } from '../../utils/simulation';
+import { Sim } from '../../utils/simulation';
+import { GameStore } from '../../utils/GameStore';
 
 // Full Screen Overlay managing HUD elements
 const GameOverlay: React.FC = () => {
@@ -44,13 +45,17 @@ const GameOverlay: React.FC = () => {
         setShowEditor(newState);
         
         if (newState) {
-            GameStore.editor.mode = 'plot';
+            // 🟢 [修复] 必须调用 enterEditorMode()！
+            // 这样才能触发：暂停游戏、创建快照、重置状态
+            GameStore.enterEditorMode();
         } else {
-            GameStore.editor.mode = 'none';
-            GameStore.editor.selectedPlotId = null;
-            GameStore.editor.selectedFurnitureId = null;
+            // 🟢 [修复] 退出时调用 cancel 或 confirm
+            // 如果用户直接点击该按钮关闭（而不是通过面板内的保存/取消），
+            // 我们默认视为“取消”或者只关闭 UI（视你的需求而定）。
+            // 这里建议调用 cancel 以确保清理干净
+            GameStore.cancelEditorChanges();
         }
-        GameStore.notify();
+        // GameStore.notify(); // enterEditorMode 内部已经 notify 了，这里可以省去
     };
 
     return (

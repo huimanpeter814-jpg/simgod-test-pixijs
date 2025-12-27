@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useMemo } from 'react';
-import { GameStore, Sim } from '../../utils/simulation';
+import { GameStore } from '../../utils/GameStore';
+import { Sim } from '../../utils/Sim';
 import { drawAvatarHead } from '../../utils/render/pixelArt';
 import { SimData } from '../../types';
 

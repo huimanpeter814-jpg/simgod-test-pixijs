@@ -1,5 +1,12 @@
 import { Furniture } from '../types';
 
+const getTile = (id: number, width: number) => {
+    return {
+        x: id % width,
+        y: Math.floor(id / width)
+    };
+};
+
 // ==========================================
 // 1. 世界地表与装饰 (World Mode 专用)
 // ==========================================
@@ -10,17 +17,102 @@ export const WORLD_DECOR_ITEMS = [
 ];
 
 export const WORLD_SURFACE_ITEMS = [
-    { id: 'surface_water', label: '💧 水域', w: 100, h: 100, color: '#54a0ff', type: 'water' },
-    { id: 'surface_grass', label: '🌱 草地', w: 100, h: 100, color: '#78e08f', type: 'grass' },
-    { id: 'surface_concrete', label: '⬜ 混凝土', w: 100, h: 100, color: '#b2bec3', type: 'concrete' },
+    //地基
+    { 
+        id:'foundation_corner_top',
+        label: '地基-上角', w: 96, h: 96, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(377,29), "tileSize": { "w": 96, "h": 96 },
+    },
+    { 
+        id:'foundation_corner_bl',
+        label: '地基-左下', w: 96, h: 96, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(435,29), "tileSize": { "w": 96, "h": 96 },
+    },
+    { 
+        id:'foundation_corner_br"',
+        label: '地基-右下', w: 96, h: 96, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(437,29), "tileSize": { "w": 96, "h": 96 },
+    },
+    { 
+        id:'foundation_edge_top"',
+        label: '地基-上边', w: 96, h: 96, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(384,29), "tileSize": { "w": 96, "h": 96 },
+    },
+    { 
+        id:'foundation_edge_bottom"',
+        label: '地基-下边', w: 96, h: 96, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(422,29), "tileSize": { "w": 96, "h": 96 },
+    },
+    //马路
     { 
         id:'surface_road',
         label: '马路', w: 48, h: 48, color: '#ffffff',
         type:'road',
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
-        // 切片坐标 (假设路灯在第0列，第0行)
-        tileX: 4, tileY: 7, tileW: 48, tileH: 48 
+        tilePos: { "x": 4, "y": 7 }, "tileSize": { "w": 48, "h": 48 },
     },
+    { 
+        id:'surface_road_line',
+        label: '马路_竖线', w: 48, h: 48, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: { "x": 9, "y": 9 }, "tileSize": { "w": 48, "h": 48 },
+    },
+    { 
+        id:'road_corner',
+        label: '马路转角', w: 48, h: 48, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(154,29), "tileSize": { "w": 48, "h": 48 },
+    },
+    { 
+        id:'zebra_crossing',
+        label: '斑马线', w: 96, h: 48, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(123,29), "tileSize": { "w": 96, "h": 48 },
+    },
+    //地砖
+    { 
+        id:'floor_tile_big',
+        label: '大地砖', w: 96, h: 96, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(9,29), "tileSize": { "w": 96, "h": 96 },
+    },
+    { 
+        id:'floor_tile_small',
+        label: '小地砖', w: 48, h: 48, color: '#ffffff',
+        type:'road',
+        sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
+        tilePos: getTile(30,29), "tileSize": { "w": 48, "h": 48 },
+    },
+    //草地
+    { 
+        id:'grass',
+        label: '草地', w: 48, h: 48, color: '#ffffff',
+        type:'grass',
+        sheetPath: '/src/assets/world_builder/3_City_Props_48x48.png', 
+        tilePos: getTile(281,32), "tileSize": { "w": 48, "h": 48 },
+    },
+    { 
+        id:'grass_flower',
+        label: '草地_花', w: 48, h: 48, color: '#ffffff',
+        type:'grass',
+        sheetPath: '/src/assets/world_builder/3_City_Props_48x48.png', 
+        tilePos: getTile(250,32), "tileSize": { "w": 48, "h": 48 },
+    },
+
 ];
 
 // ==========================================
@@ -32,28 +124,147 @@ export const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<F
         label: '街道设施',
         items: [
             // ✨ 示例：使用 SpriteSheet 的路灯
-            // { 
-            //     label: '路灯', w: 20, h: 60, color: '#f1c40f', utility: 'light', 
-            //     tags: ['street_light'],
-            //     // sheetPath 指向你的图集文件
-            //     sheetPath: '/src/assets/furniture/city_props.png', 
-            //     // 切片坐标 (假设路灯在第0列，第0行)
-            //     tileX: 0, tileY: 0, tileW: 48, tileH: 96 
-            // },
-            // { 
-            //     label: '长椅', w: 60, h: 20, color: '#e17055', utility: 'comfort', 
-            //     pixelPattern: 'bench_park', tags: ['seat'],
-            //     sheetPath: '/src/assets/furniture/city_props.png',
-            //     tileX: 1, tileY: 0 
-            // },
-            // { 
-            //     label: '消防栓', w: 20, h: 20, color: '#ff5252', utility: 'none', 
-            //     pixelPattern: 'hydrant', tags: ['decor'],
-            //     sheetPath: '/src/assets/furniture/city_props.png',
-            //     tileX: 2, tileY: 0 
-            // },
-            { label: '垃圾桶', w: 20, h: 20, color: '#636e72', utility: 'none', pixelPattern: 'trash', tags: ['decor'] },
-            { label: '贩卖机', w: 40, h: 30, color: '#ff5252', utility: 'buy_drink', pixelPattern: 'vending', tags: ['shop'] },
+            { 
+                label: '路灯_1', w: 48, h: 192, color: '#ffffff',
+                tags: ['light'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(20,32), "tileSize": { "w": 48, "h": 192 },
+            },
+            { 
+                label: '路灯_2_L', w: 48*2, h: 48*4, color: '#ffffff',
+                tags: ['light'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(903,32), "tileSize": { "w": 48*2, "h": 48*4 },
+            },
+            { 
+                label: '路灯_2_R', w: 48*2, h: 48*4, color: '#ffffff',
+                tags: ['light'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(901,32), "tileSize": { "w": 48*2, "h": 48*4 },
+            },
+            { 
+                label: '长椅_长', w: 48*3, h: 96, color: '#ffffff',
+                tags: ['seat'],utility: 'comfort',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(85,32), "tileSize": { "w": 48*3, "h": 96 },
+            },
+            { 
+                label: '长椅_短', w: 48*2, h: 96, color: '#ffffff',
+                tags: ['seat'],utility: 'comfort',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(21,32), "tileSize": { "w": 48*2, "h": 96 },
+            },
+            { 
+                label: '垃圾桶_小', w: 48, h: 96, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(791,32), "tileSize": { "w": 48, "h": 96 },
+            },
+            { 
+                label: '垃圾桶_大', w: 96, h: 96, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(692,32), "tileSize": { "w": 96, "h": 96 },
+            },
+            { 
+                label: '消防栓', w: 48, h: 96, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(817,32), "tileSize": { "w": 48, "h": 96 },
+            },
+            { 
+                label: '小摊车_1', w: 48*3, h: 48*3, color: '#ffffff',
+                tags: ['shop'],utility: 'buy_drink',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(149,32), "tileSize": { "w": 48*3, "h": 48*3 },
+            },
+            { 
+                label: '小摊车_2', w: 48*3, h: 48*3, color: '#ffffff',
+                tags: ['shop'],utility: 'buy_drink',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(245,32), "tileSize": { "w": 48*3, "h": 48*3 },
+            },
+            { 
+                label: '电话亭', w: 48*3, h: 48*5, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(412,32), "tileSize": { "w": 48*3, "h": 48*5 },
+            },
+            { 
+                label: '下水道口', w: 48, h: 48, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(567,32), "tileSize": { "w": 48, "h": 48 },
+            },
+            { 
+                label: '小花坛_1', w: 48*2, h: 48, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(576,32), "tileSize": { "w": 48*2, "h": 48 },
+            },
+            { 
+                label: '小花坛_2', w: 48*2, h: 48, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(608,32), "tileSize": { "w": 48*2, "h": 48 },
+            },
+            { 
+                label: '小花坛_3', w: 48*2, h: 48, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(640,32), "tileSize": { "w": 48*2, "h": 48 },
+            },
+            { 
+                label: '大花坛', w: 48*3, h: 48, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(578,32), "tileSize": { "w": 48*3, "h": 48 },
+            },
+            { 
+                label: '野花_1', w: 48, h: 48, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(411,32), "tileSize": { "w": 48, "h": 48 },
+            },
+            { 
+                label: '野花_2', w: 48, h: 48, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(443,32), "tileSize": { "w": 48, "h": 48 },
+            },
+            { 
+                label: '小树丛', w: 48, h: 48, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(506,32), "tileSize": { "w": 48, "h": 48 },
+            },
+            { 
+                label: '树丛_1', w: 48*2, h: 48*4, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(734,32), "tileSize": { "w": 48*2, "h": 48*4 },
+            },
+            { 
+                label: '树丛_2', w: 48*2, h: 48*3, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(862,32), "tileSize": { "w": 48*2, "h": 48*3 },
+            },
+            { 
+                label: '树_1', w: 48*2, h: 48*3, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(730,32), "tileSize": { "w": 48*2, "h": 48*3 },
+            },
+            { 
+                label: '树_2', w: 48*3, h: 48*4, color: '#ffffff',
+                tags: ['decor'],utility: 'none',
+                tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
+                tilePos: getTile(824,32), "tileSize": { "w": 48*3, "h": 48*4 },
+            },
+
+
+           
         ]
     },
     'home': {

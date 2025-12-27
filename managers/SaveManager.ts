@@ -119,4 +119,47 @@ export class SaveManager {
             furniture: Array.isArray(json.furniture) ? json.furniture : [] // 支持全量导入
         };
     }
+    /**
+     * 🟢 [新增] 导出数据为 JSON 文件下载
+     */
+    static exportMapToFile(data: MapData, filename: string = 'simgod_map.json') {
+        try {
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            return true;
+        } catch (e) {
+            console.error("Export file failed:", e);
+            return false;
+        }
+    }
+
+    /**
+     * 🟢 [新增] 读取上传的 JSON 文件
+     */
+    static async readMapFile(file: File): Promise<MapData | null> {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const json = JSON.parse(e.target?.result as string);
+                    const validData = this.parseMapData(json);
+                    resolve(validData);
+                } catch (err) {
+                    console.error("Parse file error:", err);
+                    resolve(null);
+                }
+            };
+            reader.onerror = () => resolve(null);
+            reader.readAsText(file);
+        });
+    }
 }

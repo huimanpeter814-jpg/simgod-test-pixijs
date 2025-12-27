@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GameStore } from '../utils/simulation';
+import { GameStore } from '../utils/GameStore';
 import { SaveMetadata } from '../types';
 import { HOLIDAYS } from '../constants';
 import HelpModal from './HelpModal';

@@ -1,4 +1,4 @@
-import { GameStore } from '../utils/simulation';
+import { GameStore } from '../utils/GameStore';
 import { PLOTS } from '../data/plots';
 import { Furniture, WorldPlot, RoomDef, EditorAction, EditorState } from '../types';
 import { WORLD_SURFACE_ITEMS } from '../data/furnitureData';
@@ -9,7 +9,7 @@ export class EditorManager implements EditorState {
 
     activePlotId: string | null = null;
 
-    gridSize: number = 10; 
+    gridSize: number = 12; 
     showGrid: boolean = true;
     snapToGrid: boolean = true;
     isValidPlacement: boolean = true;
@@ -47,7 +47,7 @@ export class EditorManager implements EditorState {
         this.mode = 'plot'; // 默认进入地皮编辑
         this.activePlotId = null; // 确保没有激活的地皮
         // 暂停游戏
-        GameStore.setGameSpeed(0);
+        GameStore.togglePause(true);
 
         // 创建快照 (用于撤销/取消)
         this.snapshot = {
@@ -63,8 +63,16 @@ export class EditorManager implements EditorState {
         const plot = GameStore.worldLayout.find(p => p.id === plotId);
         if (!plot) return;
 
+        if (!this.snapshot) {
+            this.snapshot = {
+                worldLayout: JSON.parse(JSON.stringify(GameStore.worldLayout)),
+                furniture: JSON.parse(JSON.stringify(GameStore.furniture)),
+                rooms: JSON.parse(JSON.stringify(GameStore.rooms.filter(r => r.isCustom))) 
+            };
+        }
+
         // 确保游戏暂停 (防止装修时 Sims 乱跑)
-        GameStore.setGameSpeed(0); 
+        GameStore.togglePause(true); 
 
         this.activePlotId = plotId;
         this.selectedPlotId = null; 
@@ -89,7 +97,9 @@ export class EditorManager implements EditorState {
         this.history = []; // 清空历史
         this.redoStack = [];
         this.resetState();
-        GameStore.setGameSpeed(1); // 恢复游戏
+        this.mode = 'none'; 
+        this.activePlotId = null;
+        GameStore.togglePause(false);
         GameStore.initIndex(); 
         GameStore.refreshFurnitureOwnership();
         GameStore.sendUpdateMap();
@@ -124,21 +134,31 @@ export class EditorManager implements EditorState {
         this.history = [];
         this.redoStack = [];
         this.resetState();
+        this.mode = 'none';
+        this.activePlotId = null;
         
-        GameStore.setGameSpeed(1); // 恢复游戏
         GameStore.triggerMapUpdate();
     }
 
     deleteCurrentSelection() {
-        // 世界模式：只能删地皮
+        // 世界模式 (没有 activePlotId)
         if (!this.activePlotId) {
             if (this.selectedPlotId) {
-                // 🟢 记录操作
+                // 删除地皮 (原有逻辑)
                 const plot = GameStore.worldLayout.find(p => p.id === this.selectedPlotId);
                 if (plot) {
                     this.recordAction({ type: 'delete_plot', data: JSON.parse(JSON.stringify(plot)) });
                     this.removePlot(this.selectedPlotId);
                     this.selectedPlotId = null;
+                }
+            }
+            // 🟢 [新增] 允许删除世界家具 (街道设施)
+            else if (this.selectedFurnitureId) {
+                const f = GameStore.furniture.find(i => i.id === this.selectedFurnitureId);
+                if (f) {
+                    this.recordAction({ type: 'delete_furniture', data: JSON.parse(JSON.stringify(f)) });
+                    this.removeFurniture(this.selectedFurnitureId);
+                    this.selectedFurnitureId = null;
                 }
             }
         }
@@ -164,8 +184,8 @@ export class EditorManager implements EditorState {
             if (!plot) return false;
 
             // 简单的 AABB 包含检测
-            const plotRight = plot.x + (plot.width || 300);
-            const plotBottom = plot.y + (plot.height || 300);
+            const plotRight = plot.x + (plot.width || 288);
+            const plotBottom = plot.y + (plot.height || 288);
             const itemRight = x + w;
             const itemBottom = y + h;
 
@@ -180,8 +200,8 @@ export class EditorManager implements EditorState {
             // (你也可以把这个逻辑去掉，允许把路灯放进地皮里，看你需求)
             const others = GameStore.worldLayout;
             for (const other of others) {
-                const ow = other.width || 300;
-                const oh = other.height || 300;
+                const ow = other.width || 288;
+                const oh = other.height || 288;
                 // 如果跟某个地皮重叠了，不仅不让放，或者提示警告
                 // 这里暂时允许重叠，因为有时候需要在路边放东西稍微压一点线
             }
@@ -257,7 +277,7 @@ export class EditorManager implements EditorState {
         this.isDragging = true; 
         this.interactionState = 'carrying';
         
-        let w = 300, h = 300;
+        let w = 288, h = 288;
         
         // 🟢 [新增] 检查是否为地表素材，如果是，强制使用其定义的尺寸
         const surfaceItem = WORLD_SURFACE_ITEMS.find(i => i.id === templateId);
@@ -296,6 +316,9 @@ export class EditorManager implements EditorState {
         //     GameStore.showToast("❌ 请先选择地皮并【进入装修】");
         //     return;
         // }
+        this.placingType = null; 
+        this.placingTemplateId = null; 
+        this.placingSize = null;
         // 🟢 新逻辑：无论在世界模式还是装修模式，都允许开始放置
         this.mode = 'furniture';
         this.placingFurniture = { ...template, rotation: 0 };
@@ -348,7 +371,7 @@ export class EditorManager implements EditorState {
         const templateId = this.placingTemplateId || 'default_empty';
         const prefix = templateId.startsWith('road') ? 'road_custom_' : 'plot_';
         const newId = `${prefix}${Date.now()}`;
-        let w = 300, h = 300;
+        let w = 288, h = 288;
         if (PLOTS[templateId]) { w = PLOTS[templateId].width; h = PLOTS[templateId].height; }
         if (this.placingSize) { w = this.placingSize.w; h = this.placingSize.h; }
         const newPlot: WorldPlot = { 
@@ -490,10 +513,19 @@ export class EditorManager implements EditorState {
             GameStore.showToast("❌ 这里不能放置物品");
             return;
         }
+        // 🟢 [修复] ID 生成逻辑
+        let newId = '';
+        if (this.activePlotId) {
+            // 如果在装修模式，ID 必须包含地皮 ID 前缀，否则无法被选中
+            newId = `${this.activePlotId}_furniture_${Date.now()}_${Math.random().toString(36).substr(2,4)}`;
+        } else {
+            // 如果是世界模式（放路灯等），保持原样
+            newId = `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
+        }
 
         const newItem = { 
             ...tpl, 
-            id: `custom_${Date.now()}_${Math.random().toString(36).substr(2,5)}`, 
+            id: newId, // 使用新生成的 ID
             x: x, 
             y: y,
             rotation: tpl.rotation || 0
@@ -535,43 +567,55 @@ export class EditorManager implements EditorState {
         } else if (this.mode === 'plot') {
              // 修改这里：优先读取 placingSize
              if (this.placingSize) {
-                 w = this.placingSize.w;
-                 h = this.placingSize.h;
-             } else if (this.placingTemplateId) {
-                 const tpl = PLOTS[this.placingTemplateId];
-                 if (tpl) { w = tpl.width; h = tpl.height; }
-             } else if (this.selectedPlotId) {
-                 const p = GameStore.worldLayout.find(x => x.id === this.selectedPlotId);
-                 if (p) { w = p.width || 300; h = p.height || 300; }
-             }
+                w = this.placingSize.w;
+                h = this.placingSize.h;
+            } else if (this.placingTemplateId) {
+                const tpl = PLOTS[this.placingTemplateId];
+                if (tpl) { w = tpl.width; h = tpl.height; }
+            } else if (this.selectedPlotId) {
+                const p = GameStore.worldLayout.find(x => x.id === this.selectedPlotId);
+                if (p) { w = p.width || 288; h = p.height || 288; }
+            }
         }
         // 计算吸附
         let finalX = worldX;
         let finalY = worldY;
-        let offsetX = this.dragOffset.x;
-        let offsetY = this.dragOffset.y;
+        // 判断是否为地表模式 (Surface)
+        const isSurface = this.placingType === 'surface' || 
+                          (this.placingTemplateId && this.placingTemplateId.startsWith('surface_'));
 
-        if (!this.isDragging && isPlacing) {
-            offsetX = w / 2;
-            offsetY = h / 2;
+        if (isSurface) {
+            // ✅ 如果是地表，强制使用 Math.floor 对齐到贴图尺寸 (w, h)
+            // 这样预览位置就和 tryPaintPlotAt 的逻辑完全一致了
+            finalX = Math.floor(worldX / w) * w;
+            finalY = Math.floor(worldY / h) * h;
+        } 
+        else {
+            // 原有逻辑：普通物品使用 gridSize (10/20) 吸附
+            let offsetX = this.dragOffset.x;
+            let offsetY = this.dragOffset.y;
+
+            if (!this.isDragging && isPlacing) {
+                offsetX = w / 2;
+                offsetY = h / 2;
+            }
+
+            if (this.snapToGrid) {
+                finalX = Math.round((worldX - offsetX) / this.gridSize) * this.gridSize;
+                finalY = Math.round((worldY - offsetY) / this.gridSize) * this.gridSize;
+            } else {
+                finalX = worldX - offsetX;
+                finalY = worldY - offsetY;
+            }
         }
-
-        if (this.snapToGrid) {
-            finalX = Math.round((worldX - offsetX) / this.gridSize) * this.gridSize;
-            finalY = Math.round((worldY - offsetY) / this.gridSize) * this.gridSize;
-        } else {
-            finalX = worldX - offsetX;
-            finalY = worldY - offsetY;
-        }
-
         // 边界吸附 (Clamping)
         if (this.activePlotId) {
             const plot = GameStore.worldLayout.find(p => p.id === this.activePlotId);
             if (plot) {
                 const minX = plot.x;
                 const minY = plot.y;
-                const maxX = plot.x + (plot.width || 300) - w;
-                const maxY = plot.y + (plot.height || 300) - h;
+                const maxX = plot.x + (plot.width || 288) - w;
+                const maxY = plot.y + (plot.height || 288) - h;
                 finalX = Math.max(minX, Math.min(finalX, maxX));
                 finalY = Math.max(minY, Math.min(finalY, maxY));
             }
@@ -627,8 +671,8 @@ export class EditorManager implements EditorState {
             
             // B. 移除位于该地皮范围内的自定义房间
             if (plot) {
-                const pw = plot.width || 300;
-                const ph = plot.height || 300;
+                const pw = plot.width || 288;
+                const ph = plot.height || 288;
                 // 简单的包含检测
                 if (r.x >= plot.x && r.x < plot.x + pw && r.y >= plot.y && r.y < plot.y + ph) {
                     return false;
@@ -646,8 +690,8 @@ export class EditorManager implements EditorState {
             if (plot) {
                 const cx = f.x + f.w / 2;
                 const cy = f.y + f.h / 2;
-                const pw = plot.width || 300;
-                const ph = plot.height || 300;
+                const pw = plot.width || 288;
+                const ph = plot.height || 288;
                 // 检测家具中心点是否在地皮内
                 if (cx >= plot.x && cx < plot.x + pw && cy >= plot.y && cy < plot.y + ph) {
                     return false;

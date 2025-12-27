@@ -104,13 +104,10 @@ export interface Furniture {
   cost?: number;
   tier?: string;
   imagePath?: string;
-  // 🆕 新增：SpriteSheet 支持
-  // 如果存在 sheetPath，则优先使用切片渲染，忽略 imagePath
-  sheetPath?: string; 
-  tileX?: number;     // 图集中的第几列 (从0开始)
-  tileY?: number;     // 图集中的第几行 (从0开始)
-  tileW?: number;     // 单个切片原始宽度 (可选，默认48)
-  tileH?: number;     // 单个切片原始高度 (可选，默认48)
+ 
+  tileSheet?: string;               // 图集路径
+  tilePos?: { x: number; y: number }; // 图集中的格子坐标
+  tileSize?: { w: number; h: number }; // 切片大小 (像素)
   
   pixelPattern?: string;
   pixelOutline?: boolean;
@@ -248,11 +245,11 @@ export interface RoomDef {
   isCustom?: boolean;
   hasWall?: boolean; 
   // ✨ 新增：同样添加这些字段
-    sheetPath?: string;
-    tileX?: number;
-    tileY?: number;
-    tileW?: number;
-    tileH?: number;
+  sheetPath?: string;
+  tileX?: number;
+  tileY?: number;
+  tileW?: number;
+  tileH?: number;
 }
 
 export type Needs = {

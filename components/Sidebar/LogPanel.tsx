@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GameStore } from '../../utils/simulation';
+import { GameStore } from '../../utils/GameStore';
 import { LogEntry } from '../../types';
 
 // [分类优化] 细化的分类
