@@ -299,6 +299,7 @@ const PixiGameCanvasComponent: React.FC = () => {
             console.log("📥 Loading assets...");
             await loadGameAssets([
                 ...(ASSET_CONFIG.bg || []),
+                ...ASSET_CONFIG.atlases,
                 ...ASSET_CONFIG.adult.bodies,
                 ...ASSET_CONFIG.adult.outfits,
                 ...ASSET_CONFIG.adult.hairs,

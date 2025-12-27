@@ -22,6 +22,12 @@ const worldFiles = import.meta.glob('/src/assets/world_builder/*.{png,jpg,jpeg,w
 // 保留旧的 face 以防万一，但主要逻辑将切换到新的三层结构
 const faceFiles = import.meta.glob('/src/assets/face/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' });
 
+const atlasFiles = import.meta.glob('/src/assets/atlases/*.json', { 
+    eager: true, 
+    query: '?url', 
+    import: 'default' 
+});
+
 function getValues(globResult: Record<string, unknown>): string[] {
     return Object.values(globResult) as string[];
 }
@@ -49,6 +55,7 @@ export const ASSET_CONFIG = {
     // 兼容旧字段，防止报错，但在新逻辑中可能不再主要使用
     face: getValues(faceFiles), 
     clothes: [],
-    pants: []
+    pants: [],
+    atlases: getValues(atlasFiles),
 };
 

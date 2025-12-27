@@ -1,7 +1,7 @@
-import { Container, Graphics, Sprite, Assets } from 'pixi.js';
+import { Container, Graphics, Sprite, Assets, Texture } from 'pixi.js';
 import { Furniture, RoomDef } from '../../types';
 import { drawPixiFurniture } from './pixelArt'; 
-import { getSlicedTexture } from '../assetLoader';
+import { getTexture, getSlicedTexture } from '../assetLoader';
 
 export class PixiWorldBuilder {
     
@@ -92,6 +92,44 @@ export class PixiWorldBuilder {
         // 4. 计算图集坐标
         // 使用 any 断言访问 types.ts 中新增的字段，防止未更新类型定义导致的报错
         const fAny = f as any;
+
+        // ==========================================
+        // 🟢 分支 A: 使用 TexturePacker 图集
+        // ==========================================
+        
+        // 1. 确定最终要用的图片名
+        let targetFrameName = fAny.frameName;
+
+        // ✨ 如果有方向映射配置，优先使用方向对应的名字
+        if (fAny.frameDirs && fAny.frameDirs[dir]) {
+            targetFrameName = fAny.frameDirs[dir];
+        }
+
+        // 2. 尝试获取纹理
+        if (targetFrameName) {
+            const texture = getTexture(targetFrameName);
+            
+            if (texture !== Texture.EMPTY) {
+                const sprite = new Sprite(texture);
+
+                // ... (尺寸和偏移逻辑同之前) ...
+                const visualWidth = texture.width; 
+                const visualHeight = texture.height;
+                const yOffset = f.h - visualHeight;
+
+                sprite.width = visualWidth;
+                sprite.height = visualHeight;
+                sprite.y = yOffset;
+
+                // ✨ [进阶] 简单的镜像翻转处理
+                // 如果你为了省资源，左右方向复用了同一张图 (比如 sofa_side.png)，
+                // 你可以在这里判断 dir === 3 时设置 sprite.scale.x = -1 并调整 anchor 或 x 坐标。
+                // 简单起见，建议初期先为每个方向打包独立的图片。
+
+                container.addChild(sprite);
+                return container;
+            }
+        }
         
         let tileX = f.tilePos ? f.tilePos.x : 0;
         let tileY = f.tilePos ? f.tilePos.y : 0;

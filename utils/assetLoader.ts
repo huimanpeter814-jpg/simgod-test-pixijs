@@ -9,12 +9,16 @@ export const loadGameAssets = async (sources: string[]) => {
     const validSources = sources.filter(s => s && typeof s === 'string' && s.length > 0);
     if (validSources.length === 0) return;
 
-    // A. 让 Pixi 加载 (给游戏画面用)
+    // 🟢 分类：区分图集 JSON 和普通图片
+    const jsonSources = validSources.filter(s => s.endsWith('.json'));
+    const imageSources = validSources.filter(s => !s.endsWith('.json'));
+
+    // A. 让 Pixi 加载所有资源 (Pixi 会自动识别 JSON 图集并解析)
     await Assets.load(validSources);
 
-    // B. 让浏览器加载 (给 UI 头像用) - 这一步至关重要
-    // 我们手动创建 Image 对象并缓存下来，确保 Sidebar 能瞬间拿到图片，不再报错
-    const promises = validSources.map(src => {
+    // B. 让浏览器加载 UI 用图片 (只针对普通图片，跳过 JSON)
+    // 图集里的图片无法直接给 <img src> 用，除非你切分，所以 UI 部分暂时只支持单图
+    const promises = imageSources.map(src => {
         return new Promise<void>((resolve) => {
             const img = new Image();
             img.src = src;
@@ -23,7 +27,7 @@ export const loadGameAssets = async (sources: string[]) => {
                 resolve();
             };
             img.onerror = () => {
-                // 即使失败也不要抛出错误卡死流程
+                // 即使失败也不要抛出错误
                 console.warn(`[AssetLoader] Failed to load UI image: ${src}`);
                 imageCache.set(src, img);
                 resolve(); 
@@ -32,15 +36,25 @@ export const loadGameAssets = async (sources: string[]) => {
     });
 
     await Promise.all(promises);
-    console.log(`[AssetLoader] 资源加载完毕: Pixi & UI 双重缓存 Ready`);
+    console.log(`[AssetLoader] 资源加载完毕 (包含 ${jsonSources.length} 个图集)`);
 };
 
 // 2. 获取纹理 (给 PixiGameCanvas 用)
+// 现在支持传入 Frame Name (例如 "sofa.png")
 export const getTexture = (path: string | undefined): Texture => {
     if (!path) return Texture.EMPTY;
+
+    // 🟢 情况 1: 这是一个图集里的 Frame Name (例如 "chair_01.png")
+    // Pixi 加载图集后，会自动把 Frame Name 注册到 Cache 中
     if (Assets.cache.has(path)) {
         return Assets.get(path);
     }
+    
+    // 🟢 情况 2: 这是一个完整的文件路径
+    if (Assets.cache.has(path)) {
+        return Assets.get(path);
+    }
+
     return Texture.EMPTY;
 };
 

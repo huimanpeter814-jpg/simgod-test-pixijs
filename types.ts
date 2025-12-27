@@ -132,6 +132,9 @@ export interface Furniture {
   tilePosDir?: {
     [key: number]: { x: number; y: number }; // 0, 1, 2, 3 对应的图集坐标
   };
+  frameDirs?:{
+    [key: number]: string;
+  }
   hasDirectionalSprites?: boolean;
   frameName?: string;
 }

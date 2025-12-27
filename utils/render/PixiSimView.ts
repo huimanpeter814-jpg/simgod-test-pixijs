@@ -121,7 +121,7 @@ export class PixiSimView {
             this.currentAssets[type] = '';
         }
     }
-
+x
     updatePosition(sim: Sim) {
         this.container.x = Math.round(sim.pos.x);
         this.container.y = Math.round(sim.pos.y);
