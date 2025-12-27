@@ -1,4 +1,5 @@
 import { CONFIG } from '../constants';
+import { Furniture } from '../types';
 
 interface Node {
     x: number;
@@ -7,6 +8,23 @@ interface Node {
     h: number;
     f: number;
     parent: Node | null;
+}
+
+export function isWalkable(x: number, y: number, furniture: Furniture[]): boolean {
+    // 1. 检查是否有家具/墙体占据了这个坐标
+    // 注意：这里只检查家具的“基座”范围
+    for (const f of furniture) {
+        // 简单的 AABB 碰撞
+        if (x >= f.x && x < f.x + f.w &&
+            y >= f.y && y < f.y + f.h) {
+             
+            // 如果是墙或者不可穿过的家具
+            if (f.isWall || f.utility !== 'rug') { 
+                return false; 
+            }
+        }
+    }
+    return true;
 }
 
 export class PathFinder {

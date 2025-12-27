@@ -91,8 +91,8 @@ export interface Furniture {
   x: number;
   y: number;
   w: number;
-  h: number;
-  rotation?: number; 
+  h: number;// 这里的 w, h 指的是逻辑上的占地面积（比如 48x48），而不是图片的高度
+  rotation?: number; // 0: Down(Front), 1: Left, 2: Up(Back), 3: Right
   color: string;
   label: string;
   utility: string;
@@ -125,6 +125,15 @@ export interface Furniture {
   borderWidth?: number;
   borderColor?: string;
   homeId?: string; 
+
+  // ✨ [新增] 2.5D 渲染配置
+  isWall?: boolean; // 标记这是墙体
+  textureHeight?: number; // 图片的实际高度（例如占地48，但树高96）
+  tilePosDir?: {
+    [key: number]: { x: number; y: number }; // 0, 1, 2, 3 对应的图集坐标
+  };
+  hasDirectionalSprites?: boolean;
+  frameName?: string;
 }
 
 export interface HousingUnit {

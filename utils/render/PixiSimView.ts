@@ -126,10 +126,11 @@ export class PixiSimView {
         this.container.x = Math.round(sim.pos.x);
         this.container.y = Math.round(sim.pos.y);
         // [修改后]：如果有被抱起的状态，强制提升层级 (zIndex + 1000)，保证在所有物体最上层
+        this.container.zIndex = this.container.y + 10; // +10 是为了让它在同一直线时稍微遮挡物体一点点
+
+        // 特殊状态处理
         if (sim.carriedBySimId) {
-            this.container.zIndex = sim.pos.y + 1000;
-        } else {
-            this.container.zIndex = sim.pos.y;
+            this.container.zIndex = 999999; // 被抱着时，层级极高
         }
 
         // 标记浮动动画

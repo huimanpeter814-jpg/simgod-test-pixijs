@@ -80,7 +80,14 @@ export const WORLD_SURFACE_ITEMS = [
         label: '斑马线', w: 96, h: 48, color: '#ffffff',
         type:'road',
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
-        tilePos: getTile(123,29), "tileSize": { "w": 96, "h": 48 },
+        tilePos: getTile(123,29), 
+        tilePosDir: {
+            0: getTile(123,29), // 横墙素材位置
+            1: getTile(359,29), // 竖墙素材位置 (假设离得很远)
+            2: getTile(123,29), // 背面也用横墙
+            3: getTile(359,29)  // 右面也用竖墙
+        },
+        "tileSize": { "w": 96, "h": 48 },
     },
     //地砖
     { 
@@ -125,13 +132,13 @@ export const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<F
         items: [
             // ✨ 示例：使用 SpriteSheet 的路灯
             { 
-                label: '路灯_1', w: 48, h: 192, color: '#ffffff',
+                label: '路灯_01', w: 48, h: 192, color: '#ffffff',
                 tags: ['light'],utility: 'none',
                 tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
                 tilePos: getTile(20,32), "tileSize": { "w": 48, "h": 192 },
             },
             { 
-                label: '路灯_2_L', w: 48*2, h: 48*4, color: '#ffffff',
+                label: '路灯_02_L', w: 48*2, h: 48*4, color: '#ffffff',
                 tags: ['light'],utility: 'none',
                 tileSheet: '/src/assets/world_builder/3_City_Props_48x48.png', 
                 tilePos: getTile(903,32), "tileSize": { "w": 48*2, "h": 48*4 },
@@ -267,6 +274,57 @@ export const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<F
            
         ]
     },
+    'wall': {
+        label: '墙面',
+        items: [
+            {
+                label: '墙面_01_中',
+                w: 48, h: 48,          // 逻辑大小：占 1 格
+                textureHeight: 96,     // 视觉大小：高 2 格 (素材通常比较高)
+                isWall: true,          // 标记为墙
+                // 假设墙体只有两个方向：横着放(0) 和 竖着放(1)
+                // 我们可以复用 rotation 字段
+                tileSheet: '/src/assets/world_builder/Room_Builder_48x48.png',
+                tilePosDir: {
+                    0: getTile(355,59), // 横墙素材位置
+                    1: getTile(359,59), // 竖墙素材位置 (假设离得很远)
+                    2: getTile(355,59), // 背面也用横墙
+                    3: getTile(359,59)  // 右面也用竖墙
+                }
+            },
+            {
+                label: '墙面_01_左',
+                w: 48, h: 48,          // 逻辑大小：占 1 格
+                textureHeight: 96,     // 视觉大小：高 2 格 (素材通常比较高)
+                isWall: true,          // 标记为墙
+                // 假设墙体只有两个方向：横着放(0) 和 竖着放(1)
+                // 我们可以复用 rotation 字段
+                tileSheet: '/src/assets/world_builder/Room_Builder_48x48.png',
+                tilePosDir: {
+                    0: getTile(354,59), // 横墙素材位置
+                    1: getTile(358,59), // 竖墙素材位置 (假设离得很远)
+                    2: getTile(354,59), // 背面也用横墙
+                    3: getTile(358,59)  // 右面也用竖墙
+                }
+            },
+            {
+                label: '墙面_01_右',
+                w: 48, h: 48,          // 逻辑大小：占 1 格
+                textureHeight: 96,     // 视觉大小：高 2 格 (素材通常比较高)
+                isWall: true,          // 标记为墙
+                // 假设墙体只有两个方向：横着放(0) 和 竖着放(1)
+                // 我们可以复用 rotation 字段
+                tileSheet: '/src/assets/world_builder/Room_Builder_48x48.png',
+                tilePosDir: {
+                    0: getTile(356,59), // 横墙素材位置
+                    1: getTile(360,59), // 竖墙素材位置 (假设离得很远)
+                    2: getTile(356,59), // 背面也用横墙
+                    3: getTile(360,59)  // 右面也用竖墙
+                }
+            },
+        ]
+    },
+
     'home': {
         label: '生活家居',
         items: [
