@@ -325,15 +325,535 @@ export const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<F
         ]
     },
 
-    'home': {
-        label: '生活家居',
+    'livingroom': { 
+        label: '客厅',
         items: [
-            { label: '双人床', w: 80, h: 100, color: '#ff7675', utility: 'energy', pixelPattern: 'bed_king', tags: ['bed', 'sleep'] },
-            { label: '沙发', w: 100, h: 40, color: '#a29bfe', utility: 'comfort', pixelPattern: 'sofa_vip', tags: ['sofa', 'seat'] },
-            { label: '餐桌', w: 60, h: 60, color: '#fab1a0', utility: 'hunger', pixelPattern: 'table_dining', tags: ['table'] },
-            { label: '冰箱', w: 40, h: 40, color: '#fff', utility: 'hunger', pixelPattern: 'fridge', tags: ['kitchen'] },
-            { label: '马桶', w: 30, h: 30, color: '#fff', utility: 'bladder', pixelPattern: 'toilet', tags: ['toilet'] },
-            { label: '淋浴间', w: 40, h: 40, color: '#81ecec', utility: 'hygiene', pixelPattern: 'shower_stall', tags: ['shower'] },
+            { 
+                label: '大柜子', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_1.png' 
+            },
+            { 
+                label: '大柜子', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_37.png' 
+            },
+            { 
+                label: '柜子', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_39.png' 
+            },
+            { 
+                label: '柜子', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_52.png' 
+            },
+            { 
+                label: '柜子', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_56.png' 
+            },
+            { 
+                label: '柜子', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_70.png' 
+            },
+            { 
+                label: '长柜子',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_54.png' 
+            },
+            { 
+                label: '茶几', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 20,
+                frameName: 'Living_Room_Singles_48x48_2.png' 
+            },
+            { 
+                label: '茶几', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 30,
+                frameName: 'Living_Room_Singles_48x48_47.png' 
+            },
+            { 
+                label: '茶几', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 30,
+                frameName: 'Living_Room_Singles_48x48_29.png' 
+            },
+            { 
+                label: '茶几',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_36.png' 
+            },
+            { 
+                label: '高茶几', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_3.png' 
+            },
+            { 
+                label: '方茶几',  
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Living_Room_Singles_48x48_4.png' 
+            },
+            { 
+                label: '矮桌',  
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Basement_Singles_Shadowless_48x48_1.png' 
+            },
+            { 
+                label: '矮桌',  
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Basement_Singles_Shadowless_48x48_2.png' 
+            },
+            { 
+                label: '矮桌',  
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                frameName: 'Basement_Singles_Shadowless_48x48_3.png' 
+            },
+            { 
+                label: '小柜子', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 24,
+                frameName: 'Living_Room_Singles_48x48_7.png' 
+            },
+            { 
+                label: '小柜子',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 24,
+                frameName: 'Living_Room_Singles_48x48_65.png' 
+            },
+            { 
+                label: '小柜子',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 24,
+                frameName: 'Living_Room_Singles_48x48_69.png' 
+            },
+            { 
+                label: '高柜子',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 24,
+                frameName: 'Living_Room_Singles_48x48_89.png' 
+            },
+            { 
+                label: '电视',
+                color: '#ffffff',
+                utility: 'cinema_', 
+                tags: ['tv'],
+                h: 12,
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_165.png',
+                    1:'Basement_Singles_Shadowless_48x48_186.png',
+                    2:'Basement_Singles_Shadowless_48x48_166.png',
+                    3:'Basement_Singles_Shadowless_48x48_186.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_165.png' 
+            },
+            { 
+                label: '电视',
+                color: '#ffffff',
+                utility: 'cinema_', 
+                tags: ['tv'],
+                h: 12,
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_164.png',
+                    1:'Basement_Singles_Shadowless_48x48_190.png',
+                    2:'Basement_Singles_Shadowless_48x48_163.png',
+                    3:'Basement_Singles_Shadowless_48x48_190.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_164.png' 
+            },
+            { 
+                label: '游戏机',
+                color: '#ffffff',
+                utility: 'play', 
+                tags: ['tv','game'],
+                h: 6,
+                frameName: 'Basement_Singles_Shadowless_48x48_177.png' 
+            },
+            { 
+                label: '游戏机',
+                color: '#ffffff',
+                utility: 'play', 
+                tags: ['tv','game'],
+                h: 6,
+                frameName: 'Basement_Singles_Shadowless_48x48_180.png' 
+            },
+            { 
+                label: '椅子', 
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 32,
+                frameName: 'Living_Room_Singles_48x48_92.png' 
+            },
+            { 
+                label: '椅子',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 32,
+                frameName: 'Living_Room_Singles_48x48_93.png' 
+            },
+            { 
+                label: '单人沙发椅',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat','sofa'],
+                h: 24,
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_202.png',
+                    1:'Basement_Singles_Shadowless_48x48_211.png',
+                    2:'Basement_Singles_Shadowless_48x48_206.png',
+                    3:'Basement_Singles_Shadowless_48x48_215.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_202.png' 
+            },
+            { 
+                label: '单人沙发椅',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat','sofa'],
+                h: 24,
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_203.png',
+                    1:'Basement_Singles_Shadowless_48x48_210.png',
+                    2:'Basement_Singles_Shadowless_48x48_207.png',
+                    3:'Basement_Singles_Shadowless_48x48_214.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_203.png' 
+            },
+            { 
+                label: '单人沙发椅',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat','sofa'],
+                h: 24,
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_204.png',
+                    1:'Basement_Singles_Shadowless_48x48_213.png',
+                    2:'Basement_Singles_Shadowless_48x48_208.png',
+                    3:'Basement_Singles_Shadowless_48x48_217.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_204.png' 
+            },
+            { 
+                label: '单人沙发椅',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat','sofa'],
+                h: 24,
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_205.png',
+                    1:'Basement_Singles_Shadowless_48x48_212.png',
+                    2:'Basement_Singles_Shadowless_48x48_209.png',
+                    3:'Basement_Singles_Shadowless_48x48_216.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_205.png' 
+            },
+            { 
+                label: '组合沙发椅-左',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat','sofa'],
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_4.png',
+                    1:'Basement_Singles_Shadowless_48x48_33.png',
+                    2:'Basement_Singles_Shadowless_48x48_53.png',
+                    3:'Basement_Singles_Shadowless_48x48_38.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_4.png' 
+            },
+            { 
+                label: '组合沙发椅-中',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat','sofa'],
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_5.png',
+                    1:'Basement_Singles_Shadowless_48x48_34.png',
+                    2:'Basement_Singles_Shadowless_48x48_52.png',
+                    3:'Basement_Singles_Shadowless_48x48_37.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_5.png' 
+            },
+            { 
+                label: '组合沙发椅-右',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat','sofa'],
+                frameDirs:{
+                    0:'Basement_Singles_Shadowless_48x48_6.png',
+                    1:'Basement_Singles_Shadowless_48x48_35.png',
+                    2:'Basement_Singles_Shadowless_48x48_51.png',
+                    3:'Basement_Singles_Shadowless_48x48_36.png',
+                },
+                frameName: 'Basement_Singles_Shadowless_48x48_6.png' 
+            },
+            { 
+                label: '矮沙发椅',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 32,
+                frameName: 'Basement_Singles_Shadowless_48x48_9.png' 
+            },
+            { 
+                label: '单人沙发椅',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                frameName: 'Basement_Singles_Shadowless_48x48_198.png' 
+            },
+            { 
+                label: '单人沙发椅',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                frameName: 'Basement_Singles_Shadowless_48x48_200.png' 
+            },
+            { 
+                label: '板凳',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 20,
+                frameName: 'Basement_Singles_Shadowless_48x48_103.png' 
+            },
+            { 
+                label: '板凳',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 20,
+                frameName: 'Basement_Singles_Shadowless_48x48_105.png' 
+            },
+            { 
+                label: '板凳',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 20,
+                frameName: 'Basement_Singles_Shadowless_48x48_107.png' 
+            },
+            { 
+                label: '板凳',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 20,
+                frameName: 'Basement_Singles_Shadowless_48x48_109.png' 
+            },
+            { 
+                label: '板凳',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 20,
+                frameName: 'Basement_Singles_Shadowless_48x48_111.png' 
+            },
+            { 
+                label: '板凳',
+                color: '#ffffff',
+                utility: 'comfort', 
+                tags: ['seat'],
+                h: 20,
+                frameName: 'Basement_Singles_Shadowless_48x48_113.png' 
+            },
+            { 
+                label: '小盆栽', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 12,
+                frameName: 'Living_Room_Singles_48x48_13.png' 
+            },
+            { 
+                label: '小盆栽', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 12,
+                frameName: 'Living_Room_Singles_48x48_14.png' 
+            },
+            { 
+                label: '迷你盆栽',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 6,
+                frameName: 'Living_Room_Singles_48x48_15.png' 
+            },
+            { 
+                label: '小盆栽',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 12,
+                frameName: 'Living_Room_Singles_48x48_16.png' 
+            },
+            { 
+                label: '梳妆台', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 32,
+                frameName: 'Living_Room_Singles_48x48_19.png' 
+            },
+            { 
+                label: '梳妆台', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 32,
+                frameName: 'Living_Room_Singles_48x48_26.png' 
+            },
+            { 
+                label: '落地灯',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['light'],
+                h: 8,
+                frameName: 'Living_Room_Singles_48x48_80.png' 
+            },
+            { 
+                label: '落地灯',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['light'],
+                h: 8,
+                frameName: 'Living_Room_Singles_48x48_81.png' 
+            },
+            { 
+                label: '落地灯',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['light'],
+                h: 8,
+                frameName: 'Living_Room_Singles_48x48_83.png' 
+            },
+            { 
+                label: '落地灯',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['light'],
+                h: 8,
+                frameName: 'Living_Room_Singles_48x48_84.png' 
+            },
+            { 
+                label: '落地灯',
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['light'],
+                h: 8,
+                frameName: 'Living_Room_Singles_48x48_88.png' 
+            },
+            { 
+                label: '壁炉', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 36,
+                frameName: 'Living_Room_Singles_48x48_108.png' 
+            },
+            { 
+                label: '壁炉',  
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 36,
+                frameName: 'Living_Room_Singles_48x48_110.png' 
+            },
+            { 
+                label: '壁炉', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 36,
+                frameName: 'Living_Room_Singles_48x48_112.png' 
+            },
+            { 
+                label: '壁炉', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 36,
+                frameName: 'Living_Room_Singles_48x48_114.png' 
+            },
+            { 
+                label: '柴', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 36,
+                frameName: 'Living_Room_Singles_48x48_116.png' 
+            },
+            { 
+                label: '柴', 
+                color: '#ffffff',
+                utility: 'none', 
+                tags: ['decor'],
+                h: 36,
+                frameName: 'Living_Room_Singles_48x48_121.png' 
+            },
+        ]
+    },
+    'bedroom':{
+        label:'卧室',
+        items:[
+            {},
+        ]
+    },
+    'bathroom':{
+        label:'卫浴',
+        items:[
+            {},
+        ]
+    },
+    'kitchen':{
+        label:'厨房',
+        items:[
+            {},
         ]
     },
     'work': {

@@ -3,6 +3,8 @@ import { GameStore } from '../../utils/GameStore';
 import { PLOTS } from '../../data/plots';
 import { Furniture } from '../../types';
 import { FURNITURE_CATALOG, WORLD_DECOR_ITEMS, WORLD_SURFACE_ITEMS } from '../../data/furnitureData';
+import { Texture } from 'pixi.js';
+import { getTexture } from '../../utils/assetLoader';
 
 interface EditorPanelProps {
     onClose: () => void; 
@@ -10,42 +12,103 @@ interface EditorPanelProps {
 
 // 🎨 Sprite缩略图组件：利用 CSS 裁剪显示你在 data 里定义好的切片
 const ItemThumbnail = ({ item, size = 32 }: { item: any, size?: number }) => {
-    // 1. 获取你在 data 里配好的大图路径
-    const sheet = item.tileSheet || item.sheetPath;
+    
+    // ====================================================
+    // 🟢 模式 A: TexturePacker 智能缩略图 (frameName)
+    // ====================================================
+    if (item.frameName) {
+        const texture = getTexture(item.frameName);
+        
+        // 确保纹理已加载且有效
+        if (texture && texture !== Texture.EMPTY) {
+            // 尝试获取大图的 URL
+            // (Pixi v7/v8 兼容写法: 优先取 source.label，其次取 resource.src)
+            const base = texture.baseTexture || (texture as any).source;
+            const imageUrl = base.label || base.resource?.src || base.resource?.url;
 
-    // 2. 如果没配图集，就显示个色块（兜底）
-    if (!sheet || !item.tilePos) {
-        return <div style={{ width: size/2, height: size/2, background: item.color || '#888', borderRadius: 2 }} />;
+            if (imageUrl) {
+                // 核心：直接从 Pixi Texture 获取裁剪区域
+                const { x, y, width, height } = texture.frame;
+                
+                // 计算缩放比例 (让长条形家具也能塞进正方形格子里)
+                const scale = Math.min(size / width, size / height);
+
+                return (
+                    <div style={{ width: size, height: size, position: 'relative', overflow: 'hidden' }}>
+                        <div style={{
+                            width: width,
+                            height: height,
+                            // 设置大图背景
+                            backgroundImage: `url(${imageUrl})`,
+                            // ✨ 核心魔法：使用负坐标偏移，精准露出家具
+                            backgroundPosition: `-${x}px -${y}px`, 
+                            backgroundRepeat: 'no-repeat',
+                            // 缩放适应 UI
+                            transform: `scale(${scale})`,
+                            transformOrigin: 'top left',
+                            // 居中显示
+                            position: 'absolute',
+                            left: (size - width * scale) / 2,
+                            top: (size - height * scale) / 2,
+                            // 保持像素清晰度
+                            imageRendering: 'pixelated'
+                        }} />
+                    </div>
+                );
+            }
+        }
     }
 
-    // 3. 计算位置：利用你 data 里的 tilePos (网格坐标) * 48 (网格大小)
-    // 注意：这里假设你的图集都是 48x48 规格的，如果不是，可以在 item 里加个 gridSize 字段
-    const gridSize = 48; 
-    const bgX = -(item.tilePos.x * gridSize);
-    const bgY = -(item.tilePos.y * gridSize);
-    
-    // 4. 计算缩放：把切片缩放到 UI 按钮的大小
-    const itemW = item.tileSize?.w || gridSize;
-    const itemH = item.tileSize?.h || gridSize;
-    const scale = Math.min(size / itemW, size / itemH); // 保持比例适应框框
+    // ====================================================
+    // 🟢 模式 B: 旧版网格切片 (tileSheet + tilePos)
+    // ====================================================
+    const sheet = item.tileSheet || item.sheetPath;
+    if (sheet && item.tilePos) {
+        const gridSize = 48; 
+        const bgX = -(item.tilePos.x * gridSize);
+        const bgY = -(item.tilePos.y * gridSize);
+        
+        // 兼容旧数据的尺寸定义
+        const itemW = item.tileSize?.w || item.w || gridSize;
+        const itemH = item.tileSize?.h || item.h || gridSize;
+        const scale = Math.min(size / itemW, size / itemH);
 
+        return (
+            <div style={{ width: size, height: size, position: 'relative', overflow: 'hidden', pointerEvents: 'none' }}>
+                <div 
+                    style={{
+                        width: itemW,
+                        height: itemH,
+                        backgroundImage: `url(${sheet})`,
+                        backgroundPosition: `${bgX}px ${bgY}px`,
+                        backgroundRepeat: 'no-repeat',
+                        transform: `scale(${scale})`,
+                        transformOrigin: 'top left',
+                        position: 'absolute',
+                        left: (size - itemW * scale) / 2,
+                        top: (size - itemH * scale) / 2,
+                        imageRendering: 'pixelated'
+                    }}
+                />
+            </div>
+        );
+    }
+
+    // ====================================================
+    // 🟢 模式 C: 兜底色块 (防止没图时一片空白)
+    // ====================================================
     return (
-        <div style={{ width: size, height: size, position: 'relative', overflow: 'hidden', pointerEvents: 'none' }}>
-            <div 
-                style={{
-                    width: itemW,
-                    height: itemH,
-                    backgroundImage: `url(${sheet})`,
-                    backgroundPosition: `${bgX}px ${bgY}px`, // 👈 核心：CSS 这里用到了你的切片数据
-                    backgroundRepeat: 'no-repeat',
-                    transform: `scale(${scale})`, // 缩放以适应 UI 小格子
-                    transformOrigin: 'top left',
-                    position: 'absolute',
-                    left: (size - itemW * scale) / 2, // 居中
-                    top: (size - itemH * scale) / 2,
-                    imageRendering: 'pixelated' // 像素风必备
-                }}
-            />
+        <div style={{ 
+            width: size, 
+            height: size, 
+            background: item.color || '#444', 
+            borderRadius: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: 0.5
+        }}>
+            <span style={{ fontSize: 10, color: '#fff' }}>?</span>
         </div>
     );
 };
@@ -302,8 +365,8 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                     </div>
 
                     {/* 列表内容 */}
-                    <div className="grid grid-cols-8 gap-2 overflow-y-auto custom-scrollbar content-start">
-
+                    {/* 修改前: grid-cols-8 */}
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] gap-1 overflow-y-auto custom-scrollbar content-start">
                  
                         {/* 1. 建筑列表 (原有逻辑) */}
                         {plotCategory === 'building' && (
@@ -389,7 +452,8 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                         ))}
                     </div>
                     {/* Items Grid */}
-                    <div className="grid grid-cols-8 gap-2 overflow-y-auto custom-scrollbar content-start">
+                    {/* 🟢 修改：使用 auto-fill 智能排列，最小宽度 48px，间距缩小为 gap-1 */}
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(48px,1fr))] gap-1 overflow-y-auto custom-scrollbar content-start p-1">
                         {FURNITURE_CATALOG[furnCategory]?.items.map((item, i) => (
                             <button 
                                 key={i} 
@@ -397,13 +461,19 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                                     const c = selectedColor || item.color || '#ffffff';
                                     GameStore.startPlacingFurniture({ ...item, color: c });
                                 }}
-                                className="aspect-square bg-white/5 border border-white/10 hover:border-white/40 hover:bg-white/10 rounded flex flex-col items-center justify-center p-1"
+                                // 🟢 修改：移除 aspect-square，改用固定高度或 min-h，避免字太长被挤压
+                                // 当然，如果你喜欢正方形格子，保留 aspect-square 也没问题
+                                className="aspect-square bg-white/5 border border-white/10 hover:border-white/40 hover:bg-white/10 rounded flex flex-col items-center justify-center p-0.5 group"
                                 title={item.label}
                             >
-                                <div className="mb-1">
-                                    <ItemThumbnail item={item} size={40} />
+                                <div className="mb-0.5">
+                                    {/* 🟢 修改：稍微调大一点缩略图占比，因为格子变小了 */}
+                                    <ItemThumbnail item={item} size={36} />
                                 </div>
-                                <span className="text-[9px] text-gray-400 scale-90 truncate w-full text-center">{item.label}</span>
+                                {/* 🟢 修改：字体进一步缩小，并且只在 hover 时显示全名(可选)，或者平时显示截断 */}
+                                <span className="text-[8px] text-gray-500 group-hover:text-gray-300 scale-90 truncate w-full text-center leading-tight">
+                                    {item.label}
+                                </span>
                             </button>
                         ))}
                     </div>

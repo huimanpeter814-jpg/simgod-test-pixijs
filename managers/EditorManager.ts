@@ -2,6 +2,8 @@ import { GameStore } from '../utils/GameStore';
 import { PLOTS } from '../data/plots';
 import { Furniture, WorldPlot, RoomDef, EditorAction, EditorState } from '../types';
 import { WORLD_SURFACE_ITEMS } from '../data/furnitureData';
+import { getTexture } from '../utils/assetLoader'; 
+import { Texture } from 'pixi.js';
 
 export class EditorManager implements EditorState {
     mode: 'none' | 'plot' | 'furniture' | 'floor' = 'none';
@@ -312,21 +314,55 @@ export class EditorManager implements EditorState {
     }
 
     startPlacingFurniture(template: Partial<Furniture>) {
-        // if (!this.activePlotId) {
-        //     GameStore.showToast("❌ 请先选择地皮并【进入装修】");
-        //     return;
-        // }
+        // 🟢 [新逻辑] 自动推断尺寸
+        // 如果数据里没写 w，就去读图集的实际宽度；如果还没加载到图，就兜底为 48
+        // 如果数据里没写 h，就默认设为 48 (如你所愿)
+        
+        let autoW = template.w;
+        let autoH = template.h;
+
+        // 1. 尝试自动解析 Width
+        if (autoW === undefined) {
+            // 优先检查 frameName (SpriteSheet 里的名字)
+            if (template.frameName) {
+                const tex = getTexture(template.frameName);
+                if (tex && tex !== Texture.EMPTY) {
+                    autoW = tex.width;
+                }
+            } 
+            // 兼容旧的 imagePath 逻辑 (如果有的话)
+            else if (template.imagePath) {
+                const tex = getTexture(template.imagePath);
+                if (tex && tex !== Texture.EMPTY) {
+                    autoW = tex.width;
+                }
+            }
+        }
+
+        // 2. 兜底默认值
+        // 如果上面没取到 (比如资源还没加载完)，或者本来就没配，就用默认值
+        const finalW = autoW || 48; 
+        const finalH = autoH || 48; // 这里实现了你的需求：默认为 48
+
         this.placingType = null; 
         this.placingTemplateId = null; 
         this.placingSize = null;
-        // 🟢 新逻辑：无论在世界模式还是装修模式，都允许开始放置
+        
         this.mode = 'furniture';
-        this.placingFurniture = { ...template, rotation: 0 };
+        
+        // 🟢 将计算好的宽高合并进去
+        this.placingFurniture = { 
+            ...template, 
+            w: finalW,
+            h: finalH,
+            rotation: 0 
+        };
+        
         this.isDragging = true;
         this.interactionState = 'carrying';
-        this.dragOffset = { x: (template.w || 0) / 2, y: (template.h || 0) / 2 };
+        // 更新拖拽中心点 (让鼠标要在物体的中心)
+        this.dragOffset = { x: finalW / 2, y: finalH / 2 };
         
-        // 如果在世界模式放置，提示一下用户
         if (!this.activePlotId) {
             GameStore.showToast("🌍 正在世界地图上放置物件");
         }
