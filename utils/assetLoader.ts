@@ -1,4 +1,4 @@
-import { Assets, Texture, Rectangle } from 'pixi.js';
+import { Assets, Texture, Rectangle, Sprite, Application } from 'pixi.js';
 
 // 缓存：路径 -> HTMLImageElement (给 React UI 用)
 const imageCache = new Map<string, HTMLImageElement>();
@@ -121,4 +121,82 @@ export const getSlicedTexture = (
 
     slicedCache.set(cacheKey, slicedTex);
     return slicedTex;
+};
+
+// 缓存计算结果，避免重复计算同一个图片的尺寸
+const widthCache = new Map<string, number>();
+
+export function getSmartFootprintWidth(texture: Texture, scanHeightRatio: number = 0.2): number {
+    // 1. 如果有缓存，直接返回
+    if (!texture.baseTexture.resource.src) {
+        // 如果是 RenderTexture 或者生成的纹理，可能没有 src，降级使用整体宽度
+        return texture.width;
+    }
+    const cacheKey = texture.baseTexture.resource.src + '_footprint';
+    if (widthCache.has(cacheKey)) {
+        return widthCache.get(cacheKey)!;
+    }
+
+    // 2. 创建临时 Canvas 用于读取像素
+    // 注意：Pixi v7/v8 获取源图像的方式可能略有不同，这里假设是基于 Image 的资源
+    const baseSource = texture.baseTexture.resource.source as HTMLImageElement; 
+    
+    if (!baseSource || !baseSource.getContext && baseSource.tagName !== 'IMG' && baseSource.tagName !== 'CANVAS') {
+        // 如果无法获取原始 DOM 元素，降级返回整体宽度
+        return texture.width;
+    }
+
+    // 创建离屏 Canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = texture.width;
+    canvas.height = texture.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return texture.width;
+
+    // 绘制图片
+    ctx.drawImage(baseSource, 0, 0, texture.width, texture.height);
+
+    // 3. 扫描底部区域
+    // 我们只关心底部 scanHeightRatio (例如 20%) 的高度
+    const startY = Math.floor(texture.height * (1 - scanHeightRatio));
+    const endY = texture.height;
+    
+    // 获取这部分像素数据
+    const imageData = ctx.getImageData(0, startY, texture.width, endY - startY);
+    const data = imageData.data;
+    const width = texture.width;
+    const height = endY - startY;
+
+    let minX = width;
+    let maxX = 0;
+    let found = false;
+
+    // 遍历像素
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const index = (y * width + x) * 4;
+            const alpha = data[index + 3];
+
+            // 阈值判断：Alpha > 10 就算非透明
+            if (alpha > 10) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                found = true;
+            }
+        }
+    }
+
+    // 4. 计算结果
+    let resultW = texture.width;
+    if (found) {
+        // +1 是因为像素坐标从0开始，宽度需要包含最后一个像素
+        resultW = maxX - minX + 1;
+        
+        // 🛡️ 容错：如果算出来的宽度太小（比如只有1个像素），可能是噪点，还是返回原宽度比较安全
+        if (resultW < 10) resultW = texture.width;
+    }
+
+    // 5. 写入缓存
+    widthCache.set(cacheKey, resultW);
+    return resultW;
 };

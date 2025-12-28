@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Application, Container, Sprite, TextureStyle, Graphics, Text } from 'pixi.js';
+import { Application, Container, Sprite, TextureStyle, Graphics, Text, FederatedPointerEvent } from 'pixi.js';
 import { ASSET_CONFIG, CONFIG } from '../constants';
 import { loadGameAssets } from '../utils/assetLoader';
 import { GameStore } from '../utils/GameStore';
@@ -51,8 +51,10 @@ const PixiGameCanvasComponent: React.FC = () => {
     const gridLayerRef = useRef<Graphics | null>(null);
     const isSpacePressed = useRef(false);
 
-    // [新增] 专门用于记录地表绘制状态的 ref
     const isPaintingSurface = useRef(false);
+    // ✨ [2] 新增：用于标记 Pixi 是否已经处理了点击事件
+    // 如果为 true，说明用户点到了家具 Sprite，后续的 handleMouseDown 就不应该再执行网格搜索了
+    const interactionHandled = useRef(false);
 
     // 绘制缩放手柄辅助函数
     const drawResizeHandles = (g: Graphics, x: number, y: number, w: number, h: number) => {
@@ -101,6 +103,56 @@ const PixiGameCanvasComponent: React.FC = () => {
 
             const c = PixiWorldBuilder.createFurniture(furn);
             c.zIndex = furn.y + furn.h; 
+            // ✨ [3] 核心修改：开启交互并绑定点击事件
+            // 'static' 模式表示它接受交互但不自动触发 update (省性能)
+            c.eventMode = 'static'; 
+            c.cursor = 'pointer';
+
+            c.on('pointerdown', (e: FederatedPointerEvent) => {
+                // 1. 如果正在放置东西/画地皮，禁止选中已有家具，以免干扰操作
+                if (GameStore.editor.placingFurniture || GameStore.editor.placingTemplateId || GameStore.editor.drawingFloor || GameStore.editor.drawingPlot) {
+                    return; 
+                }
+
+                // 2. 阻止事件冒泡 (虽然 Pixi 和 React 事件系统独立，但这是一个好习惯)
+                e.stopPropagation();
+
+                // 3. 标记为“已处理”，阻止 React 的 handleMouseDown 继续执行网格检测
+                interactionHandled.current = true;
+
+                // 4. 执行选中逻辑
+                if (GameStore.editor.mode !== 'none') {
+                    // 如果是在 World (Plot) 模式下点中家具，自动切换到 Furniture 模式
+                    if (GameStore.editor.mode === 'plot') {
+                        GameStore.editor.mode = 'furniture';
+                    }
+                    
+                    // 设置选中 ID
+                    GameStore.editor.selectedFurnitureId = furn.id;
+                    
+                    // 准备拖拽状态
+                    if (worldContainerRef.current) {
+                        // 获取点击位置相对于 World 容器的坐标 (考虑了缩放和平移)
+                        const localPos = worldContainerRef.current.toLocal(e.global);
+                        
+                        GameStore.editor.isDragging = true;
+                        isDraggingObject.current = true;
+                        
+                        // 计算鼠标相对于家具原点(x,y)的偏移量
+                        // 这样拖拽时物体不会突然“跳”到鼠标中心，而是保持点击时的相对位置
+                        GameStore.editor.dragOffset = { 
+                            x: localPos.x - furn.x, 
+                            y: localPos.y - furn.y 
+                        };
+                        
+                        // 立即更新 Ghost 预览位置
+                        GameStore.editor.previewPos = { x: furn.x, y: furn.y };
+                        GameStore.editor.updatePreviewPos(localPos.x, localPos.y);
+                    }
+                    
+                    GameStore.notify();
+                }
+            });
             world.addChild(c);
             furnViewsRef.current.set(furn.id, c);
         });
@@ -563,6 +615,12 @@ const PixiGameCanvasComponent: React.FC = () => {
             if (containerRef.current) containerRef.current.style.cursor = 'grabbing';
             return;
         }
+        // ✨ [4] 核心修改：如果 Pixi 的事件已经处理了点击（比如选中了家具），这里直接返回
+        if (interactionHandled.current) {
+            // 重置标志位，下次点击重新判断
+            interactionHandled.current = false;
+            return;
+        }
 
         if (e.button === 0 && GameStore.editor.mode !== 'none') {
             // 🆕 [新增/修改] 针对 Surface 类型的特殊处理
@@ -613,10 +671,14 @@ const PixiGameCanvasComponent: React.FC = () => {
                 return;
             }
 
-            // C. 核心：点击选择 (区分 World Mode 和 Build Mode)
+            // C. 选择模式 (Selection)
+            // ✨ 现在的逻辑：
+            // 1. 如果点到了家具 Sprite -> Pixi 事件触发 -> interactionHandled=true -> 本函数提前 return
+            // 2. 如果没点到 Sprite -> 走到这里 -> 检测是否点到了地皮 (Plot)
+            
             const activeId = GameStore.editor.activePlotId;
             
-            // 1. 检测缩放手柄 (通用)
+            // 缩放手柄检测
             let resizeTarget: { x: number, y: number, w: number, h: number } | null = null;
             if (GameStore.editor.selectedPlotId) {
                 const p = GameStore.worldLayout.find(x => x.id === GameStore.editor.selectedPlotId);
@@ -641,71 +703,43 @@ const PixiGameCanvasComponent: React.FC = () => {
                 }
             }
 
-            // 2. 物体命中检测
+            // 物体命中检测 (主要用于选中 Plot / Room，家具已经交给 Pixi 事件了)
             let hitObj: any = null;
             let hitType = '';
 
-            // [建筑模式]：只能选当前 activePlotId 内的东西
             if (activeId) {
-                // 家具
-                if (GameStore.editor.mode === 'furniture') {
-                    hitObj = [...GameStore.furniture].reverse().find(f => {
-                        return f.id.startsWith(activeId) && worldX >= f.x && worldX <= f.x + f.w && worldY >= f.y && worldY <= f.y + f.h;
-                    });
-                    if (hitObj) hitType = 'furniture';
-                }
-                // 地板/房间
-                else if (GameStore.editor.mode === 'floor') {
+                if (GameStore.editor.mode === 'floor') {
                     hitObj = [...GameStore.rooms].reverse().find(r => {
                         return r.id.startsWith(activeId) && worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h;
                     });
                     if (hitObj) hitType = 'floor';
                 }
+                // 注意：这里不再检测家具，因为家具已经由 Sprite 点击接管了
             } 
-            // 🟢 [修复] 世界模式：既能选家具(街道设施)，也能选地皮
-            // 注意：这里去掉了 else if (mode === 'plot') 的限制，只要不是建筑模式，都能选
             else {
-                 // 1. 优先检测家具 (街道设施/World Props)
-                 // 我们反向遍历(从上层到下层)，优先选中最上面的
-                 const hitFurn = [...GameStore.furniture].reverse().find(f => {
-                    return worldX >= f.x && worldX <= f.x + f.w && worldY >= f.y && worldY <= f.y + f.h;
+                 // 检测地皮 (Plot)
+                 const plot = GameStore.worldLayout.find(p => {
+                    const w = p.width || 300; const h = p.height || 300;
+                    return worldX >= p.x && worldX <= p.x + w && worldY >= p.y && worldY <= p.y + h;
                  });
-
-                 if (hitFurn) {
-                     hitObj = hitFurn;
-                     hitType = 'furniture';
-                     // ✨ 关键：选中家具时，自动把模式切为 furniture，这样后续的拖拽/预览逻辑才能正常工作
-                     GameStore.editor.mode = 'furniture';
-                 }
-                 // 2. 如果没点中家具，再检测地皮
-                 else {
-                     const plot = GameStore.worldLayout.find(p => {
-                        const w = p.width || 300; const h = p.height || 300;
-                        return worldX >= p.x && worldX <= p.x + w && worldY >= p.y && worldY <= p.y + h;
-                     });
-                     if (plot) { 
-                         hitObj = plot; 
-                         hitType = 'plot'; 
-                         // ✨ 关键：选中地皮时，自动把模式切为 plot
-                         GameStore.editor.mode = 'plot';
-                     }
+                 if (plot) { 
+                     hitObj = plot; 
+                     hitType = 'plot'; 
+                     GameStore.editor.mode = 'plot';
                  }
             }
 
             if (hitObj) {
-                // 选中了物体
                 if (hitType === 'plot') GameStore.editor.selectedPlotId = hitObj.id;
-                else if (hitType === 'furniture') GameStore.editor.selectedFurnitureId = hitObj.id;
                 else if (hitType === 'floor') GameStore.editor.selectedRoomId = hitObj.id;
 
-                // 开启普通拖拽 (按住不放)
                 GameStore.editor.isDragging = true;
                 isDraggingObject.current = true;
                 GameStore.editor.dragOffset = { x: worldX - hitObj.x, y: worldY - hitObj.y };
-                GameStore.editor.previewPos = { x: hitObj.x, y: hitObj.y }; // 立即更新 Ghost 位置
+                GameStore.editor.previewPos = { x: hitObj.x, y: hitObj.y }; 
                 GameStore.editor.updatePreviewPos(worldX, worldY);
             } else {
-                // 点击空白处取消选中
+                // 点击空白处取消选中 (除非正在调整大小)
                 if (!activeResizeHandle.current) {
                     GameStore.editor.selectedPlotId = null;
                     GameStore.editor.selectedFurnitureId = null;

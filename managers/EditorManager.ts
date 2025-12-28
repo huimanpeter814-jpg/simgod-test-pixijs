@@ -2,7 +2,7 @@ import { GameStore } from '../utils/GameStore';
 import { PLOTS } from '../data/plots';
 import { Furniture, WorldPlot, RoomDef, EditorAction, EditorState } from '../types';
 import { WORLD_SURFACE_ITEMS } from '../data/furnitureData';
-import { getTexture } from '../utils/assetLoader'; 
+import { getTexture, getSmartFootprintWidth } from '../utils/assetLoader'; 
 import { Texture } from 'pixi.js';
 
 export class EditorManager implements EditorState {
@@ -350,19 +350,13 @@ export class EditorManager implements EditorState {
 
         // 1. 尝试自动解析 Width
         if (autoW === undefined) {
-            // 优先检查 frameName (SpriteSheet 里的名字)
-            if (template.frameName) {
-                const tex = getTexture(template.frameName);
-                if (tex && tex !== Texture.EMPTY) {
-                    autoW = tex.width;
-                }
-            } 
-            // 兼容旧的 imagePath 逻辑 (如果有的话)
-            else if (template.imagePath) {
-                const tex = getTexture(template.imagePath);
-                if (tex && tex !== Texture.EMPTY) {
-                    autoW = tex.width;
-                }
+            let tex: Texture | null = null;
+            if (template.frameName) tex = getTexture(template.frameName);
+            else if (template.imagePath) tex = getTexture(template.imagePath);
+
+            if (tex && tex !== Texture.EMPTY) {
+                // 🟢 改用智能计算，只算底部 25% 的区域
+                autoW = getSmartFootprintWidth(tex, 0.25);
             }
         }
 
@@ -414,60 +408,58 @@ export class EditorManager implements EditorState {
     
         if (!target) return;
     
-        // 2. 计算新方向 (0->1->2->3)
+        // 2. 记录旋转前的状态
         const oldRot = target.rotation || 0;
+        const oldW = target.w || 48; // 旋转前的逻辑宽度
+        const oldH = target.h || 48; // 旋转前的逻辑高度/进深
+
+        // 3. 计算新方向 (0->1->2->3)
         const newRot = (oldRot + 1) % 4;
         target.rotation = newRot;
     
-        // 3. ✨ 核心修改：基于视觉素材重新计算尺寸 ✨
-        // 逻辑：如果定义了多方向的图 (frameDirs)，则去取新方向图片的宽度。
-        // 如果没有多方向图，则简单交换 w 和 h。
-        
-        let newW = 0;
-        let newH = 0;
+        // 4. ✨ 核心修改：基于图片自动调整 W，基于逻辑自动调整 H ✨
         let textureFound = false;
     
-        // 检查是否有方向性贴图配置
+        // 检查是否有方向性贴图配置 (frameDirs)
         if (target.frameDirs && target.frameDirs[newRot]) {
             const frameName = target.frameDirs[newRot];
             const tex = getTexture(frameName);
-            if (tex && tex !== Texture.EMPTY){ // 确保图片已加载
-                newW = tex.width;
-                // 高度 h 通常由逻辑决定（比如占地深度），或者你可以约定 h = texture.height / 2 之类的
-                // 这里为了稳健，如果找到了新图，我们主要更新 w (宽度)
-                // 而 h (深度) 在像素画里通常需要手动指定，或者此时只能 swap
-                
-                // 策略A：完全信任图片宽度作为占地宽度
-                newW = tex.width;
-                
-                // 策略B：交换原来的 w 和 h (假设物体是刚体旋转)
-                // 如果原来的物体是长方形 (48x96)，旋转后应该是 (96x48)
-                // 但是图片素材可能带阴影或者留白，所以混合使用：
-                // 优先交换 w/h 来保持逻辑占地面积的一致性
-                const temp = target.w;
-                newW = target.h!;
-                newH = temp!; 
+            
+            // 确保图片已加载且有效
+            if (tex && tex !== Texture.EMPTY) {
+                // ✅ 宽度 (w): 直接使用新图片的宽度
+                // 这解决了“图片对不上”的问题，无论图片多宽，包围盒都会自动适配
+                target.w = getSmartFootprintWidth(tex, 0.25);
+
+                // ✅ 高度 (h): 这里的 h 指的是“逻辑进深” (占地面积的 Y 轴长度)
+                // 物体旋转90度后，原来的“宽”变成了现在的“深”。
+                // 所以我们把旧的 oldW 赋值给新的 h。
+                target.h = oldW; 
+
+                // 举例：
+                // 电视机原状态(0): 宽100, 深20 (图片宽100)
+                // 旋转后(1): 
+                //    - 新 w = 图片宽 20 (侧面图)
+                //    - 新 h = 旧宽 100 (变成了进深)
+                // 这样中心点计算 (x + w/2, y + h/2) 依然准确
                 
                 textureFound = true;
             }
         }
     
-        if (textureFound) {
-            target.w = newW;
-            target.h = newH;
-        } else {
-            // 兜底方案：如果没有特定方向的图片，直接交换宽高
-            const temp = target.w;
-            target.w = target.h;
-            target.h = temp;
+        if (!textureFound) {
+            // 兜底方案：如果没有特定方向的图片（比如正方形物体），简单交换宽高
+            target.w = oldH;
+            target.h = oldW;
         }
     
-        // 4. 更新拖拽中心点 (如果是正在放置的状态)
+        // 5. 更新拖拽时的鼠标中心偏移
+        // 这一步很重要，否则旋转后鼠标会指在奇怪的地方
         if (this.placingFurniture) {
             this.dragOffset = { x: (target.w || 0) / 2, y: (target.h || 0) / 2 };
         }
     
-        // 5. 触发更新
+        // 6. 触发更新
         GameStore.initIndex(); 
         GameStore.triggerMapUpdate(); 
         GameStore.notify();
