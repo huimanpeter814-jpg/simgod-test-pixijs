@@ -139,9 +139,10 @@ export function getSmartFootprintWidth(texture: Texture, scanHeightRatio: number
 
     // 2. 创建临时 Canvas 用于读取像素
     // 注意：Pixi v7/v8 获取源图像的方式可能略有不同，这里假设是基于 Image 的资源
-    const baseSource = texture.baseTexture.resource.source as HTMLImageElement; 
+    const baseSource = texture.baseTexture.resource.source as HTMLImageElement | HTMLCanvasElement; 
     
-    if (!baseSource || !baseSource.getContext && baseSource.tagName !== 'IMG' && baseSource.tagName !== 'CANVAS') {
+    // 【修改点2】在访问 getContext 时将其断言为 any，或者检查 'getContext' in baseSource
+    if (!baseSource || (!(baseSource as any).getContext && baseSource.tagName !== 'IMG' && baseSource.tagName !== 'CANVAS')) {
         // 如果无法获取原始 DOM 元素，降级返回整体宽度
         return texture.width;
     }
