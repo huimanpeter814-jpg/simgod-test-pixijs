@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Assets, Texture } from 'pixi.js';
 import { Furniture, RoomDef } from '../../types';
 import { drawPixiFurniture } from './pixelArt'; 
 import { getTexture, getSlicedTexture } from '../assetLoader';
+import { GameStore } from '../GameStore';
 
 export class PixiWorldBuilder {
     
@@ -77,147 +78,146 @@ export class PixiWorldBuilder {
         container.x = f.x;
         container.y = f.y;
 
-        // ==========================================
-        // ✨ 2.5D 核心：Y-Sorting (遮挡关系)
-        // ==========================================
-        // 物体的层级由“脚底”坐标决定。
-        // f.y 是顶部，f.h 是高度，所以 f.y + f.h 是物体在地面上的基座位置。
-        // 越靠下 (Y值越大) 的物体，zIndex 应该越大，从而遮挡后面的物体。
-        const bottomY = f.y + f.h;
-        container.zIndex = bottomY;
-
-        // 3. 确定当前方向 (0:Front, 1:Left, 2:Back, 3:Right)
+        // 使用 any 断言访问 types.ts 中新增的字段 (防止类型未更新导致报错)
+        const fAny = f as any;
         const dir = f.rotation || 0;
 
-        // 4. 计算图集坐标
-        // 使用 any 断言访问 types.ts 中新增的字段，防止未更新类型定义导致的报错
-        const fAny = f as any;
-
         // ==========================================
-        // 🟢 分支 A: 使用 TexturePacker 图集
+        // ✨ [核心逻辑] 2.5D 层级与台面支持
         // ==========================================
         
-        // 1. 确定最终要用的图片名
-        let targetFrameName = fAny.frameName;
+        // 默认层级：按物体最底部的 Y 坐标排序 (越靠下遮挡越靠上的)
+        let zIndex = f.y + f.h; 
+        
+        // 视觉抬升高度 (例如电脑放在桌子上，需要向上抬 20px)
+        let elevationOffset = 0; 
 
-        // ✨ 如果有方向映射配置，优先使用方向对应的名字
+        // 如果这个物品被标记为“放在台面上” (例如 placementLayer === 'surface')
+        if (fAny.placementLayer === 'surface') {
+            // 在所有家具中查找：谁在我的正下方，并且是桌子(isSurface)？
+            const centerX = f.x + f.w / 2;
+            const centerY = f.y + f.h / 2;
+
+            // 这里的判断逻辑是：找到中心点重叠且属于 'isSurface' 的家具
+            const supportItem = GameStore.furniture.find(other => 
+                other.isSurface && 
+                other.id !== f.id && // 不是自己
+                // 简单的 AABB 包含检测
+                centerX >= other.x && centerX < other.x + other.w &&
+                centerY >= other.y && centerY < other.y + other.h
+            );
+
+            if (supportItem) {
+                // 1. 获取桌子的支撑高度 (如果没有配，默认给个 20)
+                elevationOffset = supportItem.surfaceHeight || 20;
+                
+                // 2. [关键] 强制继承桌子的层级，并微调增加一点点
+                // 这样无论桌子在哪，电脑永远会被渲染在桌子之后(之上)
+                zIndex = (supportItem.y + supportItem.h) + 0.1;
+            }
+        }
+        
+        // 应用计算好的 Z-Index
+        container.zIndex = zIndex;
+
+        // ==========================================
+        // 纹理处理与 Sprite 创建
+        // ==========================================
+        
+        // 1. 确定最终要用的图片名 (优先使用方向映射)
+        let targetFrameName = fAny.frameName;
         if (fAny.frameDirs && fAny.frameDirs[dir]) {
             targetFrameName = fAny.frameDirs[dir];
         }
 
-        // 2. 尝试获取纹理
+        let sprite: Sprite | null = null;
+        let visualHeight = f.h; // 默认视觉高度 = 逻辑高度
+
+        // 🟢 分支 A: 使用 TexturePacker 图集 (Frame Name)
         if (targetFrameName) {
             const texture = getTexture(targetFrameName);
-            
-            if (texture !== Texture.EMPTY) {
-                const sprite = new Sprite(texture);
-
-                // ... (尺寸和偏移逻辑同之前) ...
-                const visualWidth = texture.width; 
-                const visualHeight = texture.height;
-                const yOffset = f.h - visualHeight;
-
-                sprite.width = visualWidth;
-                sprite.height = visualHeight;
-                sprite.y = yOffset;
-
-                // ✨ [进阶] 简单的镜像翻转处理
-                // 如果你为了省资源，左右方向复用了同一张图 (比如 sofa_side.png)，
-                // 你可以在这里判断 dir === 3 时设置 sprite.scale.x = -1 并调整 anchor 或 x 坐标。
-                // 简单起见，建议初期先为每个方向打包独立的图片。
-
-                container.addChild(sprite);
-                return container;
+            if (texture && texture !== Texture.EMPTY) {
+                sprite = new Sprite(texture);
+                visualHeight = texture.height;
+                // 使用图片原始宽高
+                sprite.width = texture.width;
+                sprite.height = texture.height;
             }
         }
         
-        let tileX = f.tilePos ? f.tilePos.x : 0;
-        let tileY = f.tilePos ? f.tilePos.y : 0;
-        let useTile = false;
+        // 🟢 分支 B: 使用 TileSheet 切片 (Tile Pos)
+        if (!sprite) {
+            let tileX = f.tilePos ? f.tilePos.x : 0;
+            let tileY = f.tilePos ? f.tilePos.y : 0;
+            let useTile = false;
 
-        // 优先级 A: 显式映射模式 (tilePosDir)
-        // 适用于：不同方向的素材散落在图集的不同位置，不连续
-        if (fAny.tilePosDir && fAny.tilePosDir[dir]) {
-            tileX = fAny.tilePosDir[dir].x;
-            tileY = fAny.tilePosDir[dir].y;
-            useTile = true;
-        } 
-        // 优先级 B: 连续排列模式 (hasDirectionalSprites)
-        // 适用于：图集里按 [正, 左, 后, 右] 顺序横向紧挨着排列
-        else if (fAny.hasDirectionalSprites && f.tilePos) {
-            tileX += dir; // 横向偏移
-            useTile = true;
-        } 
-        // 优先级 C: 单图模式
-        // 适用于：不随旋转改变样子的物体 (或者还没画其他方向)
-        else if (f.tilePos) {
-            useTile = true;
+            // 处理切片的方向偏移
+            if (fAny.tilePosDir && fAny.tilePosDir[dir]) {
+                tileX = fAny.tilePosDir[dir].x;
+                tileY = fAny.tilePosDir[dir].y;
+                useTile = true;
+            } else if (fAny.hasDirectionalSprites && f.tilePos) {
+                tileX += dir; // 假设横向排列
+                useTile = true;
+            } else if (f.tilePos) {
+                useTile = true;
+            }
+
+            if (f.tileSheet && useTile) {
+                const sliceW = f.tileSize?.w || 48;
+                const sliceH = f.tileSize?.h || 48; 
+                
+                // 如果定义了 textureHeight (如墙体高96)，则使用它，否则默认使用逻辑高度
+                visualHeight = fAny.textureHeight || f.h; 
+
+                const texture = getSlicedTexture(f.tileSheet, tileX, tileY, sliceW, sliceH);
+                sprite = new Sprite(texture);
+                sprite.width = f.w; // 宽度通常拉伸适配逻辑格
+                sprite.height = visualHeight;
+            }
+        }
+
+        // 🟢 分支 C: 兼容单张图片路径
+        if (!sprite && f.imagePath && Assets.cache.has(f.imagePath)) {
+            sprite = Sprite.from(f.imagePath);
+            sprite.width = f.w;
+            sprite.height = f.h;
+            visualHeight = f.h;
         }
 
         // ==========================================
-        // 5. 渲染 Sprite
+        // 最终组装：应用 Y 轴偏移
         // ==========================================
-        if (f.tileSheet && useTile) {
-            // 逻辑尺寸 (占地面积)
-            const logicalW = f.w;
-            const logicalH = f.h;
+        if (sprite) {
+            // 1. 基础对齐偏移 (Alignment Offset)
+            // 用于处理像“树”这种图片很高，但占地很小(底部对齐)的物体
+            // 公式：逻辑底部 - 视觉底部。因为 Sprite 锚点默认在左上角(0,0)，
+            // 所以我们需要把 Sprite 向上推，使其底部和容器的逻辑底部 (f.h) 对齐。
+            // 偏移量 = 逻辑高度(f.h) - 视觉高度(visualHeight)
+            const alignmentOffset = f.h - visualHeight;
 
-            // 视觉尺寸 (图片实际显示大小)
-            // 如果定义了 textureHeight (如墙体、树木)，则使用它，否则默认等于占地高度
-            const visualWidth = logicalW; 
-            const visualHeight = fAny.textureHeight || logicalH;
-            
-            // ✨ 垂直偏移计算
-            // 我们需要将 Sprite 向上移动，使得 Sprite 的底部边缘与 逻辑占地(h) 的底部重合。
-            // 偏移量 = 逻辑高度 - 视觉高度
-            // 例：树占地 48，高 96。偏移 = 48 - 96 = -48 (向上移一格)
-            const yOffset = logicalH - visualHeight;
+            // 2. 应用所有偏移
+            // 最终 Y = 基础对齐偏移 - 桌子抬升高度 (负值代表向上)
+            sprite.y = alignmentOffset - elevationOffset;
 
-            // 获取切片
-            // 注意：墙体素材的 tileSize.h 可能是 96，而 f.h 依然是 48
-            const sliceW = f.tileSize?.w || 48;
-            const sliceH = f.tileSize?.h || 48; 
+            // 简单的镜像翻转处理 (可选，仅作示例)
+            // if (dir === 3) { sprite.scale.x = -1; sprite.anchor.x = 1; }
 
-            const texture = getSlicedTexture(
-                f.tileSheet, 
-                tileX, 
-                tileY, 
-                sliceW, 
-                sliceH
-            );
-            
-            const sprite = new Sprite(texture);
-            
-            // 设置显示大小
-            sprite.width = visualWidth;
-            sprite.height = visualHeight;
-            
-            // 应用垂直偏移，实现“站立”在格子上
-            sprite.y = yOffset;
-            
             container.addChild(sprite);
-
-        } else if (f.imagePath && Assets.cache.has(f.imagePath)) {
-            // [原有兼容] 单张图片渲染
-            const sprite = Sprite.from(f.imagePath);
-            sprite.width = f.w;
-            sprite.height = f.h;
-            container.addChild(sprite);
-
-        } else {
-            // [兜底] 调试用 / 程序化绘制
+        } 
+        else {
+            // [兜底绘制] 纯色矩形 + 方向箭头
             const g = new Graphics();
             
             // 同样应用视觉高度逻辑
-            const visualHeight = fAny.textureHeight || f.h;
-            const yOffset = f.h - visualHeight;
+            visualHeight = fAny.textureHeight || f.h;
+            const yOffset = (f.h - visualHeight) - elevationOffset; // ✨ 加上 elevationOffset
 
-            // 绘制主体矩形
             g.rect(0, yOffset, f.w, visualHeight);
             g.fill(f.color || 0xAAAAAA);
             g.stroke({ width: 2, color: 0x333333 });
 
-            // 绘制方向箭头 (辅助调试)
+            // 绘制方向箭头
             const cx = f.w / 2;
             const cy = yOffset + visualHeight / 2;
             
@@ -229,12 +229,10 @@ export class PixiWorldBuilder {
             else if (dir === 3) g.lineTo(cx + 15, cy); // 右
             g.stroke({ width: 3, color: 0xFF5555 });
 
-            // (可选) 如果你还想保留程序化绘制逻辑，可以放开下面这行
-            // drawPixiFurniture(g, f.w, f.h, f);
-
             container.addChild(g);
         }
 
         return container;
     }
+
 }

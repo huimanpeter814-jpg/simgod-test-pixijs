@@ -180,48 +180,75 @@ export class EditorManager implements EditorState {
 
     // 1. 优化：检查放置位置是否合法 (简单的 AABB 碰撞检测)
     checkPlacementValidity(x: number, y: number, w: number, h: number): boolean {
-        // 1. 如果处于建筑模式，必须检查是否在地皮范围内
+        const targetItem = this.placingFurniture; // 当前正在放置的物品
+        const isSurfaceItem = targetItem?.placementLayer === 'surface'; // 它是不是像电脑这样放在桌上的？
+       // 1. 基础边界检查 (不能跑出地图/地皮)
         if (this.activePlotId) {
             const plot = GameStore.worldLayout.find(p => p.id === this.activePlotId);
             if (!plot) return false;
-
-            // 简单的 AABB 包含检测
             const plotRight = plot.x + (plot.width || 288);
             const plotBottom = plot.y + (plot.height || 288);
-            const itemRight = x + w;
-            const itemBottom = y + h;
-
-            // 严格检测：物体不能超出地皮边界
-            if (x < plot.x || y < plot.y || itemRight > plotRight || itemBottom > plotBottom) {
+            if (x < plot.x || y < plot.y || x + w > plotRight || y + h > plotBottom) {
                 return false; 
             }
         }
-        // 🟢 2. 世界模式：家具与地皮的碰撞检测
-        else if (this.mode === 'furniture' && !this.activePlotId) {
-            // 简单的逻辑：允许放在任何地方，除了和其他地皮重叠的地方
-            // (你也可以把这个逻辑去掉，允许把路灯放进地皮里，看你需求)
-            const others = GameStore.worldLayout;
-            for (const other of others) {
-                const ow = other.width || 288;
-                const oh = other.height || 288;
-                // 如果跟某个地皮重叠了，不仅不让放，或者提示警告
-                // 这里暂时允许重叠，因为有时候需要在路边放东西稍微压一点线
+
+        // 2. ✨ 碰撞与层级检查 ✨
+        // 我们需要遍历所有已存在的家具，看是否冲突
+        const allFurniture = GameStore.furniture;
+        
+        // 获取当前物体的包围盒 (AABB)
+        const rect1 = { x: x, y: y, w: w, h: h };
+
+        // 标记：如果这是个放在桌上的物品，我们需要确保下面真的有桌子
+        let supportedBySurface = false; 
+
+        for (const other of allFurniture) {
+            // 忽略自己
+            if (targetItem && other.id === targetItem.id) continue;
+            // 忽略不同地皮的 (如果在装修模式)
+            if (this.activePlotId && !other.id.startsWith(this.activePlotId)) continue;
+
+            const rect2 = { x: other.x, y: other.y, w: other.w, h: other.h };
+
+            // 简单的 AABB 碰撞检测
+            const isOverlapping = (
+                rect1.x < rect2.x + rect2.w &&
+                rect1.x + rect1.w > rect2.x &&
+                rect1.y < rect2.y + rect2.h &&
+                rect1.y + rect1.h > rect2.y
+            );
+
+            if (isOverlapping) {
+                // Case A: 正在放置的是【桌上物品】 (电脑)
+                if (isSurfaceItem) {
+                    if (other.isSurface) {
+                        // 碰到了桌子 -> 合法，且被支持了
+                        // 进阶：你可以在这里判断 rect1 是否完全包含在 rect2 内部
+                        supportedBySurface = true; 
+                        continue; // 允许重叠，继续检查其他物体
+                    } else {
+                        // 碰到了其他东西 (比如碰到了另一台电脑，或者碰到了墙) -> 禁止
+                        // 除非你允许桌上的东西互相堆叠，否则这里应该 return false
+                        if (other.placementLayer === 'surface') return false; 
+                    }
+                } 
+                
+                // Case B: 正在放置的是【普通物品/桌子】
+                else {
+                    // 如果碰到了桌上物品 (比如桌子移到了电脑下面) -> 理论上允许，但逻辑比较绕
+                    // 这里简化：普通物品不能和任何东西重叠
+                    return false;
+                }
             }
         }
-        // // 2. 世界模式：地皮不能重叠
-        // else if (this.mode === 'plot') {
-        //     const others = GameStore.worldLayout.filter(p => p.id !== this.selectedPlotId);
-        //     for (const other of others) {
-        //         const ow = other.width || 300;
-        //         const oh = other.height || 300;
-        //         // AABB 重叠检测
-        //         if (x < other.x + ow && x + w > other.x &&
-        //             y < other.y + oh && y + h > other.y) {
-        //             return false;
-        //         }
-        //     }
-        // }
-        // 这里可以扩展更多逻辑，比如必须在地板上等
+
+        // 3. 最终判定
+        if (isSurfaceItem) {
+            // 如果是电脑，必须放在桌子上 (supportedBySurface 必须为 true)
+            return supportedBySurface;
+        }
+
         return true;
     }
 
@@ -379,28 +406,71 @@ export class EditorManager implements EditorState {
     }
 
     rotateSelection() {
-        if (this.placingFurniture) {
-            const oldRot = this.placingFurniture.rotation || 0;
-            this.placingFurniture.rotation = (oldRot + 1) % 4;
-            const temp = this.placingFurniture.w;
-            this.placingFurniture.w = this.placingFurniture.h;
-            this.placingFurniture.h = temp;
-            this.dragOffset = { x: (this.placingFurniture.w||0)/2, y: (this.placingFurniture.h||0)/2 };
-            GameStore.notify();
-            return;
+        // 1. 获取当前正在操作的对象（无论是正在放置的，还是已选中的）
+        let target: Partial<Furniture> | Furniture | null = this.placingFurniture;
+        if (!target && this.selectedFurnitureId) {
+            target = GameStore.furniture.find(i => i.id === this.selectedFurnitureId) || null;
         }
-
-        if (this.selectedFurnitureId) {
-            const f = GameStore.furniture.find(i => i.id === this.selectedFurnitureId);
-            if (f) {
-                f.rotation = ((f.rotation || 0) + 1) % 4;
-                const temp = f.w;
-                f.w = f.h;
-                f.h = temp;
-                GameStore.initIndex(); 
-                GameStore.triggerMapUpdate(); 
+    
+        if (!target) return;
+    
+        // 2. 计算新方向 (0->1->2->3)
+        const oldRot = target.rotation || 0;
+        const newRot = (oldRot + 1) % 4;
+        target.rotation = newRot;
+    
+        // 3. ✨ 核心修改：基于视觉素材重新计算尺寸 ✨
+        // 逻辑：如果定义了多方向的图 (frameDirs)，则去取新方向图片的宽度。
+        // 如果没有多方向图，则简单交换 w 和 h。
+        
+        let newW = 0;
+        let newH = 0;
+        let textureFound = false;
+    
+        // 检查是否有方向性贴图配置
+        if (target.frameDirs && target.frameDirs[newRot]) {
+            const frameName = target.frameDirs[newRot];
+            const tex = getTexture(frameName);
+            if (tex && tex !== Texture.EMPTY){ // 确保图片已加载
+                newW = tex.width;
+                // 高度 h 通常由逻辑决定（比如占地深度），或者你可以约定 h = texture.height / 2 之类的
+                // 这里为了稳健，如果找到了新图，我们主要更新 w (宽度)
+                // 而 h (深度) 在像素画里通常需要手动指定，或者此时只能 swap
+                
+                // 策略A：完全信任图片宽度作为占地宽度
+                newW = tex.width;
+                
+                // 策略B：交换原来的 w 和 h (假设物体是刚体旋转)
+                // 如果原来的物体是长方形 (48x96)，旋转后应该是 (96x48)
+                // 但是图片素材可能带阴影或者留白，所以混合使用：
+                // 优先交换 w/h 来保持逻辑占地面积的一致性
+                const temp = target.w;
+                newW = target.h!;
+                newH = temp!; 
+                
+                textureFound = true;
             }
         }
+    
+        if (textureFound) {
+            target.w = newW;
+            target.h = newH;
+        } else {
+            // 兜底方案：如果没有特定方向的图片，直接交换宽高
+            const temp = target.w;
+            target.w = target.h;
+            target.h = temp;
+        }
+    
+        // 4. 更新拖拽中心点 (如果是正在放置的状态)
+        if (this.placingFurniture) {
+            this.dragOffset = { x: (target.w || 0) / 2, y: (target.h || 0) / 2 };
+        }
+    
+        // 5. 触发更新
+        GameStore.initIndex(); 
+        GameStore.triggerMapUpdate(); 
+        GameStore.notify();
     }
 
     placePlot(x: number, y: number) {

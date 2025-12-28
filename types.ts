@@ -137,6 +137,9 @@ export interface Furniture {
   }
   hasDirectionalSprites?: boolean;
   frameName?: string;
+  isSurface?: boolean;        // 是否提供台面 (如：桌子、柜子)
+  placementLayer?: 'floor' | 'surface' | 'wall'; // 放置位置限制
+  surfaceHeight?: number;
 }
 
 export interface HousingUnit {
