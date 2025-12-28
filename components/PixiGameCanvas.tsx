@@ -102,7 +102,7 @@ const PixiGameCanvasComponent: React.FC = () => {
             if (GameStore.editor.mode === 'plot' && GameStore.editor.selectedPlotId && furn.id.startsWith(GameStore.editor.selectedPlotId) && isDraggingObject.current) return;
 
             const c = PixiWorldBuilder.createFurniture(furn);
-            c.zIndex = furn.y + furn.h; 
+            //c.zIndex = furn.y + furn.h; 
             // ✨ [3] 核心修改：开启交互并绑定点击事件
             // 'static' 模式表示它接受交互但不自动触发 update (省性能)
             c.eventMode = 'static'; 

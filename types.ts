@@ -86,6 +86,14 @@ export enum AgeStage {
     Elder = 'Elder'
 }
 
+export interface FurnitureSlot {
+  x: number;      // 相对于家具原点的逻辑 X 偏移
+  y: number;      // 相对于家具原点的逻辑 Y 偏移
+  height: number; // 这个插槽的视觉高度（解决你的“猜高度”问题）
+  type?: 'decor' | 'computer' | 'food'; // (可选) 限制这个插槽能放什么
+  isOccupied?: boolean; // 运行时标记：是否已被占用
+}
+
 export interface Furniture {
   id: string;
   x: number;
@@ -140,6 +148,10 @@ export interface Furniture {
   isSurface?: boolean;        // 是否提供台面 (如：桌子、柜子)
   placementLayer?: 'floor' | 'surface' | 'wall'; // 放置位置限制
   surfaceHeight?: number;
+
+  slots?: FurnitureSlot[];
+  parentId?: string;
+  parentSlotIndex?: number;
 }
 
 export interface HousingUnit {

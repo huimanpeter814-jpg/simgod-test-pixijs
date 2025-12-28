@@ -652,61 +652,182 @@ export class EditorManager implements EditorState {
         GameStore.triggerMapUpdate();
     }
 
+    // 辅助函数：检查某个插槽是否已经被其他家具占用
+    private isSlotOccupied(parentId: string, slotIndex: number): boolean {
+        return GameStore.furniture.some(f => f.parentId === parentId && f.parentSlotIndex === slotIndex);
+    }
+
+    // 辅助函数：计算旋转后的插槽世界坐标
+    private calculateSlotPos(parent: Furniture, slot: { x: number, y: number }): { x: number, y: number } {
+        const rot = parent.rotation || 0;
+        let sx = slot.x;
+        let sy = slot.y;
+
+        // parent.w 和 parent.h 是家具*当前状态*（旋转后）的宽高
+        // 我们基于当前的宽高进行坐标变换
+        
+        switch (rot) {
+            case 0: // 0度：不变
+                return { x: parent.x + sx, y: parent.y + sy };
+            
+            case 1: // 90度 (顺时针)：原点在右上，x -> y, y -> (w - x)
+                // 此时 parent.w 对应原始的 height，parent.h 对应原始的 width
+                // 变换公式：新x = 当前宽 - 原y, 新y = 原x
+                return { x: parent.x + (parent.w - sy), y: parent.y + sx };
+            
+            case 2: // 180度：原点在右下，x -> (w - x), y -> (h - y)
+                return { x: parent.x + (parent.w - sx), y: parent.y + (parent.h - sy) };
+            
+            case 3: // 270度 (逆时针90度)：原点在左下
+                // 变换公式：新x = 原y, 新y = 当前高 - 原x
+                return { x: parent.x + sy, y: parent.y + (parent.h - sx) };
+                
+            default:
+                return { x: parent.x + sx, y: parent.y + sy };
+        }
+    }
+
     // 3. 优化：更新预览位置（包含吸附和合法性检查）
+
     updatePreviewPos(worldX: number, worldY: number) {
-        const isPlacing = this.placingFurniture || this.placingTemplateId;
+        const targetItem = this.placingFurniture;
+        const isPlacing = targetItem || this.placingTemplateId;
+        
         if (!this.isDragging && !isPlacing) return;
 
+        // --- (A. 获取尺寸 w, h 代码保持不变) ---
         let w = 100, h = 100;
-        // 获取尺寸
         if (this.mode === 'furniture') {
-            const tpl = this.placingFurniture || GameStore.furniture.find(f => f.id === this.selectedFurnitureId);
-            if (tpl) { w = tpl.w ?? 100; h = tpl.h ?? 100; }
-        } else if (this.mode === 'plot') {
-             // 修改这里：优先读取 placingSize
-             if (this.placingSize) {
-                w = this.placingSize.w;
-                h = this.placingSize.h;
-            } else if (this.placingTemplateId) {
-                const tpl = PLOTS[this.placingTemplateId];
-                if (tpl) { w = tpl.width; h = tpl.height; }
-            } else if (this.selectedPlotId) {
-                const p = GameStore.worldLayout.find(x => x.id === this.selectedPlotId);
-                if (p) { w = p.width || 288; h = p.height || 288; }
+            if (targetItem) { 
+                w = targetItem.w ?? 100; 
+                h = targetItem.h ?? 100; 
+            } else {
+                const existing = GameStore.furniture.find(f => f.id === this.selectedFurnitureId);
+                if (existing) { w = existing.w; h = existing.h; }
             }
+        } else if (this.mode === 'plot') {
+             if (this.placingSize) { w = this.placingSize.w; h = this.placingSize.h; }
+             else if (this.placingTemplateId) { const tpl = PLOTS[this.placingTemplateId]; if(tpl){w=tpl.width;h=tpl.height;} }
+             else if (this.selectedPlotId) { const p = GameStore.worldLayout.find(x => x.id === this.selectedPlotId); if(p){w=p.width||288;h=p.height||288;} }
         }
-        // 计算吸附
+
         let finalX = worldX;
         let finalY = worldY;
-        // 判断是否为地表模式 (Surface)
+
         const isSurface = this.placingType === 'surface' || 
                           (this.placingTemplateId && this.placingTemplateId.startsWith('surface_'));
 
         if (isSurface) {
-            // ✅ 如果是地表，强制使用 Math.floor 对齐到贴图尺寸 (w, h)
-            // 这样预览位置就和 tryPaintPlotAt 的逻辑完全一致了
             finalX = Math.floor(worldX / w) * w;
             finalY = Math.floor(worldY / h) * h;
         } 
         else {
-            // 原有逻辑：普通物品使用 gridSize (10/20) 吸附
-            let offsetX = this.dragOffset.x;
-            let offsetY = this.dragOffset.y;
+            // --- (B. 智能插槽吸附逻辑) ---
+            let snappedToSlot = false;
 
-            if (!this.isDragging && isPlacing) {
-                offsetX = w / 2;
-                offsetY = h / 2;
+            if (targetItem && targetItem.placementLayer === 'surface') {
+                targetItem.parentId = undefined;
+                targetItem.parentSlotIndex = undefined;
+
+                let bestSlot: { parent: Furniture; index: number; x: number; y: number } | null = null;
+                let bestDist = Infinity;
+
+                // 筛选候选家具 (必须是台面，且鼠标在范围内)
+                // 🟢 这里不再强制要求 f.slots 存在，只要是 isSurface 即可
+                const candidates = GameStore.furniture.filter(f => 
+                    f.isSurface && 
+                    worldX >= f.x && worldX < f.x + f.w && 
+                    worldY >= f.y && worldY < f.y + f.h
+                );
+
+                for (const parent of candidates) {
+                    
+                    // === 分支 1: 手动配置的插槽 (优先级高，适合异形桌) ===
+                    if (parent.slots && parent.slots.length > 0) {
+                        for (let index = 0; index < parent.slots.length; index++) {
+                            const slot = parent.slots[index];
+                            // 使用之前的旋转计算函数
+                            const { x: slotWorldX, y: slotWorldY } = this.calculateSlotPos(parent, slot);
+                            
+                            const dx = worldX - slotWorldX;
+                            const dy = worldY - slotWorldY;
+                            const dist = Math.sqrt(dx*dx + dy*dy);
+
+                            if (dist < 30 && !this.isSlotOccupied(parent.id, index)) {
+                                if (dist < bestDist) {
+                                    bestDist = dist;
+                                    bestSlot = { parent, index, x: slotWorldX, y: slotWorldY };
+                                }
+                            }
+                        }
+                    } 
+                    // === 分支 2: 自动网格插槽 (适合普通方桌、长桌) ===
+                    // 🟢 如果没有手动 slots，则根据宽高自动生成 48x48 的中心点
+                    else {
+                        // 计算桌子当前的网格列数和行数
+                        const cols = Math.floor(parent.w / 48);
+                        const rows = Math.floor(parent.h / 48);
+                        
+                        // 遍历每个格子
+                        for (let r = 0; r < rows; r++) {
+                            for (let c = 0; c < cols; c++) {
+                                // 动态生成索引：行号 * 总列数 + 列号
+                                // 这种算法生成的索引是稳定的，只要桌子大小不变
+                                const autoIndex = r * cols + c;
+
+                                // 计算该格子的中心点世界坐标
+                                // parent.x + 列偏移 + 半个格子偏移
+                                const slotWorldX = parent.x + (c * 48) + 24;
+                                const slotWorldY = parent.y + (r * 48) + 24;
+
+                                const dx = worldX - slotWorldX;
+                                const dy = worldY - slotWorldY;
+                                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                                if (dist < 30 && !this.isSlotOccupied(parent.id, autoIndex)) {
+                                    if (dist < bestDist) {
+                                        bestDist = dist;
+                                        bestSlot = { parent, index: autoIndex, x: slotWorldX, y: slotWorldY };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (bestSlot) {
+                    snappedToSlot = true;
+                    targetItem.parentId = bestSlot.parent.id;
+                    targetItem.parentSlotIndex = bestSlot.index;
+                    
+                    finalX = bestSlot.x - w / 2;
+                    finalY = bestSlot.y - h / 2;
+                    targetItem.x = finalX;
+                    targetItem.y = finalY;
+                }
             }
 
-            if (this.snapToGrid) {
-                finalX = Math.round((worldX - offsetX) / this.gridSize) * this.gridSize;
-                finalY = Math.round((worldY - offsetY) / this.gridSize) * this.gridSize;
-            } else {
-                finalX = worldX - offsetX;
-                finalY = worldY - offsetY;
+            // --- (C. 常规网格吸附) ---
+            if (!snappedToSlot) {
+                if (targetItem) {
+                    targetItem.parentId = undefined;
+                    targetItem.parentSlotIndex = undefined;
+                }
+                let offsetX = this.dragOffset.x;
+                let offsetY = this.dragOffset.y;
+                if (!this.isDragging && isPlacing) { offsetX = w/2; offsetY = h/2; }
+
+                if (this.snapToGrid) {
+                    finalX = Math.round((worldX - offsetX) / this.gridSize) * this.gridSize;
+                    finalY = Math.round((worldY - offsetY) / this.gridSize) * this.gridSize;
+                } else {
+                    finalX = worldX - offsetX;
+                    finalY = worldY - offsetY;
+                }
             }
         }
-        // 边界吸附 (Clamping)
+
+        // --- (D. 边界限制) ---
         if (this.activePlotId) {
             const plot = GameStore.worldLayout.find(p => p.id === this.activePlotId);
             if (plot) {
@@ -718,6 +839,7 @@ export class EditorManager implements EditorState {
                 finalY = Math.max(minY, Math.min(finalY, maxY));
             }
         }
+
         this.previewPos = { x: finalX, y: finalY };
         this.isValidPlacement = this.checkPlacementValidity(finalX, finalY, w, h);
     }
@@ -885,7 +1007,24 @@ export class EditorManager implements EditorState {
         } 
         else if (entityType === 'furniture') {
             const f = GameStore.furniture.find(i => i.id === id);
-            if (f) { f.x = x; f.y = y; GameStore.triggerMapUpdate(); }
+            if (f) { 
+                // A. 计算位移差值
+                const dx = x - f.x;
+                const dy = y - f.y;
+
+                // B. 更新父物体位置
+                f.x = x; 
+                f.y = y; 
+
+                // C. ✨[新增] 级联移动：找到所有放在我上面的子物体，同步移动
+                const children = GameStore.furniture.filter(child => child.parentId === id);
+                children.forEach(child => {
+                    child.x += dx;
+                    child.y += dy;
+                });
+
+                GameStore.triggerMapUpdate(); 
+            }
         }
         else if (entityType === 'room') {
             const r = GameStore.rooms.find(i => i.id === id);
@@ -984,14 +1123,31 @@ export class EditorManager implements EditorState {
         GameStore.notify();
     }
 
-    // 辅助函数：应用移动
+    // 辅助函数：应用移动 (Undo/Redo 时调用)
     private applyMove(type: string, id: string, x: number, y: number) {
         if (type === 'furniture') {
             const f = GameStore.furniture.find(i => i.id === id);
-            if (f) { f.x = x; f.y = y; }
+            if (f) { 
+                // ✨ 1. 计算位移差值 (目标位置 - 当前位置)
+                // 这一点很重要，因为 Undo 传进来的是“绝对坐标 x,y”，
+                // 我们需要算出它相对于当前位置移动了多少，才能应用给子物体
+                const dx = x - f.x;
+                const dy = y - f.y;
+
+                // 2. 移动父物体
+                f.x = x; 
+                f.y = y; 
+
+                // ✨ 3. 级联移动子物体
+                // 找到所有认这个家具为父级的东西，让它们也移动同样的距离
+                const children = GameStore.furniture.filter(child => child.parentId === id);
+                children.forEach(child => {
+                    child.x += dx;
+                    child.y += dy;
+                });
+            }
         } else if (type === 'plot') {
             // 地皮移动需要特殊处理（重建关联物体）
-            // 这里为了简单，直接复用 finalizeMove 的部分逻辑，或者直接修改坐标并 instantiate
             const plot = GameStore.worldLayout.find(p => p.id === id);
             if (plot) {
                 plot.x = x; plot.y = y;
@@ -1002,6 +1158,7 @@ export class EditorManager implements EditorState {
                 GameStore.instantiatePlot(plot);
             }
         }
+        
         GameStore.initIndex();
         GameStore.refreshFurnitureOwnership();
         GameStore.triggerMapUpdate();

@@ -86,14 +86,33 @@ export class PixiWorldBuilder {
         // ✨ [核心逻辑] 2.5D 层级与台面支持
         // ==========================================
         
-        // 默认层级：按物体最底部的 Y 坐标排序 (越靠下遮挡越靠上的)
-        let zIndex = f.y + f.h; 
-        
-        // 视觉抬升高度 (例如电脑放在桌子上，需要向上抬 20px)
-        let elevationOffset = 0; 
+        let zIndex = f.y + f.h; // 默认：地面物品按底部排序
+        let elevationOffset = 0;
 
-        // 如果这个物品被标记为“放在台面上” (例如 placementLayer === 'surface')
-        if (fAny.placementLayer === 'surface') {
+        // 2. 检查是否有明确的父子关系 (通过插槽吸附)
+        if (fAny.parentId) {
+            // 找到父物体
+            const parent = GameStore.furniture.find(p => p.id === fAny.parentId);
+            
+            if (parent) {
+                // A. 强制层级：子物体必须比父物体高一点点
+                // 这样无论父物体在哪里，子物体永远覆盖在它上面
+                // 使用 (parent.y + parent.h) 是父物体的基准 zIndex
+                zIndex = (parent.y + parent.h) + 1; // +1 确保在上方
+
+                // B. 计算高度偏移 (Elevation)
+                // 优先使用插槽的高度
+                if (fAny.parentSlotIndex !== undefined && parent.slots && parent.slots[fAny.parentSlotIndex]) {
+                    elevationOffset = parent.slots[fAny.parentSlotIndex].height;
+                } 
+                // 兜底：如果没插槽信息，用父物体的通用台面高度
+                else if (parent.isSurface) {
+                    elevationOffset = parent.surfaceHeight || 30;
+                }
+            }
+        }
+        // 3. 兼容旧逻辑：如果没有 parentId，但是是 'surface' 类型 (为了兼容还没重构的旧存档)
+        else if (fAny.placementLayer === 'surface') {// 如果这个物品被标记为“放在台面上” (例如 placementLayer === 'surface')
             // 在所有家具中查找：谁在我的正下方，并且是桌子(isSurface)？
             const centerX = f.x + f.w / 2;
             const centerY = f.y + f.h / 2;
