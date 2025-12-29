@@ -1,4 +1,7 @@
 import {FurnitureUtility, FurnitureTag } from './config/furnitureTypes';
+// 2. ✨ 新增：引入严格的枚举定义 (Step 1 创建的文件)
+// 注意：请确保 NeedType 已经移动到了 gameConstants.ts，否则这里不要 import NeedType，而是保留原定义
+import { InteractionType, ItemTag, SlotType, NeedType } from './config/gameConstants';
 
 export interface Vector2 {
   x: number;
@@ -77,16 +80,6 @@ export enum JobType {
     ElderCare = 'elder_care'
 }
 
-export enum NeedType {
-    Hunger = 'hunger',
-    Energy = 'energy',
-    Fun = 'fun',
-    Social = 'social',
-    Bladder = 'bladder',
-    Hygiene = 'hygiene',
-    Comfort = 'comfort'
-}
-
 export enum AgeStage {
     Infant = 'Infant',
     Toddler = 'Toddler',
@@ -95,6 +88,71 @@ export enum AgeStage {
     Adult = 'Adult',
     MiddleAged = 'MiddleAged',
     Elder = 'Elder'
+}
+
+// ==========================================
+// ✨ 新增：交互行为配置表
+// 这些 Interface 定义了 data/furnitureData.ts 中 interactions 字段的具体结构
+// ==========================================
+
+// 🪑 坐下/休息配置
+export interface SitConfig {
+  restoreNeed: NeedType;   // 恢复什么需求 (Energy 或 Comfort)
+  restoreRate: number;     // 每分钟恢复多少 (例如 0.5)
+  comfortRating?: number;  // 舒适度评分 (0-100)，影响心情 Buff
+}
+
+// 🛌 睡觉配置
+export interface SleepConfig {
+  restoreRate: number;     // 每分钟恢复精力 (例如 0.8)
+  canWoohoo?: boolean;     // 是否支持嘿嘿嘿 (双人床专属)
+}
+
+// 🥘 做饭/烹饪配置
+export interface CookConfig {
+  tier: number;            // 厨具等级 (1=微波炉, 2=普通炉灶, 3=专业)
+  allowedMeals?: string[]; // 允许做的饭菜类型 (可选)
+}
+
+// 📦 储物/冰箱配置
+export interface StorageConfig {
+  capacity: number;        // 容量
+  preservesFood: boolean;  // 是否保鲜 (冰箱=true)
+  inventoryType: 'food' | 'general' | 'clothes';
+}
+
+// 💼 工作/学习配置
+export interface WorkConfig {
+  jobType?: string[];      // 允许的工作类型
+  efficiency: number;      // 工作效率倍率 (1.0 = 正常)
+}
+
+// 🎮 娱乐配置 (电视/游戏机)
+export interface FunConfig {
+  funRating: number;       // 娱乐值评分
+  groupActivity?: boolean; // 是否允许多人一起 (如看电视)
+}
+
+// 🛒 购物/贩卖机配置
+export interface ShopConfig {
+  shopType: 'food' | 'drink' | 'general';
+  priceMultiplier?: number;
+}
+
+// 🛠️ 总表：将枚举映射到具体配置
+export interface InteractionConfigs {
+  [InteractionType.Sit]?: SitConfig;
+  [InteractionType.Sleep]?: SleepConfig;
+  [InteractionType.Cook]?: CookConfig;
+  [InteractionType.OpenStorage]?: StorageConfig;
+  [InteractionType.Work]?: WorkConfig;
+  [InteractionType.Watch]?: FunConfig;
+  [InteractionType.PlayGame]?: FunConfig;
+  [InteractionType.BuyItem]?: ShopConfig;
+  [InteractionType.OrderFood]?: ShopConfig;
+  
+  // 允许其他未详细定义的交互使用通用对象，防止报错
+  [key: string]: any; 
 }
 
 export interface FurnitureSlot {
@@ -130,8 +188,30 @@ export interface Furniture {
   color: string;
   label: string;
 
-  utility: FurnitureUtility;
-  tags?: FurnitureTag[];
+  // ==========================================
+  // 🚧 弃用区域 (Deprecated)
+  // 暂时保留以兼容旧代码，但在 Step 4 之后将移除
+  // ==========================================
+  /** @deprecated 请使用 interactions 配置替代 */
+  utility?: FurnitureUtility; // 改为可选，允许新家具不填
+ 
+  // ==========================================
+  // ✨ 重构区域 (New System)
+  // ==========================================
+  
+  /** * 🏷️ 物品标签：用于 AI 识别这是什么
+   * 例如：[ItemTag.Seat, ItemTag.Decoration]
+   */
+  tags: ItemTag[]; // 替换了原来的 FurnitureTag[]
+
+  /** * ⚡ 交互能力：定义这件家具能做什么
+   * 如果没有对应的 key，就表示不能进行该交互
+   */
+  interactions?: InteractionConfigs;
+
+  /** * 📍 放置规则：使用严格枚举
+   */
+  placementLayer?: SlotType; // 替换原来的 string
 
   dir?: string;
   multiUser?: boolean;
@@ -174,7 +254,6 @@ export interface Furniture {
   hasDirectionalSprites?: boolean;
   frameName?: string;
   isSurface?: boolean;        // 是否提供台面 (如：桌子、柜子)
-  placementLayer?: 'floor' | 'surface' | 'wall'; // 放置位置限制
   surfaceHeight?: number;
 
   slots?: FurnitureSlot[];

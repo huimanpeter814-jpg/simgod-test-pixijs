@@ -1,12 +1,13 @@
 import type { Sim } from '../Sim'; 
 import { GameStore } from '../simulation';
 import { CONFIG, BUFFS} from '../../constants'; 
-import { Furniture, SimAction, NeedType, AgeStage, JobType, SimIntent, QueuedAction, Relationship} from '../../types';
+import { Furniture, SimAction, AgeStage, JobType, SimIntent, QueuedAction, Relationship} from '../../types';
 import { getInteractionPos } from '../simulationHelpers';
 // 🟢 [修改] 引入所有需要的状态类，移除 require
 import { FeedBabyState, WaitingState, BatheBabyState, SchoolingState, WorkingState } from './SimStates';
 import { PLOTS } from '../../data/plots'; 
-import { FurnitureUtility, FurnitureTag } from '../../config/furnitureTypes';
+import { ItemTag, InteractionType, NeedType } from '../../config/gameConstants';
+import { InteractionSystem } from './InteractionSystem';
 
 // 辅助：判断是否是工作日/工作时间
 const isWorkTime = (sim: Sim): boolean => {
@@ -395,20 +396,10 @@ export const DecisionLogic = {
         const queue: QueuedAction[] = [];
         
         // 辅助：快速添加移动+交互序列
-        const addInteractSequence = (target: Furniture, interactionKey: string, desc: string) => {
+        const addInteractSequence = (target: Furniture, interactionKey: InteractionType, desc: string) => {
             const { anchor } = getInteractionPos(target);
-            queue.push({
-                type: 'WALK',
-                targetPos: anchor,
-                targetId: target.id,
-                desc: `走向: ${desc}`
-            });
-            queue.push({
-                type: 'INTERACT',
-                targetId: target.id,
-                interactionKey: interactionKey,
-                desc: `正在: ${desc}`
-            });
+            queue.push({ type: 'WALK', targetPos: anchor, targetId: target.id, desc: `走向: ${desc}` });
+            queue.push({ type: 'INTERACT', targetId: target.id, interactionKey: interactionKey, desc: `正在: ${desc}` });
         };
 
         switch (intent) {
@@ -428,94 +419,87 @@ export const DecisionLogic = {
                     needType = sim['currentNeedType'] as NeedType;
                 }
 
-                // 查找物品策略 (Tags)
-                let searchTags: string[] = [];
-                let actionVerb = 'use';
+                // 🟢 [修改] 搜索策略改为基于 Tags
+                let searchTags: ItemTag[] = [];
+                let interactionType: InteractionType = InteractionType.Eat;
 
                 // --- 🟢 [战术分支] 贫富与性格差异 ---
                 const isSnob = sim.traits.includes('势利眼');     
                 const isFrugal = sim.traits.includes('吝啬鬼') || sim.money < 50; 
-                // ⚠️ 关键修正：如果是 SURVIVE 状态，意味着极度危险，此时忽略性格偏好
                 const isDesperate = intent === SimIntent.SURVIVE || sim.needs[needType] < 15;
 
                 if (needType === NeedType.Hunger) {
-                    // 1. 优先找剩饭 (暂略)
-                    
-                    // 2. 策略分级
+                    interactionType = InteractionType.Eat;
                     if (isDesperate) {
-                        // 🚑 救命模式：什么都吃
-                        searchTags = ['hunger', 'fridge', 'eat_out', 'buy_food', 'cooking', 'vending_machine']; 
-                        actionVerb = 'eat';
+                        searchTags = [ItemTag.Fridge, ItemTag.FoodSource, ItemTag.VendingMachine, ItemTag.ShopShelf]; 
                         sim.currentPlanDescription = "饿急了，饥不择食！🆘";
+                        interactionType = InteractionType.OpenStorage; // 比如去开冰箱
                     } else if (isSnob && sim.money > 200) {
-                        searchTags = ['eat_out', 'restaurant', 'bar']; 
-                        actionVerb = 'eat_out';
-                        sim.currentPlanDescription = "势利眼：非高档餐厅不去 🍷";
+                        // 假设餐厅有 Food 标签或 OrderFood 交互
+                        searchTags = [ItemTag.Table]; // 需配合 InteractionType.OrderFood
+                        interactionType = InteractionType.OrderFood;
+                        sim.currentPlanDescription = "势利眼：非高档餐厅不去";
                     } else if (sim.skills.cooking > 20 && sim.hasFreshIngredients) {
-                        searchTags = ['stove', 'cooking']; 
-                        actionVerb = 'cooking';
-                        sim.currentPlanDescription = "大显身手：亲自下厨 🍳";
+                        searchTags = [ItemTag.Stove]; 
+                        interactionType = InteractionType.Cook;
+                        sim.currentPlanDescription = "大显身手：亲自下厨";
                     } else if (isFrugal) {
-                        searchTags = ['fridge', 'vending_machine', 'hunger']; 
-                        actionVerb = 'eat';
-                        sim.currentPlanDescription = "省钱模式：吃点便宜的 🥡";
+                        searchTags = [ItemTag.Fridge, ItemTag.VendingMachine]; 
+                        interactionType = InteractionType.OpenStorage;
+                        sim.currentPlanDescription = "省钱模式：吃点便宜的";
                     } else {
-                        searchTags = ['hunger', 'fridge', 'eat_out', 'buy_food'];
-                        actionVerb = 'eat';
-                        sim.currentPlanDescription = "寻找最近的食物来源";
+                        searchTags = [ItemTag.Fridge, ItemTag.FoodSource];
+                        interactionType = InteractionType.OpenStorage;
+                        sim.currentPlanDescription = "寻找食物";
                     }
                 } else if (needType === NeedType.Energy) {
+                    interactionType = InteractionType.Sleep;
                     if (isDesperate) {
-                        searchTags = ['energy', 'bed', 'nap_crib', 'sofa', 'bench', 'chair'];
-                        sim.currentPlanDescription = "困得不行，随便找地方睡";
+                        searchTags = [ItemTag.Bed, ItemTag.Sofa, ItemTag.Seat, ItemTag.Crib];
+                        sim.currentPlanDescription = "困不行了，随便睡";
                     } else if (isSnob) {
-                        searchTags = ['bed', 'energy']; 
-                        sim.currentPlanDescription = "回卧室休息 (只睡好床)";
+                        searchTags = [ItemTag.Bed]; 
+                        sim.currentPlanDescription = "回卧室休息";
                     } else {
-                        searchTags = ['energy', 'bed', 'nap_crib', 'sofa', 'bench'];
-                        sim.currentPlanDescription = "找地方补觉";
+                        searchTags = [ItemTag.Bed, ItemTag.Sofa, ItemTag.Crib];
+                        sim.currentPlanDescription = "补觉";
                     }
-                    actionVerb = 'sleep';
                 } else if (needType === NeedType.Bladder) {
-                    searchTags = ['bladder', 'toilet'];
-                    actionVerb = 'use_toilet';
-                    sim.currentPlanDescription = "寻找卫生间";
+                    searchTags = [ItemTag.Toilet];
+                    interactionType = InteractionType.UseToilet;
+                    sim.currentPlanDescription = "找厕所";
                 } else if (needType === NeedType.Hygiene) {
-                    searchTags = ['hygiene', 'shower', 'bathtub'];
-                    actionVerb = 'shower';
-                    sim.currentPlanDescription = "去洗香香 🛁";
+                    searchTags = [ItemTag.Shower];
+                    interactionType = InteractionType.Shower;
+                    sim.currentPlanDescription = "洗澡";
                 }
 
                 // 执行查找
                 let targetObj = this.findBestFurniture(sim, searchTags);
                 
-                // 🟢 [兜底重试机制] 如果按偏好没找到，且不是救命模式，尝试全局搜索
+                // 兜底重试：如果不挑食没找到，尝试所有来源
                 if (!targetObj && !isDesperate && needType === NeedType.Hunger) {
-                     // 比如吝啬鬼没找到冰箱，那就只能去餐厅了，总比饿死强
-                     targetObj = this.findBestFurniture(sim, ['hunger', 'fridge', 'eat_out', 'buy_food', 'cooking']);
-                     if (targetObj) sim.currentPlanDescription = "没找到便宜的，只好破费了...";
+                     targetObj = this.findBestFurniture(sim, [ItemTag.Fridge, ItemTag.FoodSource, ItemTag.VendingMachine]);
+                     if (targetObj) {
+                         sim.currentPlanDescription = "被迫破费...";
+                         interactionType = InteractionType.OpenStorage;
+                     }
                 }
 
                 if (targetObj) {
-                    // 动态动词修正
-                    if (needType === NeedType.Hunger && (targetObj.utility === 'cooking' || targetObj.label.includes('灶'))) actionVerb = 'cooking';
-                    else if (needType === NeedType.Hunger && targetObj.utility === 'eat_out') actionVerb = 'eat_out';
-
-                    addInteractSequence(targetObj, actionVerb, `${needType} @ ${targetObj.label}`);
+                    // 动态动词校正 (从 InteractionSystem 获取最佳动词)
+                    const bestAction = InteractionSystem.determineBestInteraction(sim, targetObj);
+                    if (bestAction) interactionType = bestAction;
+                    
+                    addInteractSequence(targetObj, interactionType, `${needType}`);
                 } else {
-                    // 🔴 最终兜底：真的全图都找不到
                     if (needType === NeedType.Energy) {
-                         // 睡地板逻辑
                          sim.currentPlanDescription = "无处可去，原地昏睡";
                          queue.push({ type: 'WAIT', duration: 10000, desc: '原地打盹' });
-                         sim.say("太困了...直接睡地板吧 💤", 'bad');
-                         // 这里建议直接回复一点体力，防止死循环
                          sim.needs[NeedType.Energy] += 10; 
                     } else {
-                        sim.say(`附近没有解决 ${needType} 的设施!`, 'bad');
-                        // 缩短等待时间，尽快重试或触发其他逻辑
+                        sim.say(`找不到 ${needType} 设施!`, 'bad');
                         queue.push({ type: 'WAIT', duration: 2000 });
-                        sim.currentPlanDescription = `资源枯竭: ${needType}`;
                     }
                 }
                 break;
@@ -529,15 +513,16 @@ export const DecisionLogic = {
                          const enterX = schoolPlot.x + (schoolPlot.width||300)/2;
                          const enterY = schoolPlot.y + (schoolPlot.height||300)/2;
                          queue.push({ type: 'WALK', targetPos: { x: enterX, y: enterY }, desc: '去学校' });
-                         queue.push({ type: 'INTERACT', interactionKey: 'school_attend', desc: '上课' });
+                         // 这里 interactionKey 仅作为标记，State 会处理
+                         queue.push({ type: 'INTERACT', interactionKey: 'school_attend' as any, desc: '上课' });
                          sim.currentPlanDescription = "去学校上课 🏫";
                     }
                 } else if (sim.workplaceId) {
                     const workPlot = GameStore.worldLayout.find(p => p.id === sim.workplaceId);
                     if (workPlot) {
                         queue.push({ type: 'WALK', targetPos: { x: workPlot.x + 100, y: workPlot.y + 100 }, desc: '去上班' });
-                         queue.push({ type: 'INTERACT', interactionKey: 'work_attend', desc: '工作' });
-                         sim.currentPlanDescription = "去公司搬砖 💼";
+                        queue.push({ type: 'INTERACT', interactionKey: 'work_attend' as any, desc: '工作' });
+                        sim.currentPlanDescription = "去公司搬砖 💼";
                     }
                 }
                 break;
@@ -617,44 +602,39 @@ export const DecisionLogic = {
             // === 4. 娱乐与自我实现 (Fun) (保持不变) ===
             case SimIntent.FUN:
                 const funPref = sim['funPreference'] || 'any';
-                let funTypes: string[] = [];
-                let funVerb = 'play';
+                let funTags: ItemTag[] = [];
+                let funVerb = InteractionType.PlayGame;
 
                 if (funPref === 'passive_fun') {
-                    funTypes = ['tv', 'sofa', 'bed', 'bench', 'cinema_2d', 'bookshelf']; 
-                    sim.currentPlanDescription = "只想躺平 (低能量模式) ☁️";
+                    funTags = [ItemTag.TV, ItemTag.Sofa, ItemTag.Bed]; 
+                    sim.currentPlanDescription = "低能量娱乐";
+                    funVerb = InteractionType.Watch;
                 } else if (funPref === 'skill_building') {
-                    funTypes = ['art', 'chess', 'piano', 'gym', 'computer', 'bookshelf'];
-                    sim.currentPlanDescription = "自我提升：练点技能 📈";
+                    funTags = [ItemTag.Easel, ItemTag.Instrument, ItemTag.GymEquipment, ItemTag.Computer, ItemTag.Storage]; // Storage=书架
+                    sim.currentPlanDescription = "自我提升";
+                    funVerb = InteractionType.PracticeMusic; // 默认值，会被 determineBestInteraction 修正
                 } else if (funPref === 'side_hustle') {
-                    funTypes = ['computer', 'work_station', 'painting'];
-                    sim.currentPlanDescription = "搞点副业赚外快 💰";
+                    funTags = [ItemTag.Computer, ItemTag.Easel];
+                    sim.currentPlanDescription = "副业搞钱";
+                    funVerb = InteractionType.Work;
                 } else {
-                    funTypes = ['fun', 'tv', 'computer', 'game', 'bookshelf', 'art', 'gym'];
-                    if (sim.needs[NeedType.Energy] < 50) funTypes.push('comfort');
-                    sim.currentPlanDescription = "寻找好玩的东西 🎮";
+                    funTags = [ItemTag.TV, ItemTag.Computer, ItemTag.GameConsole, ItemTag.GymEquipment];
+                    if (sim.needs[NeedType.Energy] < 50) funTags.push(ItemTag.Sofa);
+                    sim.currentPlanDescription = "找乐子";
                 }
                 
-                const funObj = this.findBestFurniture(sim, funTypes);
+                const funObj = this.findBestFurniture(sim, funTags);
                 
                 if (funObj) {
-                    if (funObj.utility === 'art' || funObj.label.includes('画')) funVerb = 'paint';
-                    else if (funObj.utility === 'gym' || funObj.label.includes('跑')) funVerb = 'run';
-                    else if (funObj.label.includes('琴')) funVerb = 'play_instrument';
-                    else if (funObj.label.includes('棋')) funVerb = 'play_chess';
-                    else if (funObj.label.includes('书')) funVerb = 'read_book';
-                    else if (funObj.label.includes('电脑')) funVerb = funPref === 'side_hustle' ? 'work_coding' : 'play_game'; 
-
+                    const best = InteractionSystem.determineBestInteraction(sim, funObj);
+                    if (best) funVerb = best;
                     addInteractSequence(funObj, funVerb, '娱乐');
                 } else {
-                    // [核心修复] 婴幼儿找不到乐子时，原地玩耍/哭闹，严禁乱跑
                     if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
                         queue.push({ type: 'WAIT', duration: 5000, desc: '发呆' });
-                        sim.currentPlanDescription = "好无聊... (发呆)";
                         if (Math.random() > 0.7) sim.say("咿呀...", 'sys');
                     } else {
                         queue.push({ type: 'WALK', desc: '散步' }); 
-                        sim.currentPlanDescription = "没东西玩，散散步";
                     }
                 }
                 break;
@@ -758,7 +738,8 @@ export const DecisionLogic = {
                         } else if (action.interactionKey === 'school_attend') {
                             sim.changeState(new SchoolingState());
                         } else {
-                            sim.startInteraction();
+                            // 🟢 [修改] 传入具体的交互类型 (Type Casting 确保类型安全)
+                            InteractionSystem.startInteraction(sim, action.interactionKey as InteractionType);
                         }
                     }
                 }
@@ -899,7 +880,9 @@ export const DecisionLogic = {
     // [新增] 呼叫洗澡逻辑
     triggerHygieneBroadcast(sim: Sim) {
         // 1. 检查家里有没有洗澡设施 (淋浴或浴缸)
-        const hasShower = GameStore.furniture.some(f => f.homeId === sim.homeId && (f.utility === 'shower' || f.utility === 'hygiene'));
+        const hasShower = GameStore.furniture.some(f => 
+            f.homeId === sim.homeId && f.tags && f.tags.includes(ItemTag.Shower)
+        );
         if (!hasShower) {
             sim.say("家里没澡盆...", 'bad');
             return false;
@@ -1009,26 +992,38 @@ export const DecisionLogic = {
     findSideHustle(sim: Sim): boolean {
         // 🆕 [新增] 婴幼儿禁止搞副业
         if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return false;
+        const searchGroups = [
+            { type: 'pc', tags: [ItemTag.Computer], skillReq: { logic: 5, creativity: 5 } },
+            { type: 'lake', tags: [ItemTag.FishingSpot], skillReq: {} }, // 钓鱼没门槛
+            { type: 'garden', tags: [ItemTag.GardenPlant], skillReq: {} } // 园艺没门槛
+        ];
         let options: { type: string; target: Furniture }[] = [];
 
-        if (sim.skills.logic > 5 || sim.skills.creativity > 5) {
-            let pcs = GameStore.furniture.filter(f => f.label.includes('电脑') && (!f.reserved || f.reserved === sim.id));
-            pcs = pcs.filter(f => !DecisionLogic.isRestricted(sim, f));
-            if (pcs.length > 0) {
-                const netCafePcs = pcs.filter(p => p.label.includes('网吧'));
-                const homePcs = pcs.filter(p => !p.label.includes('网吧'));
-                if (sim.money > 100 && netCafePcs.length > 0 && Math.random() > 0.4) options.push({ type: 'pc', target: netCafePcs[Math.floor(Math.random() * netCafePcs.length)] });
-                else if (homePcs.length > 0) options.push({ type: 'pc', target: homePcs[Math.floor(Math.random() * homePcs.length)] });
-                else if (pcs.length > 0) options.push({ type: 'pc', target: pcs[Math.floor(Math.random() * pcs.length)] });
+        for (const group of searchGroups) {
+            // 1. 技能门槛检查
+            const reqs = group.skillReq as any;
+            if (reqs.logic && sim.skills.logic < reqs.logic && sim.skills.creativity < reqs.creativity) continue;
+
+            // 2. 搜索家具
+            const found = GameStore.furniture.filter(f => 
+                f.tags && f.tags.some(t => group.tags.includes(t)) &&
+                !DecisionLogic.isRestricted(sim, f) &&
+                (!f.reserved || f.reserved === sim.id)
+            );
+
+            // 3. 随机选一个加入候选项
+            if (found.length > 0) {
+                // 特殊处理：网吧逻辑 (Label包含网吧)
+                if (group.type === 'pc' && sim.money > 100) {
+                     const netCafe = found.filter(p => p.label.includes('网吧'));
+                     if (netCafe.length > 0 && Math.random() > 0.4) {
+                         options.push({ type: group.type, target: netCafe[Math.floor(Math.random() * netCafe.length)] });
+                         continue;
+                     }
+                }
+                options.push({ type: group.type, target: found[Math.floor(Math.random() * found.length)] });
             }
         }
-        
-        let lake = GameStore.furnitureIndex.get('fishing')?.[0]; 
-        if (lake) options.push({ type: 'lake', target: lake });
-
-        let flowers = GameStore.furnitureIndex.get('gardening') || [];
-        flowers = flowers.filter(f => !DecisionLogic.isRestricted(sim, f));
-        if (flowers.length > 0) options.push({ type: 'garden', target: flowers[Math.floor(Math.random() * flowers.length)] });
 
         if (options.length > 0) {
             let best = options[Math.floor(Math.random() * options.length)];
@@ -1045,6 +1040,8 @@ export const DecisionLogic = {
 
     // [修复] 返回 boolean，移除自动闲逛
     findObject(sim: Sim, type: string): boolean {
+        // 1. 定义搜索目标 Tags
+        let targetTags: ItemTag[] = [];
         // 🆕 辅助函数：统一价格检查逻辑
         const canAfford = (sim: Sim, f: Furniture) => {
             let estimatedCost = f.cost || 0;
@@ -1330,19 +1327,14 @@ export const DecisionLogic = {
      * 🔍 [辅助] 查找最佳家具对象 (Pro版)
      * 具备“性格感知”和“情境感知”的智能评分系统
      */
-    findBestFurniture(sim: Sim, utilityTypes: string[]): Furniture | null {
-        let candidates: Furniture[] = [];
-        
-        // 1. 收集所有候选家具
-        utilityTypes.forEach(type => {
-            const list = GameStore.furnitureIndex.get(type);
-            if (list) candidates = candidates.concat(list);
+    findBestFurniture(sim: Sim, tags: ItemTag[]): Furniture | null {
+        const candidates = GameStore.furniture.filter(f => {
+            if (!f.tags) return false;
+            return f.tags.some(t => tags.includes(t));
         });
 
         if (candidates.length === 0) return null;
 
-        // --- 0. 准备上下文 ---
-        // 预计算一些状态，避免在循环中重复计算
         const isUrgent = sim.needs[NeedType.Bladder] < 20 || sim.needs[NeedType.Hunger] < 15 || sim.needs[NeedType.Energy] < 10;
         const isSnob = sim.traits.includes('势利眼');
         const isGeek = sim.traits.includes('极客') || sim.traits.includes('书呆子');
@@ -1350,53 +1342,36 @@ export const DecisionLogic = {
         const isLazy = sim.traits.includes('懒惰');
         const isLoner = sim.traits.includes('独行侠');
         
-        // 2. 筛选逻辑 (硬性过滤)
-        const validCandidates = candidates.filter(f => {
-            // 🛑 [核心修复] 婴幼儿严禁独自出门：只能使用家里的东西
-            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                if (sim.homeId) {
-                    // 如果有家，必须是家里的物品 (严禁跑去邻居家或公园)
-                    if (f.homeId !== sim.homeId) return false;
-                } else {
-                    // 如果无家可归(极少见)，只准选身边的物品 (500px范围)，防止横穿地图
-                    const distSq = (f.x - sim.pos.x)**2 + (f.y - sim.pos.y)**2;
-                    if (distSq > 250000) return false; 
+            // 2. 筛选逻辑 (硬性过滤)
+            const validCandidates = candidates.filter(f => {
+                // 婴幼儿限制
+                if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                    if (sim.homeId) {
+                        if (f.homeId !== sim.homeId) return false;
+                    } else {
+                        const distSq = (f.x - sim.pos.x)**2 + (f.y - sim.pos.y)**2;
+                        if (distSq > 250000) return false; 
+                    }
+                    
+                    // 禁止危险设施 (基于 Tag 判断)
+                    if (f.tags.includes(ItemTag.GymEquipment)) return false;
+                    if (f.tags.includes(ItemTag.Computer)) return false;
+                    if (f.tags.includes(ItemTag.Stove)) return false;
                 }
-            }
-            // 🛑 [新增修复] 幼儿禁止使用成人危险设施
-            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                // 禁止健身
-                if (['gym', 'run', 'lift', 'treadmill'].some(k => f.utility.includes(k))) return false;
-                
-                // 禁止玩电脑 (除非将来有儿童平板)
-                if (f.label.includes('电脑') || f.utility.includes('computer') || f.utility === 'work') return false;
-                
-                // 禁止玩火/做饭
-                if (f.utility === 'cooking' || f.utility === 'stove') return false;
-            }
-            // 🛑 [新增修复] 成人/青少年禁止使用婴儿床
-            if (f.utility === 'nap_crib' && ![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
-                return false;
-            }
-            // A. 权限检查 (核心)
-            if (this.isRestricted(sim, f)) return false;
-            
-            // B. 经济检查 (买不起的别看)
-            // 注意：某些公共设施 cost 为 0，但 interactionRegistry 里可能有扣费，这里只检查标价
-            if ((f.cost || 0) > sim.money) return false;
+                // 成人禁止睡婴儿床
+                if (f.tags.includes(ItemTag.Crib) && ![AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                    return false;
+                }
 
-            // C. 占用检查
+                if (this.isRestricted(sim, f)) return false;
+            if ((f.cost || 0) > sim.money) return false;
             if (f.reserved && f.reserved !== sim.id) return false;
+            
+            // 检查占用
             if (!f.multiUser) {
-                // 检查是否有人正在用 (InteractionTarget 指向它)
                 const isOccupied = GameStore.sims.some(s => s.id !== sim.id && s.interactionTarget?.id === f.id);
                 if (isOccupied) return false;
             }
-
-            // D. 专用性检查
-            // 电脑：如果是极客，只用高配电脑 (假设 label 区分)；如果是工作，必须用能工作的。
-            // 这里暂且不做过细过滤，交给下面的评分系统
-            
             return true;
         });
 
@@ -1439,24 +1414,23 @@ export const DecisionLogic = {
             }
 
             // --- 因子 3: 性格匹配 (Trait Matching) ---
-            const matchTrait = (f: Furniture, keywords: string[], bonus: number) => {
-                if (keywords.some(k => f.utility.includes(k) || f.label.includes(k))) return bonus;
+            const matchTag = (f: Furniture, targetTags: ItemTag[], bonus: number) => {
+                if (f.tags && f.tags.some(t => targetTags.includes(t))) return bonus;
                 return 0;
             };
 
             // 极客/书呆子：爱电脑、书
             if (isGeek) {
-                scoreA += matchTrait(a, ['computer', 'book', 'logic'], 100);
-                scoreB += matchTrait(b, ['computer', 'book', 'logic'], 100);
-                // 讨厌运动
-                scoreA -= matchTrait(a, ['gym', 'sport', 'run'], 50);
-                scoreB -= matchTrait(b, ['gym', 'sport', 'run'], 50);
+                scoreA += matchTag(a, [ItemTag.Computer, ItemTag.Storage], 100); // Storage for books
+                scoreB += matchTag(b, [ItemTag.Computer, ItemTag.Storage], 100);
+                scoreA -= matchTag(a, [ItemTag.GymEquipment], 50);
+                scoreB -= matchTag(b, [ItemTag.GymEquipment], 50);
             }
 
             // 运动狂：爱健身
             if (isActive) {
-                scoreA += matchTrait(a, ['gym', 'sport', 'run', 'swim'], 150);
-                scoreB += matchTrait(b, ['gym', 'sport', 'run', 'swim'], 150);
+                scoreA += matchTag(a, [ItemTag.GymEquipment], 150);
+                scoreB += matchTag(b, [ItemTag.GymEquipment], 150);
             }
 
             // --- 因子 4: 拥挤度/社交偏好 (Crowd/Privacy) ---
@@ -1470,8 +1444,8 @@ export const DecisionLogic = {
             // --- 因子 5: 舒适度与心情 (Mood) ---
             // 如果心情不好，优先找舒适度高的 (utility='comfort' 或 'bed')
             if (sim.mood < 40) {
-                if (a.utility === 'comfort' || a.utility === 'bed') scoreA += 80;
-                if (b.utility === 'comfort' || b.utility === 'bed') scoreB += 80;
+                if (a.tags.includes(ItemTag.Sofa) || a.tags.includes(ItemTag.Bed)) scoreA += 80;
+                if (b.tags.includes(ItemTag.Sofa) || b.tags.includes(ItemTag.Bed)) scoreB += 80;
             }
 
             return scoreB - scoreA; // 降序排列

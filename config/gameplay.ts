@@ -1,4 +1,5 @@
-import { Job, JobType, AgeStage, NeedType } from '../types';
+import { Job, JobType, AgeStage } from '../types';
+import { ItemTag, InteractionType, NeedType } from './gameConstants';
 
 // 新增：时间流逝配置
 // 60 ticks = 1 游戏分钟 (在 60FPS 下，1秒现实时间 = 1游戏分钟)
