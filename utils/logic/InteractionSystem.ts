@@ -59,38 +59,28 @@ export const InteractionSystem = {
      * 执行具体的物体交互逻辑
      */
     performInteractionLogic(sim: Sim, obj: Furniture) {
-        // ==========================================
-        // 🍔 [新增] 饮食行为链拦截
-        // ==========================================
-        
-        // 1. 在家做饭/吃饭流程：
-        // 如果点击的是 冰箱(fridge)、炉灶(stove) 或通用吃饭(hunger)，统一先去冰箱拿食材
+        // 1. 饮食拦截
         if (obj.utility === FurnitureUtility.Fridge || obj.utility === FurnitureUtility.Cooking || obj.utility === FurnitureUtility.Dining) {
             sim.changeState(new FetchingFoodState(obj)); 
-            return; // 拦截成功，不再执行后续默认逻辑
+            return;
         }
 
-        // 2. 外出就餐流程：
-        if (obj.utility === FurnitureUtility.EatOut ) {
+        // 2. 外出就餐拦截
+        if (obj.utility === FurnitureUtility.EatOut) { // 原代码可能是 'eat_out'
             sim.changeState(new OrderingState(obj));
-            return; // 拦截成功
+            return; 
         }
 
-        // ==========================================
-        // 📖 [新增] 阅读行为链拦截
-        // ==========================================
+        // 3. 阅读拦截
         if (obj.utility === FurnitureUtility.Book || obj.label.includes('书架')) {
             sim.changeState(new FetchingBookState(obj));
             return;
         }
 
-        // ==========================================
-        // 🛍️ [新增] 购物行为链拦截
-        // ==========================================
-        // 注意：buy_drink, buy_book, buy_item 都可以走这个流程
-        // 但要注意区分：贩卖机(vending)通常是即时的，货架(shelf)才需要浏览和结账
+        // 4. 购物拦截
         const isVendingMachine = obj.utility === FurnitureUtility.Vending || obj.label.includes('贩卖机');
-        const isShopItem = ['buy_item', 'buy_book', 'buy_drink'].includes(obj.utility) && !isVendingMachine;
+        // 注意：buy_item 等字符串需要替换为枚举
+        const isShopItem = [FurnitureUtility.Shelf, FurnitureUtility.BuyBook, FurnitureUtility.Vending].includes(obj.utility as FurnitureUtility) && !isVendingMachine;
 
         if (isShopItem) {
             sim.changeState(new BrowsingState(obj));
@@ -125,8 +115,7 @@ export const InteractionSystem = {
         }
 
         // 4. 确定动作类型与时长
-        let actionType = SimAction.Using;
-        // 映射部分 utility 到特定 Action
+       let actionType = SimAction.Using;
         if (obj.utility === FurnitureUtility.Energy) actionType = SimAction.Sleeping;
         else if (obj.utility === FurnitureUtility.Work) actionType = SimAction.Working;
         // 注意：Eating 相关已经被上面拦截了，这里剩下的可能是一些特殊的直接恢复类
@@ -176,7 +165,7 @@ export const InteractionSystem = {
         if (sim.action === SimAction.Eating) sim.needs[NeedType.Hunger] = 100;
         
         // 2. 执行 onFinish 回调
-        if (sim.interactionTarget && sim.interactionTarget.type !== 'human') {
+       if (sim.interactionTarget && sim.interactionTarget.type !== 'human') {
             let u = sim.interactionTarget.utility;
             let obj = sim.interactionTarget;
             let handler = INTERACTIONS[u] || INTERACTIONS['default'];

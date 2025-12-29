@@ -8,6 +8,7 @@ import { SchoolLogic } from './school';
 import { INTERACTIONS, RESTORE_TIMES } from './interactionRegistry';
 import { hasRequiredTags, getInteractionPos } from '../simulationHelpers';
 import { PLOTS } from '../../data/plots'; 
+import { FurnitureUtility, FurnitureTag } from '../../config/furnitureTypes';
 
 // === 1. 状态接口定义 ===
 export interface SimState {
@@ -340,7 +341,7 @@ export class CommutingState extends BaseState {
         }
     }
     private findWorkstation(sim: Sim): Furniture | null {
-        const requiredTags = sim.job.requiredTags || ['work'];
+        const requiredTags = sim.job.requiredTags || [FurnitureUtility.Work];
         if (sim.workplaceId) {
             const plotFurniture = GameStore.furnitureByPlot.get(sim.workplaceId) || [];
             const candidates = plotFurniture.filter(f => hasRequiredTags(f, requiredTags));
@@ -472,7 +473,7 @@ export class WorkingState extends BaseState {
         
         if (isChef) {
             // 👨‍🍳 厨师：只在 炉灶(stove) 或 厨房柜台(kitchen) 之间移动
-            const workstations = furnitureList.filter(f => f.utility === 'cooking' || f.tags?.includes('kitchen'));
+            const workstations = furnitureList.filter(f => f.utility === FurnitureUtility.Cooking || f.tags?.includes(FurnitureTag.Kitchen));
             
             if (workstations.length > 0) {
                 const target = workstations[Math.floor(Math.random() * workstations.length)];
@@ -489,7 +490,7 @@ export class WorkingState extends BaseState {
             const rand = Math.random();
             if (rand < 0.5) {
                 // 50% 去出餐口拿菜
-                const pickupSpots = furnitureList.filter(f => f.tags?.includes('counter') || f.utility === 'cooking');
+                const pickupSpots = furnitureList.filter(f => f.tags?.includes(FurnitureTag.Counter) || f.utility === FurnitureUtility.Cooking);
                 if (pickupSpots.length > 0) {
                     const t = pickupSpots[Math.floor(Math.random() * pickupSpots.length)];
                     sim.target = { x: t.x + t.w/2, y: t.y + t.h + 20 };
@@ -497,7 +498,7 @@ export class WorkingState extends BaseState {
                 }
             } else {
                 // 50% 去客人桌子
-                const tables = furnitureList.filter(f => f.tags?.includes('table') || f.tags?.includes('seat'));
+                const tables = furnitureList.filter(f => f.tags?.includes(FurnitureTag.Table) || f.tags?.includes(FurnitureTag.Seat));
                 if (tables.length > 0) {
                     const t = tables[Math.floor(Math.random() * tables.length)];
                     sim.target = { x: t.x + t.w/2, y: t.y + t.h + 20 };
@@ -668,10 +669,10 @@ export class SchoolingState extends BaseState {
 
     private doObjectInteraction(sim: Sim, target: any) {
         if (sim.ageStage === AgeStage.Teen) {
-            if (target.utility === 'book' || target.label?.includes('书')) {
+            if (target.utility === FurnitureUtility.Book || target.label?.includes('书')) {
                 sim.say("突击复习...", 'act');
                 sim.skills.logic += 0.5; // 学习加成
-            } else if (target.utility === 'gym' || target.utility === 'run') {
+            } else if (target.utility === FurnitureTag.Gym || target.utility === FurnitureUtility.Exercise) {
                 sim.say("挥洒汗水！", 'act');
                 sim.needs[NeedType.Fun] += 20;
             } else {
@@ -729,10 +730,10 @@ export class SchoolingState extends BaseState {
         // 30% 学习/休息 (找书架、桌子、长椅、贩卖机)
         if (rand < 0.7) {
             const props = GameStore.furnitureByPlot.get(plot.id)?.filter(f => 
-                f.utility === 'book' || f.label.includes('书') || 
-                f.label.includes('桌') || f.label.includes('椅') || 
-                f.utility === 'vending'
-            ) || [];
+            f.utility === FurnitureUtility.Book || f.label.includes('书') || 
+            f.label.includes('桌') || f.label.includes('椅') || 
+            f.utility === FurnitureUtility.Vending
+        ) || [];
             if (props.length > 0) {
                 this.goToObject(sim, props);
                 return;
@@ -742,8 +743,8 @@ export class SchoolingState extends BaseState {
         // 20% 运动 (如果操场有篮球架或跑道)
         if (rand < 0.9) {
             const sports = GameStore.furnitureByPlot.get(plot.id)?.filter(f => 
-                f.utility === 'gym' || f.utility === 'run' || f.label.includes('球')
-            ) || [];
+            f.utility === FurnitureTag.Gym || f.utility === FurnitureUtility.Exercise || f.label.includes('球')
+        ) || [];
             if (sports.length > 0) {
                 this.goToObject(sim, sports);
                 return;
@@ -761,8 +762,8 @@ export class SchoolingState extends BaseState {
         // 40% 玩设施 (操场、滑梯)
         if (rand < 0.4) {
             const toys = GameStore.furnitureByPlot.get(plot.id)?.filter(f => 
-                f.utility === 'play' || f.utility === 'fun' || f.label.includes('滑梯')
-            ) || [];
+            f.utility === FurnitureUtility.Game || f.utility === FurnitureUtility.Toy || f.label.includes('滑梯')
+        ) || [];
             if (toys.length > 0) {
                 this.goToObject(sim, toys);
                 return;
@@ -790,8 +791,8 @@ export class SchoolingState extends BaseState {
         
         if (sim.needs[NeedType.Energy] < 40 || isNapTime) {
             const cribs = GameStore.furnitureByPlot.get(plot.id)?.filter(f => 
-                f.utility === 'nap_crib' || f.tags?.includes('bed')
-            ) || [];
+            f.utility === FurnitureUtility.NapCrib || f.tags?.includes(FurnitureTag.Bed)
+        ) || [];
             if (cribs.length > 0) {
                 const freeCribs = cribs.filter(c => !GameStore.sims.some(s => s.id !== sim.id && s.interactionTarget?.id === c.id));
                 if (freeCribs.length > 0) {
@@ -895,15 +896,16 @@ export class InteractionState extends BaseState {
             } 
             // 🔴 [修复] 否则，尝试通用映射恢复
             else {
-                // 尝试将 utility 映射为 NeedType (处理别名)
+                // update 方法中
+                // 尝试将 utility 映射为 NeedType
                 let targetNeed: NeedType | null = null;
                 const u = obj.utility;
                 
-                if (u === 'toilet' || u === 'wc') targetNeed = NeedType.Bladder;
-                else if (u === 'shower' || u === 'bath') targetNeed = NeedType.Hygiene;
-                else if (u === 'fridge' || u === 'cooking') targetNeed = NeedType.Hunger;
-                else if (u === 'bed' || u === 'sofa') targetNeed = NeedType.Energy;
-                else if (u === 'tv' || u === 'computer' || u === 'bookshelf') targetNeed = NeedType.Fun;
+                if (u === FurnitureUtility.Toilet) targetNeed = NeedType.Bladder;
+                else if (u === FurnitureUtility.Shower || u === FurnitureUtility.Bathtub) targetNeed = NeedType.Hygiene;
+                else if (u === FurnitureUtility.Fridge || u === FurnitureUtility.Cooking) targetNeed = NeedType.Hunger;
+                else if (u === FurnitureUtility.Energy || u === FurnitureTag.Bed || u === FurnitureTag.Sofa) targetNeed = NeedType.Energy;
+                else if (u === FurnitureUtility.TV || u === FurnitureTag.Computer || u === FurnitureTag.Bookshelf) targetNeed = NeedType.Fun;
                 // 如果 utility 本身就是标准 NeedType (如 'hunger', 'energy')
                 else if (Object.values(NeedType).includes(u as NeedType)) targetNeed = u as NeedType;
 
@@ -1331,7 +1333,7 @@ export class BatheBabyState extends BaseState {
 
     enter(sim: Sim) {
         // 1. 寻找最近的淋浴间/浴缸
-        const showers = GameStore.furniture.filter(f => f.homeId === sim.homeId && (f.utility === 'shower' || f.utility === 'hygiene'));
+        const showers = GameStore.furniture.filter(f => f.homeId === sim.homeId && (f.utility === FurnitureUtility.Shower || f.utility === NeedType.Hygiene));
         if (showers.length === 0) {
             sim.say("找不到浴室...", 'bad');
             sim.changeState(new IdleState());
@@ -1541,7 +1543,7 @@ export class FindingSeatState extends BaseState {
     enter(sim: Sim) {
         // 寻找附近的椅子/沙发
         const seats = GameStore.furniture.filter(f => 
-            (f.tags?.includes('seat') || f.utility === 'comfort') && 
+            (f.tags?.includes(FurnitureTag.Seat) || f.utility === FurnitureUtility.Comfort) && 
             (sim.homeId ? f.homeId === sim.homeId : true)
         );
 
@@ -1680,7 +1682,7 @@ export class WaitingForFoodState extends BaseState {
             // 简单判定：距离市民不要太远 (比如 20格以内)，且属于该店铺
             const dist = (f.x - sim.pos.x)**2 + (f.y - sim.pos.y)**2;
             // 这里的 100000 约等于 300像素距离
-            return dist < 100000 && (f.tags?.includes('seat') || f.utility === 'comfort');
+            return dist < 100000 && (f.tags?.includes(FurnitureTag.Seat) || f.utility === FurnitureUtility.Comfort);
         });
 
         // 🔴 [修复] 显式声明类型
@@ -1781,13 +1783,13 @@ export class FindingReadingSpotState extends BaseState {
         // 筛选舒适的座位 (优先 sofa)
         const seats = GameStore.furniture.filter(f => 
             (f.homeId === sim.homeId || f.homeId === sim.workplaceId) && // 在当前环境找
-            (f.tags?.includes('sofa') || f.tags?.includes('armchair') || f.utility === 'comfort')
+            (f.tags?.includes(FurnitureTag.Sofa) || f.tags?.includes(FurnitureTag.Armchair) || f.utility === FurnitureUtility.Comfort)
         );
 
         // 如果没沙发，勉强找普通椅子
         if (seats.length === 0) {
             const chairs = GameStore.furniture.filter(f => 
-                (f.homeId === sim.homeId) && f.tags?.includes('seat')
+                (f.homeId === sim.homeId) && f.tags?.includes(FurnitureTag.Seat)
             );
             seats.push(...chairs);
         }
@@ -1847,7 +1849,7 @@ export class ReadingState extends BaseState {
         if (this.seat) {
             sim.pos = { x: this.seat.x + this.seat.w/2, y: this.seat.y + this.seat.h/2 };
             // 如果是沙发，稍微回一点精力和舒适
-            if (this.seat.tags?.includes('sofa')) {
+            if (this.seat.tags?.includes(FurnitureTag.Sofa)) {
                 sim.say("这沙发真舒服...", 'happy');
             }
         }
@@ -1938,7 +1940,7 @@ export class GoingToCheckoutState extends BaseState {
         // 寻找该店铺内的收银台
         const cashiers = GameStore.furniture.filter(f => 
             (f.homeId === sim.workplaceId || f.homeId === this.targetItemShelf.homeId) && // 同一地块
-            (f.tags?.includes('cashier') || f.label.includes('收银') || f.utility === 'work')
+            (f.tags?.includes(FurnitureTag.Cashier) || f.label.includes('收银') || f.utility === FurnitureUtility.Work)
         );
 
         if (cashiers.length === 0) {

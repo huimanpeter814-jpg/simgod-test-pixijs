@@ -6,6 +6,7 @@ import { getInteractionPos } from '../simulationHelpers';
 // 🟢 [修改] 引入所有需要的状态类，移除 require
 import { FeedBabyState, WaitingState, BatheBabyState, SchoolingState, WorkingState } from './SimStates';
 import { PLOTS } from '../../data/plots'; 
+import { FurnitureUtility, FurnitureTag } from '../../config/furnitureTypes';
 
 // 辅助：判断是否是工作日/工作时间
 const isWorkTime = (sim: Sim): boolean => {

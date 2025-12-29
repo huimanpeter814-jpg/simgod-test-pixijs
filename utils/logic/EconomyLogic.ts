@@ -6,25 +6,26 @@ import { DecisionLogic } from './decision';
 import { CareerLogic } from './career';
 import { AgeStage } from '../../types';
 import { SkillLogic } from './SkillLogic';
+import { FurnitureUtility, FurnitureTag } from '../../config/furnitureTypes';
 
 // 🆕 辅助函数：将 Item ID 映射到 Furniture Utility
 // 这让市民知道为了买某个东西，应该去哪种设施
 const getItemUtility = (itemId: string): string => {
     switch(itemId) {
-        case 'drink': return 'buy_drink'; // 去售货机
-        case 'book': return 'buy_book';   // 去书店书架
+        case 'drink': return FurnitureUtility.Vending; // 之前是 'buy_drink'，需确认枚举值是否一致
+        case 'book': return FurnitureUtility.Book; // 或 'buy_book'，取决于枚举定义
         case 'cinema_2d':
-        case 'cinema_3d': return 'cinema_3d'; // 去电影院
-        case 'gym_pass': return 'run'; // 去健身房 (跑步机)
-        case 'museum_ticket': return 'art'; // 去美术馆
-        case 'game_coin': return 'play'; // 去游戏厅
+        case 'cinema_3d': return FurnitureUtility.Cinema; // 或 'cinema_3d'
+        case 'gym_pass': return FurnitureUtility.Exercise; // 'run'
+        case 'museum_ticket': return FurnitureTag.Art; 
+        case 'game_coin': return FurnitureUtility.Game;
         case 'gift_chocolates':
         case 'cosmetic_set':
         case 'fashion_mag':
         case 'protein_powder':
         case 'puzzle_game': 
-            return 'buy_item'; // 去通用商店货架
-        default: return 'buy_item';
+            return FurnitureUtility.Shelf;; // 去通用商店货架
+        default: return FurnitureUtility.Shelf;;
     }
 };
 

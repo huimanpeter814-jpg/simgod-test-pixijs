@@ -1,5 +1,6 @@
 import { Job, Furniture, Vector2 } from '../types';
 import { TIME_CONFIG } from '../constants'; // 引入统一配置
+import { FurnitureUtility, FurnitureTag } from '../config/furnitureTypes';
 
 // 将游戏分钟转换为 tick 数
 // 保持和 GameLoop 中一致的时间流逝定义
@@ -19,21 +20,21 @@ export const getFurnitureTags = (f: Furniture): string[] => {
     const utility = f.utility || '';
     const pattern = f.pixelPattern || '';
 
-    if (label.includes('电脑') || pattern.includes('pc')) inferred.push('computer', 'work');
-    if (label.includes('办公桌') || label.includes('工位') || pattern.includes('desk')) inferred.push('desk', 'work');
-    if (label.includes('会议') || pattern.includes('meet')) inferred.push('meeting', 'work');
-    if (label.includes('老板') || label.includes('保险')) inferred.push('boss_chair', 'work');
-    if (label.includes('收银') || pattern.includes('cashier')) inferred.push('cashier', 'work');
-    if (label.includes('货架') || label.includes('柜台')) inferred.push('shelf', 'counter', 'work');
-    if (label.includes('吧台') || label.includes('酒')) inferred.push('bar', 'work');
-    if (label.includes('灶') || utility === 'cook') inferred.push('stove', 'kitchen', 'work');
-    if (label.includes('餐桌') || label.includes('椅')) inferred.push('table', 'seat');
-    if (label.includes('病床') || utility === 'healing') inferred.push('medical_bed', 'bed', 'work');
-    if (label.includes('黑板') || label.includes('讲台')) inferred.push('blackboard', 'work');
-    if (label.includes('DJ')) inferred.push('dj_booth', 'work');
-    if (label.includes('画架')) inferred.push('easel', 'art', 'work');
-    if (label.includes('床') || utility === 'energy') inferred.push('bed');
-    if (label.includes('沙发') || utility === 'comfort') inferred.push('sofa', 'seat');
+    if (label.includes('电脑') || pattern.includes('pc')) inferred.push(FurnitureTag.Computer, FurnitureUtility.Work);
+    if (label.includes('办公桌') || label.includes('工位') || pattern.includes('desk')) inferred.push(FurnitureTag.Desk, FurnitureUtility.Work);
+    if (label.includes('会议') || pattern.includes('meet')) inferred.push(FurnitureTag.Meeting, FurnitureUtility.Work);
+    if (label.includes('老板') || label.includes('保险')) inferred.push(FurnitureTag.BossChair, FurnitureUtility.Work);
+    if (label.includes('收银') || pattern.includes('cashier')) inferred.push(FurnitureTag.Cashier, FurnitureUtility.Work);
+    if (label.includes('货架') || label.includes('柜台')) inferred.push(FurnitureTag.Shelf, FurnitureTag.Counter, FurnitureUtility.Work);
+    if (label.includes('吧台') || label.includes('酒')) inferred.push(FurnitureTag.Bar, FurnitureUtility.Work);
+    if (label.includes('灶') || utility === FurnitureUtility.Cooking) inferred.push(FurnitureTag.Stove, FurnitureTag.Kitchen, FurnitureUtility.Work);
+    if (label.includes('餐桌') || label.includes('椅')) inferred.push(FurnitureTag.Table, FurnitureTag.Seat);
+    if (label.includes('病床') || utility === FurnitureUtility.Healing) inferred.push(FurnitureTag.MedicalBed, FurnitureTag.Bed, FurnitureUtility.Work);
+    if (label.includes('黑板') || label.includes('讲台')) inferred.push(FurnitureTag.Blackboard, FurnitureUtility.Work);
+    if (label.includes('DJ')) inferred.push(FurnitureTag.DjBooth, FurnitureUtility.Work);
+    if (label.includes('画架')) inferred.push(FurnitureTag.Easel, FurnitureTag.Art, FurnitureUtility.Work);
+    if (label.includes('床') || utility === FurnitureUtility.Energy) inferred.push(FurnitureTag.Bed);
+    if (label.includes('沙发') || utility === FurnitureUtility.Comfort) inferred.push(FurnitureTag.Sofa, FurnitureTag.Seat);
 
     return inferred;
 };
@@ -56,27 +57,22 @@ export const getInteractionPos = (f: Furniture): { anchor: Vector2, interact: Ve
     const tags = getFurnitureTags(f);
     const label = f.label || '';
 
-    // 1. 床 (Bed): 走到床边，躺在中心
-    if (tags.includes('bed')) {
-        // 简单假设走到床的左侧或右侧，视空间而定，这里简化为左侧略偏下
-        // 实际上为了不穿模，应该根据家具方向，这里暂定下方或侧方
+    // 1. Bed
+    if (tags.includes(FurnitureTag.Bed)) {
         anchor = { x: f.x - 15, y: f.y + f.h / 2 }; 
-        // 如果是双人床，可能需要更精细判断，这里先统一
     }
-    // 2. 座椅/沙发 (Seat): 走到前方，坐到中心
-    else if (tags.includes('seat') || tags.includes('sofa') || tags.includes('boss_chair') || label.includes('马桶')) {
-        // 假设椅子正面朝下 (y+)
+    // 2. Seat/Sofa
+    else if (tags.includes(FurnitureTag.Seat) || tags.includes(FurnitureTag.Sofa) || tags.includes(FurnitureTag.BossChair) || label.includes('马桶')) {
         anchor = { x: center.x, y: f.y + f.h + 10 }; 
         interact = { ...center };
     }
-    // 3. 柜台/灶台/货架 (Work/Counter): 走到前方，在前方操作 (不进入物体)
-    else if (tags.includes('stove') || tags.includes('counter') || tags.includes('cashier') || tags.includes('bar') || tags.includes('shelf') || tags.includes('easel') || label.includes('黑板')) {
+    // 3. Work/Counter
+    else if (tags.includes(FurnitureTag.Stove) || tags.includes(FurnitureTag.Counter) || tags.includes(FurnitureTag.Cashier) || tags.includes(FurnitureTag.Bar) || tags.includes(FurnitureTag.Shelf) || tags.includes(FurnitureTag.Easel) || label.includes('黑板')) {
         anchor = { x: center.x, y: f.y + f.h + 15 };
-        interact = { x: center.x, y: f.y + f.h + 5 }; // 贴近物体边缘
+        interact = { x: center.x, y: f.y + f.h + 5 }; 
     }
-    // 4. 电脑桌 (Desk): 走到椅子位置
-    else if (tags.includes('desk') || tags.includes('computer')) {
-        // 假设椅子在桌子下方
+    // 4. Desk/Computer
+    else if (tags.includes(FurnitureTag.Desk) || tags.includes(FurnitureTag.Computer)) {
         anchor = { x: center.x, y: f.y + f.h + 15 };
         interact = { x: center.x, y: f.y + f.h + 5 }; 
     }
