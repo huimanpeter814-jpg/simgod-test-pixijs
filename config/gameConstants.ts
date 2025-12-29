@@ -77,6 +77,8 @@ export enum ItemTag {
     PracticeMusic = 'practice_music', // 练琴 (对应原 utility: play_instrument)
     Paint = 'paint',             // 绘画 (对应原 utility: paint)
     Exercise = 'exercise',       // 运动 (对应原 utility: run)
+    AttendingWork = 'work_attend',   // 上班打卡
+    AttendingSchool = 'school_attend', // 上学签到
     
     // --- 娱乐 ---
     Watch = 'watch',             // 观看 (对应原 utility: TV, cinema_)
