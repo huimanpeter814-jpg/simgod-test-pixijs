@@ -3,7 +3,7 @@ import { GameStore } from '../simulation';
 import { SimAction, NeedType, Furniture } from '../../types';
 import { INTERACTIONS, RESTORE_TIMES, InteractionHandler } from './interactionRegistry';
 import { ITEMS, BUFFS } from '../../constants';
-import { IdleState, WorkingState, InteractionState, TransitionState } from './SimStates';
+import { IdleState, WorkingState, InteractionState, TransitionState, FetchingFoodState, OrderingState, FetchingBookState, BrowsingState } from './SimStates';
 import { getInteractionPos, minutes } from '../simulationHelpers';
 import { SocialLogic } from './social';
 
@@ -58,14 +58,50 @@ export const InteractionSystem = {
      * 执行具体的物体交互逻辑
      */
     performInteractionLogic(sim: Sim, obj: Furniture) {
-        // [修改] 移除此处的自动扣款，改由 interactionRegistry 中的 onStart 处理
-        // 原因：购买特定物品（intendedShoppingItemId）和购买通用家具（obj.cost）逻辑不同，统一在 handler 里处理
-        /* if (obj.cost) {
-            ...
-        } 
-        */
+        // ==========================================
+        // 🍔 [新增] 饮食行为链拦截
+        // ==========================================
+        
+        // 1. 在家做饭/吃饭流程：
+        // 如果点击的是 冰箱(fridge)、炉灶(stove) 或通用吃饭(hunger)，统一先去冰箱拿食材
+        if (obj.utility === 'fridge' || obj.utility === 'cooking' || obj.utility === 'hunger') {
+            sim.changeState(new FetchingFoodState(obj)); 
+            return; // 拦截成功，不再执行后续默认逻辑
+        }
 
-        // 2. 获取交互处理器
+        // 2. 外出就餐流程：
+        // 如果点击的是 收银台(buy_drink/eat_out) 或带有 cashier 标签的家具
+        if (obj.utility === 'buy_drink' || obj.utility === 'eat_out' || obj.tags?.includes('cashier')) {
+            sim.changeState(new OrderingState(obj));
+            return; // 拦截成功
+        }
+
+        // ==========================================
+        // 📖 [新增] 阅读行为链拦截
+        // ==========================================
+        if (obj.utility === 'bookshelf' || obj.label.includes('书架')) {
+            sim.changeState(new FetchingBookState(obj));
+            return;
+        }
+
+        // ==========================================
+        // 🛍️ [新增] 购物行为链拦截
+        // ==========================================
+        // 注意：buy_drink, buy_book, buy_item 都可以走这个流程
+        // 但要注意区分：贩卖机(vending)通常是即时的，货架(shelf)才需要浏览和结账
+        const isVendingMachine = obj.utility === 'vending' || obj.label.includes('贩卖机');
+        const isShopItem = ['buy_item', 'buy_book', 'buy_drink'].includes(obj.utility) && !isVendingMachine;
+
+        if (isShopItem) {
+            sim.changeState(new BrowsingState(obj));
+            return;
+        }
+
+        // ==========================================
+        // 👇 原有通用交互逻辑
+        // ==========================================
+
+        // 2. 获取交互处理器 (InteractionHandler)
         let handler: InteractionHandler | null = null;
         if (INTERACTIONS && obj.utility) {
             handler = INTERACTIONS[obj.utility];
@@ -77,7 +113,7 @@ export const InteractionSystem = {
             if (!handler) handler = INTERACTIONS['default'];
         }
 
-        // 3. 执行 onStart
+        // 3. 执行 onStart 回调 (检查前置条件，如金钱是否足够)
         if (handler && handler.onStart) {
             const success = handler.onStart(sim, obj);
             if (!success) {
@@ -90,15 +126,17 @@ export const InteractionSystem = {
 
         // 4. 确定动作类型与时长
         let actionType = SimAction.Using;
+        // 映射部分 utility 到特定 Action
         if (obj.utility === 'energy') actionType = SimAction.Sleeping;
-        else if (obj.utility === 'hunger' || obj.utility === 'eat_out') actionType = SimAction.Eating;
         else if (obj.utility === 'work') actionType = SimAction.Working;
+        // 注意：Eating 相关已经被上面拦截了，这里剩下的可能是一些特殊的直接恢复类
         
-        let durationMinutes = 30;
+        let durationMinutes = 30; // 默认时长
+        
         if (handler && handler.getDuration) durationMinutes = handler.getDuration(sim, obj);
         else if (handler && handler.duration) durationMinutes = handler.duration;
         else {
-            // 默认根据需求缺口计算时长
+            // 默认根据需求缺口动态计算时长
             const u = obj.utility;
             const timePer100 = RESTORE_TIMES[u] || RESTORE_TIMES.default;
             const needKey = u as NeedType;
@@ -111,7 +149,7 @@ export const InteractionSystem = {
 
         sim.actionTimer = minutes(durationMinutes);
         
-        // 5. 切换状态
+        // 5. 切换到对应状态
         if (actionType === SimAction.Working) {
             sim.changeState(new WorkingState()); 
         } else {
@@ -121,6 +159,8 @@ export const InteractionSystem = {
         // 6. 气泡反馈
         let verb = handler ? handler.verb : "使用";
         if (handler && handler.getVerb) verb = handler.getVerb(sim, obj);
+        
+        // 80% 概率冒个气泡
         if (Math.random() < 0.8) sim.say(verb, 'act');
     },
 

@@ -387,8 +387,9 @@ export class WorkingState extends BaseState {
     update(sim: Sim, dt: number) {
         super.update(sim, dt);
 
-        // 🆕 [需求] 工作期间特殊需求处理
-        // 1. 如果饥饿或如厕太低，自动恢复到安全线 (60-80)
+        // === 1. 基础生存检查 (保留原有逻辑) ===
+        
+        // 如果饥饿或如厕太低，自动恢复到安全线 (60-80)
         if (sim.needs[NeedType.Hunger] < 20) {
             sim.needs[NeedType.Hunger] = 60 + Math.random() * 20;
             sim.say("偷偷吃点东西...", 'act');
@@ -398,13 +399,14 @@ export class WorkingState extends BaseState {
             sim.say("去趟洗手间", 'act');
         }
 
-        // 2. 如果精力耗尽，提前结束工作并获得对应工资
+        // 如果精力耗尽，提前结束工作
         if (sim.needs[NeedType.Energy] <= 0) {
             sim.say("实在太困了... 撑不住了", 'bad');
             CareerLogic.leaveWorkEarly(sim);
             return;
         }
 
+        // === 2. 技能与数值成长 (保留原有逻辑) ===
         const rate = 0.005 * dt;
         switch (sim.job.companyType) {
             case JobType.Internet: sim.skills.logic += rate; break;
@@ -414,51 +416,126 @@ export class WorkingState extends BaseState {
             case JobType.Hospital: sim.skills.logic += rate; break;
             case JobType.Store: sim.eq = Math.min(100, sim.eq + rate); break;
         }
+
+        // === 3. 随机同事社交 (保留原有逻辑) ===
         if (Math.random() < 0.0005 * dt) {
-            const nearby = GameStore.sims.find(s => s.id !== sim.id && s.workplaceId === sim.workplaceId && Math.abs(s.pos.x - sim.pos.x) < 80 && Math.abs(s.pos.y - sim.pos.y) < 80);
+            const nearby = GameStore.sims.find(s => 
+                s.id !== sim.id && 
+                s.workplaceId === sim.workplaceId && 
+                Math.abs(s.pos.x - sim.pos.x) < 80 && 
+                Math.abs(s.pos.y - sim.pos.y) < 80
+            );
             if (nearby) {
                 const topics = ["在那边怎么样？", "老板今天很凶...", "中午吃啥？", "周末去哪玩？", "这项目真难搞"];
                 sim.say(topics[Math.floor(Math.random() * topics.length)], 'normal');
                 SocialLogic.updateRelationship(sim, nearby, 'friendship', 1);
-                if (Math.random() < 0.1 && sim.orientation !== 'aro') { SocialLogic.triggerJealousy(sim, nearby, sim); }
-            }
-        }
-        // --- 3. [修复] 移动逻辑分离 ---
-        
-        // 计时器只负责“决定下一个目标”，不负责“移动”
-        this.subStateTimer -= dt;
-        if (this.subStateTimer <= 0) {
-            this.subStateTimer = 300 + Math.random() * 300; 
-            
-            const jobType = sim.job.companyType;
-            const jobTitle = sim.job.title;
-            const plot = sim.workplaceId ? GameStore.worldLayout.find(p => p.id === sim.workplaceId) : null;
-            
-            if (plot) {
-                // 判断是否需要走动的职业 (服务员、护士、看护、店员)
-                if ((jobType === JobType.Restaurant && jobTitle.includes('服务')) || 
-                    (jobType === JobType.Store && !jobTitle.includes('收银')) || 
-                    (jobType === JobType.Hospital && jobTitle.includes('护士')) || 
-                    (jobType === JobType.ElderCare)) {
-                    
-                    const tx = plot.x + 20 + Math.random() * ((plot.width||300) - 40);
-                    const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
-                    sim.target = { x: tx, y: ty };
-                } 
-                // 医生/老师偶尔走动
-                else if ((jobType === JobType.Hospital && jobTitle.includes('医')) || (jobType === JobType.School)) {
-                     if (Math.random() > 0.7) {
-                         const tx = plot.x + 20 + Math.random() * ((plot.width||300) - 40);
-                         const ty = plot.y + 20 + Math.random() * ((plot.height||300) - 40);
-                         sim.target = { x: tx, y: ty };
-                     }
+                if (Math.random() < 0.1 && sim.orientation !== 'aro') { 
+                    SocialLogic.triggerJealousy(sim, nearby, sim); 
                 }
             }
         }
 
-        // [关键] 只要有目标，每帧都执行移动，而不是被 return 挡住
+        // === 4. 职位特定的移动与行为 AI (修改部分) ===
+        
+        // 如果正在移动中，优先执行移动，不进行新的决策
         if (sim.target) {
-            sim.moveTowardsTarget(dt);
+            const arrived = sim.moveTowardsTarget(dt);
+            if (arrived) {
+                sim.target = null;
+                // 到达目的地后，站桩工作一段时间 (3~6秒)
+                this.subStateTimer = 180 + Math.random() * 180; 
+            }
+            return;
+        }
+
+        // 倒计时：如果还在站桩工作中，就不要动
+        this.subStateTimer -= dt;
+        if (this.subStateTimer > 0) return;
+
+        // 倒计时结束，决定下一个动作
+        if (sim.job.companyType === JobType.Restaurant) {
+            this.handleRestaurantBehavior(sim);
+        } else {
+            this.handleGenericBehavior(sim);
+        }
+    }
+
+    /**
+     * 餐厅职业专用逻辑
+     */
+    private handleRestaurantBehavior(sim: Sim) {
+        // 重置思考时间，防止每一帧都计算
+        this.subStateTimer = 100; // 默认短暂停顿
+
+        const furnitureList = GameStore.furnitureByPlot.get(sim.workplaceId!) || [];
+        const isChef = sim.job.title.includes('厨') || sim.job.title.includes('Chef');
+        
+        if (isChef) {
+            // 👨‍🍳 厨师：只在 炉灶(stove) 或 厨房柜台(kitchen) 之间移动
+            const workstations = furnitureList.filter(f => f.utility === 'cooking' || f.tags?.includes('kitchen'));
+            
+            if (workstations.length > 0) {
+                const target = workstations[Math.floor(Math.random() * workstations.length)];
+                sim.target = { 
+                    x: target.x + target.w / 2, 
+                    y: target.y + target.h + 20 // 站在家具前方
+                };
+                sim.say("火候正好🔥", 'work');
+            } else {
+                sim.say("厨房在哪里？", 'bad');
+            }
+        } else {
+            // 🤵 服务员：在 厨房取餐口(counter/stove) 和 餐桌(table/seat) 之间往返
+            const rand = Math.random();
+            if (rand < 0.5) {
+                // 50% 去出餐口拿菜
+                const pickupSpots = furnitureList.filter(f => f.tags?.includes('counter') || f.utility === 'cooking');
+                if (pickupSpots.length > 0) {
+                    const t = pickupSpots[Math.floor(Math.random() * pickupSpots.length)];
+                    sim.target = { x: t.x + t.w/2, y: t.y + t.h + 20 };
+                    sim.say("上菜咯", 'work');
+                }
+            } else {
+                // 50% 去客人桌子
+                const tables = furnitureList.filter(f => f.tags?.includes('table') || f.tags?.includes('seat'));
+                if (tables.length > 0) {
+                    const t = tables[Math.floor(Math.random() * tables.length)];
+                    sim.target = { x: t.x + t.w/2, y: t.y + t.h + 20 };
+                    sim.say("请慢用", 'work');
+                }
+            }
+        }
+    }
+
+    /**
+     * 通用职业逻辑 (保留旧有的漫步逻辑)
+     */
+    private handleGenericBehavior(sim: Sim) {
+        // 设置较长的移动间隔
+        this.subStateTimer = 300 + Math.random() * 300; 
+
+        const jobType = sim.job.companyType;
+        const jobTitle = sim.job.title;
+        const plot = sim.workplaceId ? GameStore.worldLayout.find(p => p.id === sim.workplaceId) : null;
+        
+        if (!plot) return;
+
+        // 判断是否是需要经常走动的职业
+        const isActiveJob = 
+            (jobType === JobType.Store && !jobTitle.includes('收银')) || 
+            (jobType === JobType.Hospital && jobTitle.includes('护士')) || 
+            (jobType === JobType.ElderCare);
+
+        // 或者是偶尔走动的职业 (医生/老师)
+        const isSemiActiveJob = 
+            (jobType === JobType.Hospital && jobTitle.includes('医')) || 
+            (jobType === JobType.School);
+
+        if (isActiveJob || (isSemiActiveJob && Math.random() > 0.7)) {
+            // 在地块范围内随机找点
+            const tx = plot.x + 20 + Math.random() * ((plot.width || 300) - 40);
+            const ty = plot.y + 20 + Math.random() * ((plot.height || 300) - 40);
+            sim.target = { x: tx, y: ty };
         }
     }
 }
@@ -824,7 +901,7 @@ export class InteractionState extends BaseState {
                 
                 if (u === 'toilet' || u === 'wc') targetNeed = NeedType.Bladder;
                 else if (u === 'shower' || u === 'bath') targetNeed = NeedType.Hygiene;
-                else if (u === 'fridge' || u === 'stove') targetNeed = NeedType.Hunger;
+                else if (u === 'fridge' || u === 'cooking') targetNeed = NeedType.Hunger;
                 else if (u === 'bed' || u === 'sofa') targetNeed = NeedType.Energy;
                 else if (u === 'tv' || u === 'computer' || u === 'bookshelf') targetNeed = NeedType.Fun;
                 // 如果 utility 本身就是标准 NeedType (如 'hunger', 'energy')
@@ -1366,6 +1443,538 @@ export class BeingBathedState extends BaseState {
         // 安全检查：如果长时间没大人管 (比如大人突然消失了)，自动恢复
         if (!sim.carriedBySimId && sim.needs[NeedType.Hygiene] < 100) {
             // 这里可以加一个简单的超时判断，防止卡死
+        }
+    }
+}
+
+/**
+ * 1. 取食材状态：走向冰箱
+ */
+export class FetchingFoodState extends BaseState {
+    actionName = SimAction.FetchingFood;
+    targetFridge: Furniture;
+
+    constructor(fridge: Furniture) {
+        super();
+        this.targetFridge = fridge;
+    }
+
+    enter(sim: Sim) {
+        // 计算冰箱交互位置
+        const { interact } = getInteractionPos(this.targetFridge);
+        sim.target = interact;
+        sim.path = [];
+        sim.say("饿了，找点吃的...", 'act');
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        const arrived = sim.moveTowardsTarget(dt);
+        
+        if (arrived) {
+            // 到达冰箱后，决定是直接吃（速食）还是做饭
+            // 简单逻辑：如果家里有炉灶，且心情不错，就做饭；否则吃速食
+            const stoves = GameStore.furniture.filter(f => f.homeId === sim.homeId && f.utility === 'cooking');
+            const hasStove = stoves.length > 0;
+            
+            if (hasStove && Math.random() < 0.7) {
+                // 去做饭
+                const stove = stoves[Math.floor(Math.random() * stoves.length)];
+                sim.changeState(new CookingState(stove));
+            } else {
+                // 直接找地方吃
+                sim.say("随便吃点吧", 'act');
+                sim.changeState(new FindingSeatState());
+            }
+        }
+    }
+}
+
+/**
+ * 2. 烹饪状态：在炉灶前等待
+ */
+export class CookingState extends BaseState {
+    actionName = SimAction.Cooking;
+    targetStove: Furniture;
+    timer: number = 0;
+
+    constructor(stove: Furniture) {
+        super();
+        this.targetStove = stove;
+    }
+
+    enter(sim: Sim) {
+        const { interact } = getInteractionPos(this.targetStove);
+        sim.target = interact;
+        sim.path = [];
+        this.timer = 120; // 烹饪时间 (约2秒)
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        
+        if (sim.target) {
+            const arrived = sim.moveTowardsTarget(dt);
+            if (arrived) {
+                sim.target = null; // 停止移动，开始做饭
+                sim.say("展示厨艺！🍳", 'act');
+            }
+        } else {
+            // 烹饪倒计时
+            this.timer -= dt;
+            sim.skills.cooking += 0.005 * dt; // 增加烹饪技能
+
+            if (this.timer <= 0) {
+                sim.say("好香啊~", 'happy');
+                sim.changeState(new FindingSeatState());
+            }
+        }
+    }
+}
+
+/**
+ * 3. 寻找座位状态：端着盘子找最近的餐椅
+ */
+export class FindingSeatState extends BaseState {
+    actionName = SimAction.FindingSeat;
+    
+    enter(sim: Sim) {
+        // 寻找附近的椅子/沙发
+        const seats = GameStore.furniture.filter(f => 
+            (f.tags?.includes('seat') || f.utility === 'comfort') && 
+            (sim.homeId ? f.homeId === sim.homeId : true)
+        );
+
+        if (seats.length === 0) {
+            sim.say("没地坐了...", 'bad');
+            sim.changeState(new DiningState(null));
+            return;
+        }
+
+        // 🔴 [修复] 显式声明类型: Furniture | null
+        let bestSeat: Furniture | null = null; 
+        let minDist = Infinity;
+
+        seats.forEach(s => {
+            if (this.isOccupied(s, sim.id)) return;
+            const d = (s.x - sim.pos.x)**2 + (s.y - sim.pos.y)**2;
+            if (d < minDist) {
+                minDist = d;
+                bestSeat = s; // 现在这里不会报错了
+            }
+        });
+
+        if (bestSeat) {
+            const { interact } = getInteractionPos(bestSeat);
+            sim.target = interact;
+            sim.interactionTarget = bestSeat; 
+        } else {
+            sim.changeState(new DiningState(null)); 
+        }
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        if (sim.target) {
+            const arrived = sim.moveTowardsTarget(dt);
+            if (arrived) {
+                // 必须确保传递的是 Furniture，虽然逻辑上 interactionTarget 已经是了，但在TS里最好强转或判空
+                sim.changeState(new DiningState(sim.interactionTarget as Furniture));
+            }
+        }
+    }
+
+    private isOccupied(f: Furniture, selfId: string): boolean {
+        return GameStore.sims.some(s => s.id !== selfId && s.interactionTarget?.id === f.id);
+    }
+}
+
+/**
+ * 4. 进食状态：坐在椅子上恢复饥饿
+ */
+export class DiningState extends BaseState {
+    actionName = SimAction.Dining;
+    chair: Furniture | null;
+    timer: number = 0;
+
+    constructor(chair: Furniture | null) {
+        super();
+        this.chair = chair;
+    }
+
+    enter(sim: Sim) {
+        sim.target = null;
+        sim.path = [];
+        this.timer = 180; // 吃饭耗时 (约3秒)
+        sim.say("开动！🙏", 'act');
+        
+        // 如果有椅子，修正坐姿朝向
+        if (this.chair) {
+            // 简单的视觉处理：位置对齐
+             sim.pos = { x: this.chair.x + this.chair.w/2, y: this.chair.y + this.chair.h/2 };
+        }
+    }
+
+    update(sim: Sim, dt: number) {
+        this.decayNeeds(sim, dt, [NeedType.Hunger]); // 吃饭时不扣饥饿
+
+        this.timer -= dt;
+        
+        // 恢复饥饿值
+        sim.needs[NeedType.Hunger] = Math.min(100, sim.needs[NeedType.Hunger] + 0.5 * dt);
+        
+        // 恢复舒适度 (如果坐着)
+        if (this.chair) sim.needs[NeedType.Comfort] = Math.min(100, sim.needs[NeedType.Comfort] + 0.1 * dt);
+
+        if (sim.needs[NeedType.Hunger] >= 100 || this.timer <= 0) {
+            sim.needs[NeedType.Hunger] = 100;
+            sim.say("吃饱了~", 'happy');
+            sim.finishAction(); // 回归 Idle
+        }
+    }
+}
+
+// ==========================================
+// 🏪 餐厅顾客状态链
+// ==========================================
+
+export class OrderingState extends BaseState {
+    actionName = SimAction.Ordering;
+    counter: Furniture;
+
+    constructor(counter: Furniture) {
+        super();
+        this.counter = counter;
+    }
+
+    enter(sim: Sim) {
+        const { interact } = getInteractionPos(this.counter);
+        sim.target = interact;
+        sim.say("去点餐...", 'act');
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        if (sim.moveTowardsTarget(dt)) {
+            sim.money -= 20; // 扣钱
+            sim.say("我要一份豪华套餐", 'chat');
+            // 点完餐，去找位子等
+            sim.changeState(new WaitingForFoodState(this.counter.homeId || this.counter.id)); // 传入 plotId 或关联ID
+        }
+    }
+}
+
+export class WaitingForFoodState extends BaseState {
+    actionName = SimAction.WaitingForFood;
+    plotId: string;
+    timer: number = 200; 
+
+    constructor(plotId: string) {
+        super();
+        this.plotId = plotId;
+    }
+
+    enter(sim: Sim) {
+        // 在当前店铺(地块)范围内找椅子
+        const seats = GameStore.furniture.filter(f => {
+            // 简单判定：距离市民不要太远 (比如 20格以内)，且属于该店铺
+            const dist = (f.x - sim.pos.x)**2 + (f.y - sim.pos.y)**2;
+            // 这里的 100000 约等于 300像素距离
+            return dist < 100000 && (f.tags?.includes('seat') || f.utility === 'comfort');
+        });
+
+        // 🔴 [修复] 显式声明类型
+        let bestSeat: Furniture | null = null;
+        let minDist = Infinity;
+
+        seats.forEach(s => {
+            // 如果被占用，跳过
+            if (GameStore.sims.some(other => other.id !== sim.id && other.interactionTarget?.id === s.id)) return;
+            
+            const d = (s.x - sim.pos.x)**2 + (s.y - sim.pos.y)**2;
+            if (d < minDist) {
+                minDist = d;
+                bestSeat = s;
+            }
+        });
+        
+        if (bestSeat) {
+            const { interact } = getInteractionPos(bestSeat);
+            sim.target = interact;
+            sim.interactionTarget = bestSeat;
+        } else {
+            // 没位子就在原地等
+            sim.say("没位子了，站着等吧", 'bad');
+            sim.target = null;
+        }
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        
+        if (sim.target) {
+            // 走向位子
+            if (sim.moveTowardsTarget(dt)) {
+                sim.target = null; 
+                // 视觉对齐：坐到椅子中心
+                if (sim.interactionTarget) {
+                     sim.pos = { 
+                         x: sim.interactionTarget.x + sim.interactionTarget.w/2, 
+                         y: sim.interactionTarget.y + sim.interactionTarget.h/2 
+                     };
+                }
+            }
+        } else {
+            // 坐下/站立等待中
+            this.timer -= dt;
+            if (this.timer % 100 < 1) sim.say("菜还没好吗...", 'sys');
+
+            if (this.timer <= 0) {
+                // 上菜了！
+                sim.say("终于来了！", 'happy');
+                // 进入进食状态
+                sim.changeState(new DiningState(sim.interactionTarget as Furniture));
+            }
+        }
+    }
+}
+
+// ==========================================
+// 📖 沉浸式阅读行为链
+// ==========================================
+
+/**
+ * 1. 取书状态：走向书架
+ */
+export class FetchingBookState extends BaseState {
+    actionName = 'fetching_book';
+    targetBookshelf: Furniture;
+
+    constructor(bookshelf: Furniture) {
+        super();
+        this.targetBookshelf = bookshelf;
+    }
+
+    enter(sim: Sim) {
+        const { interact } = getInteractionPos(this.targetBookshelf);
+        sim.target = interact;
+        sim.say("找本好书看看...", 'act');
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        if (sim.moveTowardsTarget(dt)) {
+            // 到达书架，手里拿书 (逻辑上)，开始找坐位
+            sim.say("就这本了", 'act');
+            sim.changeState(new FindingReadingSpotState());
+        }
+    }
+}
+
+/**
+ * 2. 寻找阅读位状态：优先找沙发，其次找椅子
+ */
+export class FindingReadingSpotState extends BaseState {
+    actionName = 'finding_reading_spot';
+
+    enter(sim: Sim) {
+        // 筛选舒适的座位 (优先 sofa)
+        const seats = GameStore.furniture.filter(f => 
+            (f.homeId === sim.homeId || f.homeId === sim.workplaceId) && // 在当前环境找
+            (f.tags?.includes('sofa') || f.tags?.includes('armchair') || f.utility === 'comfort')
+        );
+
+        // 如果没沙发，勉强找普通椅子
+        if (seats.length === 0) {
+            const chairs = GameStore.furniture.filter(f => 
+                (f.homeId === sim.homeId) && f.tags?.includes('seat')
+            );
+            seats.push(...chairs);
+        }
+
+        // 找最近的一个空位
+        let bestSeat: Furniture | null = null;
+        let minDist = Infinity;
+
+        seats.forEach(s => {
+            if (this.isOccupied(s, sim.id)) return;
+            const d = (s.x - sim.pos.x)**2 + (s.y - sim.pos.y)**2;
+            if (d < minDist) {
+                minDist = d;
+                bestSeat = s;
+            }
+        });
+
+        if (bestSeat) {
+            const { interact } = getInteractionPos(bestSeat);
+            sim.target = interact;
+            sim.interactionTarget = bestSeat; // 绑定座位
+        } else {
+            // 没地坐，站着读
+            sim.say("没地坐，站着看吧", 'sys');
+            sim.changeState(new ReadingState(null)); 
+        }
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        if (sim.target && sim.moveTowardsTarget(dt)) {
+            sim.changeState(new ReadingState(sim.interactionTarget as Furniture));
+        }
+    }
+
+    private isOccupied(f: Furniture, selfId: string): boolean {
+        return GameStore.sims.some(s => s.id !== selfId && s.interactionTarget?.id === f.id);
+    }
+}
+
+/**
+ * 3. 阅读状态：坐在舒适的地方读书
+ */
+export class ReadingState extends BaseState {
+    actionName = 'reading';
+    seat: Furniture | null;
+    timer: number = 0;
+
+    constructor(seat: Furniture | null) {
+        super();
+        this.seat = seat;
+    }
+
+    enter(sim: Sim) {
+        sim.target = null;
+        // 如果有座位，对齐坐标
+        if (this.seat) {
+            sim.pos = { x: this.seat.x + this.seat.w/2, y: this.seat.y + this.seat.h/2 };
+            // 如果是沙发，稍微回一点精力和舒适
+            if (this.seat.tags?.includes('sofa')) {
+                sim.say("这沙发真舒服...", 'happy');
+            }
+        }
+        
+        // 读书时长根据 逻辑/智商 技能缩短
+        this.timer = 120; // 约2秒
+    }
+
+    update(sim: Sim, dt: number) {
+        this.decayNeeds(sim, dt, [NeedType.Fun]); // 读书不扣娱乐
+
+        this.timer -= dt;
+        
+        // 读书效果
+        sim.needs[NeedType.Fun] += 0.2 * dt; // 增加娱乐
+        
+        // 随机增加逻辑或写作技能
+        if (Math.random() < 0.05) sim.skills.logic += 0.01;
+
+        // 如果坐着，回复舒适度
+        if (this.seat) sim.needs[NeedType.Comfort] = Math.min(100, sim.needs[NeedType.Comfort] + 0.1 * dt);
+
+        if (this.timer <= 0 || sim.needs[NeedType.Fun] >= 100) {
+            sim.say("读完了，真精彩", 'act');
+            // 可以在这里加一个 PuttingBookBackState (放回书)，或者直接结束
+            sim.finishAction(); 
+        }
+    }
+}
+
+// ==========================================
+// 🛍️ 真实购物行为链
+// ==========================================
+
+/**
+ * 1. 浏览商品状态：在货架前徘徊
+ */
+export class BrowsingState extends BaseState {
+    actionName = 'browsing';
+    shelf: Furniture;
+    timer: number = 60; // 浏览时间
+    
+    constructor(shelf: Furniture) {
+        super();
+        this.shelf = shelf;
+    }
+
+    enter(sim: Sim) {
+        const { interact } = getInteractionPos(this.shelf);
+        // 稍微随机一点位置，不要所有人站同一个点
+        sim.target = { 
+            x: interact.x + (Math.random() - 0.5) * 20, 
+            y: interact.y + (Math.random() - 0.5) * 20 
+        };
+        sim.say("看看有什么...", 'act');
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        if (sim.target) {
+            if (sim.moveTowardsTarget(dt)) {
+                sim.target = null; // 到达货架，开始挑选
+            }
+        } else {
+            this.timer -= dt;
+            if (this.timer <= 0) {
+                sim.say("就买这个！", 'act');
+                // 挑选完毕，去结账
+                sim.changeState(new GoingToCheckoutState(this.shelf));
+            }
+        }
+    }
+}
+
+/**
+ * 2. 前往收银台状态
+ */
+export class GoingToCheckoutState extends BaseState {
+    actionName = 'checkout_queue';
+    targetItemShelf: Furniture; // 记录原本是在哪个货架买的东西，用于获取价格等
+
+    constructor(shelf: Furniture) {
+        super();
+        this.targetItemShelf = shelf;
+    }
+
+    enter(sim: Sim) {
+        // 寻找该店铺内的收银台
+        const cashiers = GameStore.furniture.filter(f => 
+            (f.homeId === sim.workplaceId || f.homeId === this.targetItemShelf.homeId) && // 同一地块
+            (f.tags?.includes('cashier') || f.label.includes('收银') || f.utility === 'work')
+        );
+
+        if (cashiers.length === 0) {
+            // 没有收银台？自助结账（直接扣钱）
+            sim.say("没人收钱？那我直接扫码了", 'sys');
+            this.performTransaction(sim);
+            sim.finishAction();
+            return;
+        }
+
+        // 找最近的收银台
+        const cashier = cashiers[0]; // 简化，取第一个
+        const { interact } = getInteractionPos(cashier);
+        sim.target = interact;
+        sim.interactionTarget = cashier;
+    }
+
+    update(sim: Sim, dt: number) {
+        super.update(sim, dt);
+        if (sim.target && sim.moveTowardsTarget(dt)) {
+            // 到达收银台，执行交易
+            this.performTransaction(sim);
+            sim.finishAction();
+        }
+    }
+
+    private performTransaction(sim: Sim) {
+        // 复用 interactionRegistry 里的 buy_item 逻辑，或者简单扣款
+        const cost = this.targetItemShelf.cost || 20; // 默认价格
+        if (sim.money >= cost) {
+            sim.money -= cost;
+            sim.say(`支付了 $${cost}`, 'money');
+            sim.needs[NeedType.Fun] += 10;
+            // 如果是书架买的书，可以在这里添加物品进背包(如果有背包系统)
+        } else {
+            sim.say("哎呀，钱不够...", 'bad');
         }
     }
 }

@@ -886,7 +886,311 @@ export const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<F
     'kitchen':{
         label:'厨房',
         items:[
-            {},
+            {
+                label: '冰箱', h: 20, utility: 'fridge', tags: ['kitchen'],
+                frameName: 'Kitchen_Singles_Shadowless_48x48_158.png', // UI缩略图
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_158.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_170.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_158.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_170.png', // 右 (复用侧)
+                },
+                variants: [
+                    {
+                        id: 'var_1', label: '冰箱',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_159.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_164.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_159.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_164.png', // 右 (复用侧)
+                },
+                    },
+                    {
+                        id: 'var_2', label: '冰箱',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_160.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_168.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_160.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_168.png', // 右 (复用侧)
+                },
+                    },
+                ]
+            },
+            {
+                label: '橱柜', h: 20, utility: 'none', tags: ['kitchen'], frameName: 'Kitchen_Singles_Shadowless_48x48_114.png',
+                variants: [
+                    { id: 'var_1', label: '橱柜', frameName: 'Kitchen_Singles_Shadowless_48x48_94.png' },
+                    { id: 'var_2', label: '橱柜', frameName: 'Kitchen_Singles_Shadowless_48x48_104.png' },
+                ]
+            },
+            {
+                label: '橱柜', h: 20, utility: 'none', tags: ['kitchen'], frameName: 'Kitchen_Singles_Shadowless_48x48_118.png',
+                variants: [
+                    { id: 'var_1', label: '橱柜', frameName: 'Kitchen_Singles_Shadowless_48x48_98.png' },
+                    { id: 'var_2', label: '橱柜', frameName: 'Kitchen_Singles_Shadowless_48x48_108.png' },
+                ]
+            },
+            {
+                label: '橱柜', h: 20, utility: 'none', tags: ['kitchen'], frameName: 'Kitchen_Singles_Shadowless_48x48_119.png',
+                variants: [
+                    { id: 'var_1', label: '橱柜', frameName: 'Kitchen_Singles_Shadowless_48x48_99.png' },
+                    { id: 'var_2', label: '橱柜', frameName: 'Kitchen_Singles_Shadowless_48x48_109.png' },
+                ]
+            },
+            {
+                label: '料理台', h: 10, utility: 'none', tags: ['kitchen'], isSurface: true, surfaceHeight: 30, frameName: 'Kitchen_Singles_Shadowless_48x48_76.png',
+                variants: [
+                    { id: 'var_1', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_68.png' },
+                    { id: 'var_2', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_58.png' },
+                ]
+            },
+            {
+                label: '料理台', h: 10, utility: 'none', tags: ['kitchen'], isSurface: true, surfaceHeight: 30, frameName: 'Kitchen_Singles_Shadowless_48x48_68.png',
+                variants: [
+                    { id: 'var_1', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_77.png' },
+                    { id: 'var_2', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_59.png' },
+                ]
+            },
+            {
+                label: '料理台', h: 10, utility: 'none', isSurface: true, surfaceHeight: 30, frameName: 'Kitchen_Singles_Shadowless_48x48_69.png',
+                variants: [
+                    { id: 'var_1', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_78.png' },
+                    { id: 'var_2', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_60.png' },
+                ]
+            },
+            {
+                label: '料理台', h: 10, utility: 'none', tags: ['kitchen'], isSurface: true, surfaceHeight: 30, frameName: 'Kitchen_Singles_Shadowless_48x48_4.png',
+                variants: [
+                    { id: 'var_1', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_31.png' },
+                    { id: 'var_2', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_40.png' },
+                    { id: 'var_3', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_49.png' },
+                    { id: 'var_4', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_22.png' },
+                    { id: 'var_5', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_13.png' },
+                ]
+            },
+            {
+                label: '料理台', h: 10, utility: 'none', tags: ['kitchen'], isSurface: true, surfaceHeight: 30, frameName: 'Kitchen_Singles_Shadowless_48x48_5.png',
+                variants: [
+                    { id: 'var_1', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_32.png' },
+                    { id: 'var_2', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_41.png' },
+                    { id: 'var_3', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_50.png' },
+                    { id: 'var_4', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_23.png' },
+                    { id: 'var_5', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_14.png' },
+                ]
+            },
+            {
+                label: '料理台', h: 10, utility: 'none', tags: ['kitchen'], isSurface: true, surfaceHeight: 30, frameName: 'Kitchen_Singles_Shadowless_48x48_6.png',
+                variants: [
+                    { id: 'var_1', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_33.png' },
+                    { id: 'var_2', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_42.png' },
+                    { id: 'var_3', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_51.png' },
+                    { id: 'var_4', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_24.png' },
+                    { id: 'var_5', label: '料理台', frameName: 'Kitchen_Singles_Shadowless_48x48_15.png' },
+                ]
+            },
+            {
+                label: '炉',  utility: 'cooking', tags: ['kitchen'], frameName: 'Kitchen_Singles_Shadowless_48x48_148.png',
+                variants: [
+                    { id: 'var_1', label: '炉', frameName: 'Kitchen_Singles_Shadowless_48x48_151.png' },
+                    { id: 'var_2', label: '炉', frameName: 'Kitchen_Singles_Shadowless_48x48_152.png' },
+                ]
+            },
+            {
+                label: '炸炉', utility: 'cooking', tags: ['kitchen'], frameName: 'Kitchen_Singles_Shadowless_48x48_194.png',
+                variants: [
+                    { id: 'var_1', label: '炸炉', frameName: 'Kitchen_Singles_Shadowless_48x48_193.png' },
+                ]
+            },
+            {
+                label: '洗手池', h: 15, utility: 'hygiene', tags: ['kitchen'], placementLayer: 'surface', frameName: 'Kitchen_Singles_Shadowless_48x48_143.png',
+                variants: [
+                    { id: 'var_1', label: '洗手池', frameName: 'Kitchen_Singles_Shadowless_48x48_141.png' },
+                    { id: 'var_2', label: '洗手池', frameName: 'Kitchen_Singles_Shadowless_48x48_145.png' },
+                    { id: 'var_3', label: '洗手池', frameName: 'Kitchen_Singles_Shadowless_48x48_144.png' },
+                    { id: 'var_4', label: '洗手池', frameName: 'Kitchen_Singles_Shadowless_48x48_142.png' },
+                    { id: 'var_5', label: '洗手池', frameName: 'Kitchen_Singles_Shadowless_48x48_146.png' },
+                ]
+            },
+            {
+                label: '餐桌', utility: 'none', tags: ['kitchen'], isSurface: true, surfaceHeight: 30,
+                frameName: 'Kitchen_Singles_Shadowless_48x48_311.png', // UI缩略图
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_311.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_310.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_311.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_310.png', // 右 (复用侧)
+                },
+                variants: [
+                    {
+                        id: 'var_1', label: '餐桌',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_309.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_322.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_309.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_322.png', // 右 (复用侧)
+                },
+                    },
+                    {
+                        id: 'var_2', label: '餐桌',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_321.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_323.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_321.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_323.png', // 右 (复用侧)
+                },
+                    },
+                ]
+            },
+            {
+                label: '木凳', h: 20, utility: 'comfort', tags: ['seat'],
+                frameName: 'Kitchen_Singles_Shadowless_48x48_280.png', // UI缩略图
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_280.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_284.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_280.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_284.png', // 右 (复用侧)
+                },
+                variants: [
+                    {
+                        id: 'var_1', label: '木凳',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_281.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_285.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_281.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_285.png', // 右 (复用侧)
+                },
+                    },
+                    {
+                        id: 'var_2', label: '木凳',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_282.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_286.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_282.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_286.png', // 右 (复用侧)
+                },
+                    },
+                    {
+                        id: 'var_3', label: '木凳',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_283.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_287.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_283.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_287.png', // 右 (复用侧)
+                },
+                    },
+                ]
+            },
+            {
+                label: '小木凳', h: 24, utility: 'comfort', tags: ['seat'],
+                frameName: 'Kitchen_Singles_Shadowless_48x48_373.png', // UI缩略图
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_373.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_370.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_373.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_370.png', // 右 (复用侧)
+                },
+                variants: [
+                    {
+                        id: 'var_1', label: '小木凳',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_371.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_369.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_371.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_369.png', // 右 (复用侧)
+                },
+                    },
+                    {
+                        id: 'var_2', label: '小木凳',
+                frameDirs: {
+                    0: 'Kitchen_Singles_Shadowless_48x48_372.png', // 正
+                    1: 'Kitchen_Singles_Shadowless_48x48_368.png', // 侧 (左)
+                    2: 'Kitchen_Singles_Shadowless_48x48_372.png', // 背 (复用正)
+                    3: 'Kitchen_Singles_Shadowless_48x48_368.png', // 右 (复用侧)
+                },
+                    },
+                ]
+            },
+            {
+                label: '小板凳', utility: 'comfort', tags: ['seat'], frameName: 'Kitchen_Singles_Shadowless_48x48_273.png',
+                variants: [
+                    { id: 'var_1', label: '小板凳', frameName: 'Kitchen_Singles_Shadowless_48x48_274.png' },
+                    { id: 'var_2', label: '小板凳', frameName: 'Kitchen_Singles_Shadowless_48x48_275.png' },
+                    { id: 'var_3', label: '小板凳', frameName: 'Kitchen_Singles_Shadowless_48x48_272.png' },
+                ]
+            },
+            {
+                label: '小板凳', utility: 'comfort', tags: ['seat'], frameName: 'Kitchen_Singles_Shadowless_48x48_276.png',
+                variants: [
+                    { id: 'var_1', label: '小板凳', frameName: 'Kitchen_Singles_Shadowless_48x48_277.png' },
+                    { id: 'var_2', label: '小板凳', frameName: 'Kitchen_Singles_Shadowless_48x48_278.png' },
+                    { id: 'var_3', label: '小板凳', frameName: 'Kitchen_Singles_Shadowless_48x48_279.png' },
+                ]
+            },
+            {
+                label: '电饭煲', h: 8, utility: 'none', tags: ['kitchen'], placementLayer: 'surface', frameName: 'Kitchen_Singles_Shadowless_48x48_195.png',
+                variants: [
+                    { id: 'var_1', label: '电饭煲', frameName: 'Kitchen_Singles_Shadowless_48x48_197.png' },
+                    { id: 'var_2', label: '电饭煲', frameName: 'Kitchen_Singles_Shadowless_48x48_196.png' },
+                    { id: 'var_3', label: '电饭煲', frameName: 'Kitchen_Singles_Shadowless_48x48_198.png' },
+                ]
+            },
+            {
+                label: '烤面包机', h: 5, utility: 'none', tags: ['kitchen'], placementLayer: 'surface', frameName: 'Kitchen_Singles_Shadowless_48x48_136.png',
+                variants: [
+                    { id: 'var_1', label: '烤面包机', frameName: 'Kitchen_Singles_Shadowless_48x48_135.png' },
+                ]
+            },
+            {
+                label: '榨汁机', h: 5, utility: 'none', tags: ['kitchen'], placementLayer: 'surface', frameName: 'Kitchen_Singles_Shadowless_48x48_184.png',
+                variants: [
+                    { id: 'var_1', label: '榨汁机', frameName: 'Kitchen_Singles_Shadowless_48x48_183.png' },
+                ]
+            },
+            {
+                label: '咖啡机', h: 16, utility: 'none', tags: ['kitchen'], placementLayer: 'surface', frameName: 'Kitchen_Singles_Shadowless_48x48_179.png',
+                variants: [
+                    { id: 'var_1', label: '咖啡机', frameName: 'Kitchen_Singles_Shadowless_48x48_177.png' },
+                    { id: 'var_2', label: '咖啡机', frameName: 'Kitchen_Singles_Shadowless_48x48_180.png' },
+                    { id: 'var_3', label: '咖啡机', frameName: 'Kitchen_Singles_Shadowless_48x48_178.png' },
+                ]
+            },
+            {
+                label: '调料', h: 5, utility: 'none', tags: ['kitchen'], placementLayer: 'surface', frameName: 'Kitchen_Singles_Shadowless_48x48_397.png',
+                variants: [
+                    { id: 'var_1', label: '调料', frameName: 'Kitchen_Singles_Shadowless_48x48_396.png' },
+                ]
+            },
+            {
+                label: '甜甜圈', h: 5, utility: 'none', tags: ['kitchen', 'food'], placementLayer: 'surface', frameName: 'Kitchen_Singles_Shadowless_48x48_402.png',
+                variants: [
+                    { id: 'var_1', label: '甜甜圈', frameName: 'Kitchen_Singles_Shadowless_48x48_403.png' },
+                    { id: 'var_2', label: '甜甜圈', frameName: 'Kitchen_Singles_Shadowless_48x48_405.png' },
+                    { id: 'var_3', label: '甜甜圈', frameName: 'Kitchen_Singles_Shadowless_48x48_404.png' },
+                    { id: 'var_4', label: '甜甜圈', frameName: 'Kitchen_Singles_Shadowless_48x48_401.png' },
+                    { id: 'var_5', label: '甜甜圈', frameName: 'Kitchen_Singles_Shadowless_48x48_400.png' },
+                    { id: 'var_6', label: '甜甜圈', frameName: 'Kitchen_Singles_Shadowless_48x48_399.png' },
+                    { id: 'var_7', label: '甜甜圈', frameName: 'Kitchen_Singles_Shadowless_48x48_398.png' },
+                ]
+            },
+            {
+                label: '菜', h: 5, utility: 'none', tags: ['kitchen', 'food'], placementLayer: 'surface', frameName: 'Kitchen_Singles_Shadowless_48x48_388.png',
+                variants: [
+                    { id: 'var_1', label: '菜', frameName: 'Kitchen_Singles_Shadowless_48x48_384.png' },
+                    { id: 'var_2', label: '菜', frameName: 'Kitchen_Singles_Shadowless_48x48_386.png' },
+                    { id: 'var_3', label: '菜', frameName: 'Kitchen_Singles_Shadowless_48x48_389.png' },
+                    { id: 'var_4', label: '菜', frameName: 'Kitchen_Singles_Shadowless_48x48_385.png' },
+                    { id: 'var_5', label: '菜', frameName: 'Kitchen_Singles_Shadowless_48x48_387.png' },
+                    { id: 'var_6', label: '菜', frameName: 'Kitchen_Singles_Shadowless_48x48_390.png' },
+                ]
+            },
+            {
+                label: '灯', h: 10, utility: 'none', tags: ['light'], frameName: 'Kitchen_Singles_Shadowless_48x48_203.png',
+                variants: [
+                    { id: 'var_1', label: '灯', frameName: 'Kitchen_Singles_Shadowless_48x48_205.png' },
+                    { id: 'var_2', label: '灯', frameName: 'Kitchen_Singles_Shadowless_48x48_204.png' },
+                    { id: 'var_3', label: '灯', frameName: 'Kitchen_Singles_Shadowless_48x48_206.png' },
+                ]
+            },
         ]
     },
     'work': {

@@ -49,7 +49,16 @@ export enum SimAction {
     NannyWork = 'nanny_work', // 🆕 保姆工作状态
     FeedBaby = 'feed_baby', // 🆕 喂食婴儿状态
     BatheBaby = 'bathe_baby',   // 大人给宝宝洗澡
-    BeingBathed = 'being_bathed' // 宝宝被洗澡
+    BeingBathed = 'being_bathed', // 宝宝被洗澡
+    // 🍔 新增饮食相关细分状态
+    FetchingFood = 'fetching_food',   // 走向冰箱/取食材
+    Cooking = 'cooking',             // 在炉灶前做饭
+    FindingSeat = 'finding_seat',    // 端着盘子找位子
+    Dining = 'dining',               // 坐在椅子上吃 (替代单纯的 Eating)
+    
+    // 🏪 餐厅顾客状态
+    Ordering = 'ordering',           // 在收银台点餐
+    WaitingForFood = 'waiting_food', // 坐在位子上等菜
 }
 
 export enum JobType {
