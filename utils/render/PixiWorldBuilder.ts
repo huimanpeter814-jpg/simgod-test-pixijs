@@ -78,8 +78,25 @@ export class PixiWorldBuilder {
         container.x = f.x;
         container.y = f.y;
 
-        // 使用 any 断言访问 types.ts 中新增的字段 (防止类型未更新导致报错)
         const fAny = f as any;
+
+        // 使用 any 断言访问 types.ts 中新增的字段 (防止类型未更新导致报错)
+        // 默认使用家具本体作为渲染配置
+        let visualConfig = fAny;
+        
+        // 1. 获取当前激活的变体 ID (实例上的 > 默认的 > 第一个变体的)
+        const activeVariantId = fAny.currentVariantId || fAny.defaultVariantId;
+
+        // 2. 如果存在变体列表，尝试查找并合并数据
+        if (fAny.variants && fAny.variants.length > 0 && activeVariantId) {
+            const variant = fAny.variants.find((v: any) => v.id === activeVariantId);
+            if (variant) {
+                // ✨ 关键：用变体的数据覆盖本体的数据
+                // 这样后续代码读取 visualConfig.tilePos 时，读到的就是变体的坐标
+                visualConfig = { ...fAny, ...variant };
+            }
+        }
+        
         const dir = f.rotation || 0;
 
         // ==========================================
@@ -95,17 +112,13 @@ export class PixiWorldBuilder {
             const parent = GameStore.furniture.find(p => p.id === fAny.parentId);
             
             if (parent) {
-                // A. 强制层级：子物体必须比父物体高一点点
-                // 这样无论父物体在哪里，子物体永远覆盖在它上面
-                // 使用 (parent.y + parent.h) 是父物体的基准 zIndex
-                zIndex = (parent.y + parent.h) + 1; // +1 确保在上方
+                // A. 强制层级：子物体必须比父物体高
+                zIndex = (parent.y + parent.h) + 1; 
 
                 // B. 计算高度偏移 (Elevation)
-                // 优先使用插槽的高度
                 if (fAny.parentSlotIndex !== undefined && parent.slots && parent.slots[fAny.parentSlotIndex]) {
                     elevationOffset = parent.slots[fAny.parentSlotIndex].height;
                 } 
-                // 兜底：如果没插槽信息，用父物体的通用台面高度
                 else if (parent.isSurface) {
                     elevationOffset = parent.surfaceHeight || 30;
                 }
@@ -120,12 +133,10 @@ export class PixiWorldBuilder {
             // 这里的判断逻辑是：找到中心点重叠且属于 'isSurface' 的家具
             const supportItem = GameStore.furniture.find(other => 
                 other.isSurface && 
-                other.id !== f.id && // 不是自己
-                // 简单的 AABB 包含检测
+                other.id !== f.id && 
                 centerX >= other.x && centerX < other.x + other.w &&
                 centerY >= other.y && centerY < other.y + other.h
             );
-
             if (supportItem) {
                 // 1. 获取桌子的支撑高度 (如果没有配，默认给个 20)
                 elevationOffset = supportItem.surfaceHeight || 20;
@@ -144,9 +155,9 @@ export class PixiWorldBuilder {
         // ==========================================
         
         // 1. 确定最终要用的图片名 (优先使用方向映射)
-        let targetFrameName = fAny.frameName;
-        if (fAny.frameDirs && fAny.frameDirs[dir]) {
-            targetFrameName = fAny.frameDirs[dir];
+        let targetFrameName = visualConfig.frameName;
+        if (visualConfig.frameDirs && visualConfig.frameDirs[dir]) {
+            targetFrameName = visualConfig.frameDirs[dir];
         }
 
         let sprite: Sprite | null = null;
@@ -158,7 +169,6 @@ export class PixiWorldBuilder {
             if (texture && texture !== Texture.EMPTY) {
                 sprite = new Sprite(texture);
                 visualHeight = texture.height;
-                // 使用图片原始宽高
                 sprite.width = texture.width;
                 sprite.height = texture.height;
             }
@@ -166,39 +176,38 @@ export class PixiWorldBuilder {
         
         // 🟢 分支 B: 使用 TileSheet 切片 (Tile Pos)
         if (!sprite) {
-            let tileX = f.tilePos ? f.tilePos.x : 0;
-            let tileY = f.tilePos ? f.tilePos.y : 0;
+            let tileX = visualConfig.tilePos ? visualConfig.tilePos.x : 0;
+            let tileY = visualConfig.tilePos ? visualConfig.tilePos.y : 0;
             let useTile = false;
 
             // 处理切片的方向偏移
-            if (fAny.tilePosDir && fAny.tilePosDir[dir]) {
-                tileX = fAny.tilePosDir[dir].x;
-                tileY = fAny.tilePosDir[dir].y;
+            if (visualConfig.tilePosDir && visualConfig.tilePosDir[dir]) {
+                tileX = visualConfig.tilePosDir[dir].x;
+                tileY = visualConfig.tilePosDir[dir].y;
                 useTile = true;
-            } else if (fAny.hasDirectionalSprites && f.tilePos) {
-                tileX += dir; // 假设横向排列
+            } else if (visualConfig.hasDirectionalSprites && visualConfig.tilePos) {
+                tileX += dir; 
                 useTile = true;
-            } else if (f.tilePos) {
+            } else if (visualConfig.tilePos) {
                 useTile = true;
             }
 
-            if (f.tileSheet && useTile) {
-                const sliceW = f.tileSize?.w || 48;
-                const sliceH = f.tileSize?.h || 48; 
+            if (visualConfig.tileSheet && useTile) {
+                const sliceW = visualConfig.tileSize?.w || 48;
+                const sliceH = visualConfig.tileSize?.h || 48; 
                 
-                // 如果定义了 textureHeight (如墙体高96)，则使用它，否则默认使用逻辑高度
-                visualHeight = fAny.textureHeight || f.h; 
+                visualHeight = visualConfig.textureHeight || f.h; 
 
-                const texture = getSlicedTexture(f.tileSheet, tileX, tileY, sliceW, sliceH);
+                const texture = getSlicedTexture(visualConfig.tileSheet, tileX, tileY, sliceW, sliceH);
                 sprite = new Sprite(texture);
-                sprite.width = f.w; // 宽度通常拉伸适配逻辑格
+                sprite.width = f.w; 
                 sprite.height = visualHeight;
             }
         }
 
         // 🟢 分支 C: 兼容单张图片路径
-        if (!sprite && f.imagePath && Assets.cache.has(f.imagePath)) {
-            sprite = Sprite.from(f.imagePath);
+        if (!sprite && visualConfig.imagePath && Assets.cache.has(visualConfig.imagePath)) {
+            sprite = Sprite.from(visualConfig.imagePath);
             sprite.width = f.w;
             sprite.height = f.h;
             visualHeight = f.h;
@@ -208,29 +217,16 @@ export class PixiWorldBuilder {
         // 最终组装：应用 Y 轴偏移
         // ==========================================
         if (sprite) {
-            // 1. 基础对齐偏移 (Alignment Offset)
-            // 用于处理像“树”这种图片很高，但占地很小(底部对齐)的物体
-            // 公式：逻辑底部 - 视觉底部。因为 Sprite 锚点默认在左上角(0,0)，
-            // 所以我们需要把 Sprite 向上推，使其底部和容器的逻辑底部 (f.h) 对齐。
-            // 偏移量 = 逻辑高度(f.h) - 视觉高度(visualHeight)
+            // 基础对齐偏移
             const alignmentOffset = f.h - visualHeight;
-
-            // 2. 应用所有偏移
-            // 最终 Y = 基础对齐偏移 - 桌子抬升高度 (负值代表向上)
             sprite.y = alignmentOffset - elevationOffset;
-
-            // 简单的镜像翻转处理 (可选，仅作示例)
-            // if (dir === 3) { sprite.scale.x = -1; sprite.anchor.x = 1; }
-
             container.addChild(sprite);
-        } 
+        }
         else {
-            // [兜底绘制] 纯色矩形 + 方向箭头
+            // [兜底绘制] 纯色矩形
             const g = new Graphics();
-            
-            // 同样应用视觉高度逻辑
-            visualHeight = fAny.textureHeight || f.h;
-            const yOffset = (f.h - visualHeight) - elevationOffset; // ✨ 加上 elevationOffset
+            visualHeight = visualConfig.textureHeight || f.h;
+            const yOffset = (f.h - visualHeight) - elevationOffset; 
 
             g.rect(0, yOffset, f.w, visualHeight);
             g.fill(f.color || 0xAAAAAA);
@@ -239,13 +235,12 @@ export class PixiWorldBuilder {
             // 绘制方向箭头
             const cx = f.w / 2;
             const cy = yOffset + visualHeight / 2;
-            
             g.beginPath();
             g.moveTo(cx, cy);
-            if (dir === 0) g.lineTo(cx, cy + 15);      // 下 (前)
-            else if (dir === 1) g.lineTo(cx - 15, cy); // 左
-            else if (dir === 2) g.lineTo(cx, cy - 15); // 上 (后)
-            else if (dir === 3) g.lineTo(cx + 15, cy); // 右
+            if (dir === 0) g.lineTo(cx, cy + 15);      
+            else if (dir === 1) g.lineTo(cx - 15, cy); 
+            else if (dir === 2) g.lineTo(cx, cy - 15); 
+            else if (dir === 3) g.lineTo(cx + 15, cy); 
             g.stroke({ width: 3, color: 0xFF5555 });
 
             container.addChild(g);

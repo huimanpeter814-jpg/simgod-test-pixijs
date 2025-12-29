@@ -94,6 +94,21 @@ export interface FurnitureSlot {
   isOccupied?: boolean; // 运行时标记：是否已被占用
 }
 
+export interface FurnitureVariant {
+  id: string;          // 变体ID，如 'red', 'blue', 'wood'
+  label: string;       // 显示名字，如 "红色", "原木色"
+  color?: string;      // 缩略图用的代表色，或者用于 tint
+  
+  // 原本在 Furniture 里的视觉字段移到这里
+  imagePath?: string;
+  tileSheet?: string;
+  tilePos?: { x: number; y: number };
+  tilePosDir?: { [key: number]: { x: number; y: number } }; // 方向映射
+  frameName?: string;
+  frameDirs?: { [key: number]: string };
+
+}
+
 export interface Furniture {
   id: string;
   x: number;
@@ -152,6 +167,10 @@ export interface Furniture {
   slots?: FurnitureSlot[];
   parentId?: string;
   parentSlotIndex?: number;
+
+  variants?: FurnitureVariant[]; // 可选：该家具的所有变体列表
+  currentVariantId?: string;     // 可选：当前实例选中的变体ID
+  defaultVariantId?: string;     // 可选：默认变体ID
 }
 
 export interface HousingUnit {

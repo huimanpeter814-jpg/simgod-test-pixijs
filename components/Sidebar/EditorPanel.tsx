@@ -216,6 +216,20 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
         }
     };
 
+    // 🟢 [新增] 处理变体切换
+    const handleVariantSelect = (variantId: string) => {
+        const { editor } = GameStore;
+        // 只有当前正在放置家具时才有效
+        if (editor.placingFurniture) {
+            editor.placingFurniture.currentVariantId = variantId;
+            // 强制 React 更新 (因为 GameStore 可能是深层对象，React 可能没监听到)
+            // 这里用一个小 trick 触发重渲染，或者如果你用了 observer 就不需要这行
+            setForceUpdate(prev => prev + 1); 
+        }
+    };
+    // 配合上面的 forceUpdate，如果之前没有定义
+    const [, setForceUpdate] = useState(0);
+
     // 1. 初始化与订阅
     useEffect(() => {
         // 防止重复初始化导致状态重置
@@ -435,6 +449,57 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
                     </div>
                 </div>
             )}
+
+            {/* ======================================================= */}
+                {/* 🟢 [新增] 变体选择器：当正在放置家具且该家具有变体时显示 */}
+                {/* ======================================================= */}
+                {GameStore.editor.placingFurniture && 
+                 GameStore.editor.placingFurniture.variants && 
+                 GameStore.editor.placingFurniture.variants.length > 0 && (
+                    <div className="mb-3 p-2 bg-white/5 rounded border border-white/10 animate-fade-in">
+                        <div className="text-[10px] text-gray-400 mb-1.5 flex justify-between">
+                            <span>选择样式</span>
+                            <span className="text-white">
+                                {GameStore.editor.placingFurniture.variants.find(
+                                    v => v.id === (GameStore.editor.placingFurniture?.currentVariantId || 
+                                                 GameStore.editor.placingFurniture?.defaultVariantId)
+                                )?.label}
+                            </span>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                            {GameStore.editor.placingFurniture.variants.map((v) => {
+                                const activeId = GameStore.editor.placingFurniture?.currentVariantId || 
+                                                 GameStore.editor.placingFurniture?.defaultVariantId;
+                                const isSelected = activeId === v.id;
+                                
+                                return (
+                                    <button
+                                        key={v.id}
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // 防止触发底部的点击
+                                            handleVariantSelect(v.id);
+                                        }}
+                                        className={`
+                                            relative w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center
+                                            ${isSelected 
+                                                ? 'border-yellow-400 scale-110 shadow-[0_0_8px_rgba(250,204,21,0.6)]' 
+                                                : 'border-white/20 hover:scale-105 hover:border-white/50'}
+                                        `}
+                                        style={{ backgroundColor: v.color || '#999' }}
+                                        title={v.label}
+                                    >
+                                        {/* 选中时的对勾 */}
+                                        {isSelected && (
+                                            <svg className="w-4 h-4 text-black/60 drop-shadow-sm" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
             {/* Build Mode: Furniture */}
             {isBuildMode && currentMode === 'furniture' && (
@@ -674,6 +739,8 @@ const EditorPanel: React.FC<EditorPanelProps> = ({ onClose }) => {
             </div>
         );
     };
+
+    
 
     return (
         <div 
