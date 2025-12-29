@@ -1,3 +1,4 @@
+import { FurnitureUtility, FurnitureTag } from '../config/furnitureTypes';
 import { Furniture } from '../types';
 
 const getTile = (id: number, width: number) => {
@@ -508,7 +509,7 @@ export const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<F
             { 
                 label: '电视',
                 color: '#ffffff',
-                utility: 'cinema_', 
+                utility: FurnitureUtility.TV, 
                 tags: ['tv'],
                 h: 12,
                 frameDirs:{

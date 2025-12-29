@@ -6,6 +6,7 @@ import { ITEMS, BUFFS } from '../../constants';
 import { IdleState, WorkingState, InteractionState, TransitionState, FetchingFoodState, OrderingState, FetchingBookState, BrowsingState } from './SimStates';
 import { getInteractionPos, minutes } from '../simulationHelpers';
 import { SocialLogic } from './social';
+import { FurnitureUtility, FurnitureTag } from '../../config/furnitureTypes';
 
 export const InteractionSystem = {
     /**
@@ -64,14 +65,13 @@ export const InteractionSystem = {
         
         // 1. 在家做饭/吃饭流程：
         // 如果点击的是 冰箱(fridge)、炉灶(stove) 或通用吃饭(hunger)，统一先去冰箱拿食材
-        if (obj.utility === 'fridge' || obj.utility === 'cooking' || obj.utility === 'hunger') {
+        if (obj.utility === FurnitureUtility.Fridge || obj.utility === FurnitureUtility.Cooking || obj.utility === FurnitureUtility.Dining) {
             sim.changeState(new FetchingFoodState(obj)); 
             return; // 拦截成功，不再执行后续默认逻辑
         }
 
         // 2. 外出就餐流程：
-        // 如果点击的是 收银台(buy_drink/eat_out) 或带有 cashier 标签的家具
-        if (obj.utility === 'buy_drink' || obj.utility === 'eat_out' || obj.tags?.includes('cashier')) {
+        if (obj.utility === FurnitureUtility.EatOut ) {
             sim.changeState(new OrderingState(obj));
             return; // 拦截成功
         }
@@ -79,7 +79,7 @@ export const InteractionSystem = {
         // ==========================================
         // 📖 [新增] 阅读行为链拦截
         // ==========================================
-        if (obj.utility === 'bookshelf' || obj.label.includes('书架')) {
+        if (obj.utility === FurnitureUtility.Book || obj.label.includes('书架')) {
             sim.changeState(new FetchingBookState(obj));
             return;
         }
@@ -89,7 +89,7 @@ export const InteractionSystem = {
         // ==========================================
         // 注意：buy_drink, buy_book, buy_item 都可以走这个流程
         // 但要注意区分：贩卖机(vending)通常是即时的，货架(shelf)才需要浏览和结账
-        const isVendingMachine = obj.utility === 'vending' || obj.label.includes('贩卖机');
+        const isVendingMachine = obj.utility === FurnitureUtility.Vending || obj.label.includes('贩卖机');
         const isShopItem = ['buy_item', 'buy_book', 'buy_drink'].includes(obj.utility) && !isVendingMachine;
 
         if (isShopItem) {
@@ -127,8 +127,8 @@ export const InteractionSystem = {
         // 4. 确定动作类型与时长
         let actionType = SimAction.Using;
         // 映射部分 utility 到特定 Action
-        if (obj.utility === 'energy') actionType = SimAction.Sleeping;
-        else if (obj.utility === 'work') actionType = SimAction.Working;
+        if (obj.utility === FurnitureUtility.Energy) actionType = SimAction.Sleeping;
+        else if (obj.utility === FurnitureUtility.Work) actionType = SimAction.Working;
         // 注意：Eating 相关已经被上面拦截了，这里剩下的可能是一些特殊的直接恢复类
         
         let durationMinutes = 30; // 默认时长

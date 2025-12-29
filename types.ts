@@ -1,3 +1,5 @@
+import {FurnitureUtility, FurnitureTag } from './config/furnitureTypes';
+
 export interface Vector2 {
   x: number;
   y: number;
@@ -127,8 +129,10 @@ export interface Furniture {
   rotation?: number; // 0: Down(Front), 1: Left, 2: Up(Back), 3: Right
   color: string;
   label: string;
-  utility: string;
-  tags?: string[]; 
+
+  utility: FurnitureUtility;
+  tags?: FurnitureTag[];
+
   dir?: string;
   multiUser?: boolean;
   gender?: string;
