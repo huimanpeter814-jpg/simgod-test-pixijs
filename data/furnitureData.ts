@@ -874,7 +874,88 @@ export const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<F
     'bedroom':{
         label:'卧室',
         items:[
-            {},
+            {
+                label: '双人床', utility: 'energy', tags: ['bedroom'], frameName: 'Bedroom_Singles_Shadowless_48x48_217.png',
+                variants: [
+                    { id: 'var_1', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_220.png' },
+                    { id: 'var_2', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_221.png' },
+                    { id: 'var_3', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_228.png' },
+                    { id: 'var_4', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_219.png' },
+                    { id: 'var_5', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_224.png' },
+                    { id: 'var_6', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_227.png' },
+                    { id: 'var_7', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_218.png' },
+                    { id: 'var_8', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_223.png' },
+                    { id: 'var_9', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_226.png' },
+                    { id: 'var_10', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_230.png' },
+                    { id: 'var_11', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_222.png' },
+                    { id: 'var_12', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_225.png' },
+                    { id: 'var_13', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_229.png' },
+                ]
+            },
+            {
+                label: '双人床', utility: 'energy', tags: ['bedroom'], frameName: 'Bedroom_Singles_Shadowless_48x48_233.png',
+                variants: [
+                    { id: 'var_1', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_234.png' },
+                    { id: 'var_2', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_242.png' },
+                    { id: 'var_3', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_244.png' },
+                    { id: 'var_4', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_231.png' },
+                    { id: 'var_5', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_232.png' },
+                    { id: 'var_6', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_241.png' },
+                    { id: 'var_7', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_243.png' },
+                    { id: 'var_8', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_236.png' },
+                    { id: 'var_9', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_239.png' },
+                    { id: 'var_10', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_240.png' },
+                    { id: 'var_11', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_235.png' },
+                    { id: 'var_12', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_237.png' },
+                    { id: 'var_13', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_238.png' },
+                ]
+            },
+            {
+                label: '双人床', utility: 'energy', tags: ['bedroom'], frameName: 'Bedroom_Singles_Shadowless_48x48_266.png',
+                variants: [
+                    { id: 'var_1', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_263.png' },
+                    { id: 'var_2', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_265.png' },
+                    { id: 'var_3', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_260.png' },
+                    { id: 'var_4', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_264.png' },
+                    { id: 'var_5', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_261.png' },
+                    { id: 'var_6', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_262.png' },
+                    { id: 'var_7', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_259.png' },
+                    { id: 'var_8', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_267.png' },
+                    { id: 'var_9', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_268.png' },
+                    { id: 'var_10', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_269.png' },
+                    { id: 'var_11', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_270.png' },
+                    { id: 'var_12', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_271.png' },
+                    { id: 'var_13', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_272.png' },
+                ]
+            },
+            {
+                label: '双人床', utility: 'energy', tags: ['bedroom'], frameName: 'Bedroom_Singles_Shadowless_48x48_246.png',
+                variants: [
+                    { id: 'var_1', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_253.png' },
+                    { id: 'var_2', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_247.png' },
+                    { id: 'var_3', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_254.png' },
+                    { id: 'var_4', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_245.png' },
+                    { id: 'var_5', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_252.png' },
+                    { id: 'var_6', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_248.png' },
+                    { id: 'var_7', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_255.png' },
+                    { id: 'var_8', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_249.png' },
+                    { id: 'var_9', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_256.png' },
+                    { id: 'var_10', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_250.png' },
+                    { id: 'var_11', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_257.png' },
+                    { id: 'var_12', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_251.png' },
+                    { id: 'var_13', label: '双人床', frameName: 'Bedroom_Singles_Shadowless_48x48_258.png' },
+                ]
+            },
+            {
+                label: '婴儿床', utility: 'nap_crib', frameName: 'Bedroom_Singles_Shadowless_48x48_504.png',
+                variants: [
+                    { id: 'var_1', label: '婴儿床', frameName: 'Bedroom_Singles_Shadowless_48x48_491.png' },
+                    { id: 'var_2', label: '婴儿床', frameName: 'Bedroom_Singles_Shadowless_48x48_482.png' },
+                    { id: 'var_3', label: '婴儿床', frameName: 'Bedroom_Singles_Shadowless_48x48_501.png' },
+                    { id: 'var_4', label: '婴儿床', frameName: 'Bedroom_Singles_Shadowless_48x48_493.png' },
+                    { id: 'var_5', label: '婴儿床', frameName: 'Bedroom_Singles_Shadowless_48x48_481.png' },
+                ]
+            },
         ]
     },
     'bathroom':{
