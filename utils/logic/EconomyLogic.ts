@@ -1,5 +1,5 @@
 import { Sim } from '../Sim';
-import { GameStore } from '../simulation';
+import { GameStore } from '../GameStore';
 import { ITEMS, BUFFS } from '../../constants';
 import { SocialLogic } from './social';
 import { DecisionLogic } from './decision';

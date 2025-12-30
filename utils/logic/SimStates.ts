@@ -1,5 +1,5 @@
 import { Sim } from '../Sim';
-import { GameStore } from '../simulation';
+import { GameStore } from '../GameStore';
 import { SimAction, JobType, NeedType, AgeStage, Furniture } from '../../types';
 import { CareerLogic } from './career';
 import { DecisionLogic } from './decision';

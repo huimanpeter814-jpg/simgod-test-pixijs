@@ -1,5 +1,5 @@
 import { Sim } from '../Sim';
-import { GameStore } from '../simulation';
+import { GameStore } from '../GameStore';
 import { AGE_CONFIG, JOBS, BUFFS, SURNAMES, MBTI_TYPES } from '../../constants';
 import { SocialLogic } from './social';
 import { CareerLogic } from './career';

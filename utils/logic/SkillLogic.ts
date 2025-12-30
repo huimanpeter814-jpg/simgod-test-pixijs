@@ -1,5 +1,5 @@
 import { Sim } from '../Sim';
-import { GameStore } from '../simulation';
+import { GameStore } from '../GameStore';
 import { BUFFS } from '../../constants';
 
 // [修正] 技能里程碑配置：统一为 20/40/60/80/100 (5级制)

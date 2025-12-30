@@ -1,5 +1,5 @@
 import type { Sim } from '../Sim'; 
-import { GameStore } from '../simulation';
+import { GameStore } from '../GameStore';
 import { CONFIG, BUFFS} from '../../constants'; 
 import { Furniture, SimAction, AgeStage, JobType, SimIntent, QueuedAction, Relationship} from '../../types';
 import { getInteractionPos } from '../simulationHelpers';

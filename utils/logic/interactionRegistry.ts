@@ -1,10 +1,12 @@
-import { ITEMS, BUFFS } from '../../constants';
+import { BUFFS } from '../../config/gameplay';
 import { Furniture, SimAction, AgeStage } from '../../types';
 import type { Sim } from '../Sim';
 import { SchoolLogic } from './school';
 import { SkillLogic } from './SkillLogic'; 
-import { GameStore } from '../simulation';
-import { InteractionType, ItemTag, NeedType } from '../../config/gameConstants';
+import { GameStore } from '../GameStore';
+import { InteractionType, NeedType } from '../../config/gameConstants';
+import { ITEM_REGISTRY } from '../../data/items'; // 🌟 [新增] 引入物品库
+import { EconomyLogic } from './EconomyLogic';
 
 // === 接口定义 ===
 export interface InteractionHandler {

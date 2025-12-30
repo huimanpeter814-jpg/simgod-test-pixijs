@@ -1,5 +1,5 @@
 import { Sim } from '../Sim';
-import { GameStore } from '../simulation';
+import { GameStore } from '../GameStore';
 import { JOBS, BUFFS, HOLIDAYS } from '../../constants';
 import { Furniture, JobType, SimAction, AgeStage, Job,NeedType } from '../../types';
 import { CommutingState, IdleState, WorkingState } from './SimStates';

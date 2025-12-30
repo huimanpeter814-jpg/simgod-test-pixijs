@@ -22,35 +22,35 @@ export const WORLD_SURFACE_ITEMS = [
     { 
         id:'foundation_corner_top',
         label: '地基-上角', w: 96, h: 96, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(377,29), "tileSize": { "w": 96, "h": 96 },
     },
     { 
         id:'foundation_corner_bl',
         label: '地基-左下', w: 96, h: 96, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(435,29), "tileSize": { "w": 96, "h": 96 },
     },
     { 
         id:'foundation_corner_br"',
         label: '地基-右下', w: 96, h: 96, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(437,29), "tileSize": { "w": 96, "h": 96 },
     },
     { 
         id:'foundation_edge_top"',
         label: '地基-上边', w: 96, h: 96, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(384,29), "tileSize": { "w": 96, "h": 96 },
     },
     { 
         id:'foundation_edge_bottom"',
         label: '地基-下边', w: 96, h: 96, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(422,29), "tileSize": { "w": 96, "h": 96 },
     },
@@ -58,28 +58,28 @@ export const WORLD_SURFACE_ITEMS = [
     { 
         id:'surface_road',
         label: '马路', w: 48, h: 48, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: { "x": 4, "y": 7 }, "tileSize": { "w": 48, "h": 48 },
     },
     { 
         id:'surface_road_line',
         label: '马路_竖线', w: 48, h: 48, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: { "x": 9, "y": 9 }, "tileSize": { "w": 48, "h": 48 },
     },
     { 
         id:'road_corner',
         label: '马路转角', w: 48, h: 48, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(154,29), "tileSize": { "w": 48, "h": 48 },
     },
     { 
         id:'zebra_crossing',
         label: '斑马线', w: 96, h: 48, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(123,29), 
         tilePosDir: {
@@ -94,14 +94,14 @@ export const WORLD_SURFACE_ITEMS = [
     { 
         id:'floor_tile_big',
         label: '大地砖', w: 96, h: 96, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(9,29), "tileSize": { "w": 96, "h": 96 },
     },
     { 
         id:'floor_tile_small',
         label: '小地砖', w: 48, h: 48, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/2_City_Terrains_48x48.png', 
         tilePos: getTile(30,29), "tileSize": { "w": 48, "h": 48 },
     },
@@ -109,14 +109,14 @@ export const WORLD_SURFACE_ITEMS = [
     { 
         id:'grass',
         label: '草地', w: 48, h: 48, color: '#ffffff',
-        type:ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/3_City_Props_48x48.png', 
         tilePos: getTile(281,32), "tileSize": { "w": 48, "h": 48 },
     },
     { 
         id:'grass_flower',
         label: '草地_花', w: 48, h: 48, color: '#ffffff',
-        type: ItemTag.Floor,
+        tags: [ItemTag.Floor],
         sheetPath: '/src/assets/world_builder/3_City_Props_48x48.png', 
         tilePos: getTile(250,32), "tileSize": { "w": 48, "h": 48 },
     },
@@ -487,7 +487,7 @@ export const FURNITURE_CATALOG: Record<string, { label: string, items: Partial<F
                     [InteractionType.OpenStorage]: {
                         capacity: 50,
                         preservesFood: true,
-                        inventoryType: 'food'
+                        inventoryType: ItemTag.Food
                     },
                     // 2. 做饭的起点 (取食材)
                     // 即使它本身不加热，但做饭逻辑通常会寻找 "FoodSource"
