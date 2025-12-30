@@ -1,10 +1,10 @@
 import { ITEMS, BUFFS } from '../../constants';
-import { Furniture, NeedType, SimAction, AgeStage } from '../../types';
+import { Furniture, SimAction, AgeStage } from '../../types';
 import type { Sim } from '../Sim';
 import { SchoolLogic } from './school';
 import { SkillLogic } from './SkillLogic'; 
 import { GameStore } from '../simulation';
-import { FurnitureUtility, FurnitureTag } from '../../config/furnitureTypes';
+import { InteractionType, ItemTag, NeedType } from '../../config/gameConstants';
 
 // === 接口定义 ===
 export interface InteractionHandler {
@@ -44,7 +44,7 @@ const genericRestore = (needType: NeedType, timeKey?: string) => {
 
 // 🆕 核心交互策略表
 export const INTERACTIONS: Record<string, InteractionHandler> = {
-    [FurnitureUtility.Vending]: {
+    [InteractionType.UseVending]: {
         verb: '咕嘟咕嘟', duration: 5,
         onStart: (sim, obj) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("够不着...", 'bad'); return false; }
@@ -62,7 +62,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.say("没钱买水...", 'bad'); return false;
         }
     },
-    [FurnitureUtility.BuyBook]: {
+    [InteractionType.BuyBook]: {
         verb: '买书', duration: 15,
         onStart: (sim, obj) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("看不懂...", 'bad'); return false; }
@@ -75,7 +75,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.say("买不起...", 'bad'); return false;
         }
     },
-    [FurnitureUtility.Shelf]: {
+    [InteractionType.BuyItem]: {
         verb: '购物 🛍️', duration: 15,
         onStart: (sim, obj) => {
             // [修复] 婴幼儿不能购物
@@ -117,7 +117,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.needs[NeedType.Fun] += 5;
         }
     },
-    [FurnitureUtility.Exercise]: {
+    [InteractionType.Exercise]: {
         verb: '健身', duration: 60,
         onStart: (sim) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("太危险了!", 'bad'); return false; }
@@ -151,7 +151,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             }
         }
     },
-    [FurnitureUtility.Stretch]: {
+    [InteractionType.Stretch]: {
         verb: '瑜伽', duration: 60,
         onStart: (sim) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("还是玩积木吧", 'bad'); return false; }
@@ -165,7 +165,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.constitution = Math.min(100, sim.constitution + 0.03 * f);
         }
     },
-    [FurnitureUtility.Lift]: {
+    [InteractionType.Lift]: {
         verb: '举铁 💪', duration: 45,
         onStart: (sim) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("太重了...", 'bad'); return false; }
@@ -186,7 +186,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
     // 🆕 园艺：产出蔬菜
-    [FurnitureUtility.Garden]: {
+    [InteractionType.Garden]: {
         verb: '照料植物 🌿', duration: 60,
         onStart: (sim) => {
             // [新增] 婴幼儿不能园艺
@@ -233,7 +233,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             }
         }
     },
-    [FurnitureUtility.Fishing]: {
+    [InteractionType.Fish]: {
         verb: '钓鱼 🎣', duration: 60,
         onStart: (sim) => {
             // [新增] 婴幼儿不能钓鱼
@@ -269,7 +269,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
     // 🆕 烹饪
-    [FurnitureUtility.Cooking]: {
+    [InteractionType.Cook]: {
         verb: '烹饪', duration: 90,
         getDuration: (sim) => 90 * SkillLogic.getPerkModifier(sim, 'cooking', 'speed'),
         onStart: (sim) => { 
@@ -312,7 +312,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             }
         }
     },
-    [FurnitureUtility.Art]: {
+    [InteractionType.ViewArt]: {
         verb: '看展览 🎨', duration: 90,
         onStart: (sim) => { sim.addBuff(BUFFS.art_inspired); return true; },
         onUpdate: (sim, obj, f, getRate) => {
@@ -322,7 +322,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
     // 🆕 绘画
-    [FurnitureUtility.Easel]: {
+    [InteractionType.Paint]: {
         verb: '绘画 🖌️', duration: 120,
         getDuration: (sim) => 120 * SkillLogic.getPerkModifier(sim, 'creativity', 'speed'),
         onStart: (sim) => {
@@ -365,7 +365,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.earnMoney(Math.floor(value), 'selling_art');
         }
     },
-    [FurnitureUtility.Game]: {
+    [InteractionType.PlayGame]: {
         verb: '玩耍 🎈', duration: 45,
         onStart: (sim) => { sim.addBuff(BUFFS.playful); return true; },
         onUpdate: (sim, obj, f, getRate) => {
@@ -374,7 +374,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.needs[NeedType.Hygiene] -= getRate(300);
         }
     },
-    [FurnitureUtility.Dance]: {
+    [InteractionType.Dance]: {
         verb: '跳舞 💃', duration: 30,
         onStart: (sim) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("站不稳...", 'bad'); return false; }
@@ -388,7 +388,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.needs[NeedType.Energy] -= getRate(200); 
         }
     },
-    [FurnitureUtility.PracticeSpeech]: {
+    [InteractionType.PracticeSpeech]: {
         verb: '练习演讲 🗣️', duration: 45,
         getVerb: () => '对着镜子练习',
         onStart: (sim) => {
@@ -411,7 +411,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
     // 🆕 下棋 (逻辑)
-    [FurnitureUtility.PlayChess]: {
+    [InteractionType.Chess]: {
         verb: '下棋 ♟️', duration: 60,
         onStart: (sim) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("只会吃棋子...", 'bad'); return false; }
@@ -430,7 +430,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
     // 🆕 演奏乐器 (音乐)
-    [FurnitureUtility.Instrument]: {
+    [InteractionType.PracticeMusic]: {
         verb: '演奏 🎵', duration: 45,
         onStart: (sim) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("乱按...", 'bad'); return false; }
@@ -445,7 +445,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.say("🎶 ~", 'act');
         }
     },
-   [FurnitureUtility.Work]: {
+   [InteractionType.Work]: {
         verb: '使用电脑', 
         duration: 240, // 缩短基础时长
         getDuration: (sim) => sim.isGaming ? 120 : 480, // 玩游戏时间短，工作时间长
@@ -532,7 +532,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
     // [优化] 电视/电影
-    [FurnitureUtility.Cinema]: { 
+    [InteractionType.Watch]: { 
         verb: '看电视 📺', duration: 90,
         getVerb: (sim, obj) => obj.label.includes('电影') ? '看电影 🎬' : '看电视 📺',
         onStart: (sim) => { 
@@ -548,7 +548,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
     },
 
     // [新增] 阅读 (对应书架)
-    [FurnitureUtility.Book]: {
+    [InteractionType.Read]: {
         verb: '阅读 📖', duration: 60,
         onStart: (sim) => {
             if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("看不懂...", 'bad'); return false; }
@@ -564,7 +564,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
         }
     },
 
-    [NeedType.Energy]: {
+    [InteractionType.Sleep]: {
         verb: '睡觉 💤', duration: 420,
         getVerb: (sim, obj) => (obj.label.includes('沙发') || obj.label.includes('长椅')) ? '小憩' : '睡觉 💤',
         getDuration: (sim, obj) => {
@@ -595,7 +595,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             }
         }
     },
-    [FurnitureUtility.Shower]: {
+    [InteractionType.Shower]: {
         verb: '洗澡 🚿', duration: 20,
         onStart: (sim) => { 
             // [修复 B] 禁止婴幼儿独自使用淋浴
@@ -616,15 +616,15 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             if (sim.appearanceScore < 80) sim.appearanceScore += 0.05 * f;
         }
     },
-    [NeedType.Hunger]: {
+    [InteractionType.Eat]: {
         verb: '用餐 🍴', duration: 30,
         onStart: (sim) => { sim.enterInteractionState(SimAction.Eating); return true; },
         onUpdate: genericRestore(NeedType.Hunger)
     },
-    [NeedType.Comfort]: {
+    [InteractionType.Sit]: {
         verb: '休息', 
         duration: 60,
-        getVerb: () => '小憩 💤',
+        getVerb: () => '休息 🛋️',
         onStart: (sim) => { 
             sim.enterInteractionState(SimAction.Using);
             return true; 
@@ -635,7 +635,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.needs[NeedType.Fun] += getRate(60);
         }
     },
-    [FurnitureUtility.EatOut]: {
+    [InteractionType.OrderFood]: {
         verb: '享用美食 🍝', duration: 60,
         onStart: (sim, obj) => {
              const cost = obj.cost || 60;
@@ -651,7 +651,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.addBuff(BUFFS.good_meal);
         }
     },
-    [FurnitureUtility.BuyFood]: {
+    [InteractionType.BuyFood]: {
         verb: '吃点心 🌭', 
         duration: 15,
         onStart: (sim, obj) => {
@@ -691,14 +691,14 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             }
         }
     },
-    [FurnitureUtility.NapCrib]: {
+    [InteractionType.NapCrib]: {
         verb: '午睡 👶', duration: 120,
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs[NeedType.Energy] += getRate(120);
             if (sim.ageStage === AgeStage.Infant) sim.health += 0.01 * f;
         }
     },
-    [FurnitureUtility.PlayBlocks]: {
+    [InteractionType.PlayBlocks]: {
         verb: '堆积木 🧱', duration: 40,
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs[NeedType.Fun] += getRate(60);
@@ -706,7 +706,7 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             sim.needs[NeedType.Social] += getRate(180); 
         }
     },
-    [FurnitureUtility.Study]: {
+    [InteractionType.Study]: {
         verb: '写作业 📝', duration: 60,
         onStart: (sim) => {
             if (sim.mood < 40 && !sim.mbti.includes('J')) {

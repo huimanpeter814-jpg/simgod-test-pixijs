@@ -1,4 +1,4 @@
-import {FurnitureUtility, FurnitureTag } from './config/furnitureTypes';
+//import {FurnitureUtility, FurnitureTag } from './config/furnitureTypes';
 // 2. ✨ 新增：引入严格的枚举定义 (Step 1 创建的文件)
 // 注意：请确保 NeedType 已经移动到了 gameConstants.ts，否则这里不要 import NeedType，而是保留原定义
 import { InteractionType, ItemTag, SlotType, NeedType } from './config/gameConstants';
@@ -118,7 +118,7 @@ export interface CookConfig {
 export interface StorageConfig {
   capacity: number;        // 容量
   preservesFood: boolean;  // 是否保鲜 (冰箱=true)
-  inventoryType: 'food' | 'general' | 'clothes';
+  inventoryType: ItemTag;
 }
 
 // 💼 工作/学习配置
@@ -135,7 +135,7 @@ export interface FunConfig {
 
 // 🛒 购物/贩卖机配置
 export interface ShopConfig {
-  shopType: 'food' | 'drink' | 'general';
+  shopType: ItemTag;
   priceMultiplier?: number;
 }
 
@@ -146,7 +146,7 @@ export interface InteractionConfigs {
   [InteractionType.Cook]?: CookConfig;
   [InteractionType.OpenStorage]?: StorageConfig;
   [InteractionType.Work]?: WorkConfig;
-  [InteractionType.Watch]?: FunConfig;
+  [InteractionType.WatchTV]?: FunConfig;
   [InteractionType.PlayGame]?: FunConfig;
   [InteractionType.BuyItem]?: ShopConfig;
   [InteractionType.OrderFood]?: ShopConfig;
@@ -159,7 +159,7 @@ export interface FurnitureSlot {
   x: number;      // 相对于家具原点的逻辑 X 偏移
   y: number;      // 相对于家具原点的逻辑 Y 偏移
   height: number; // 这个插槽的视觉高度（解决你的“猜高度”问题）
-  type?: 'decor' | 'computer' | 'food'; // (可选) 限制这个插槽能放什么
+  type?: ItemTag;
   isOccupied?: boolean; // 运行时标记：是否已被占用
 }
 
@@ -193,7 +193,7 @@ export interface Furniture {
   // 暂时保留以兼容旧代码，但在 Step 4 之后将移除
   // ==========================================
   /** @deprecated 请使用 interactions 配置替代 */
-  utility?: FurnitureUtility; // 改为可选，允许新家具不填
+  //utility?: FurnitureUtility; // 改为可选，允许新家具不填
  
   // ==========================================
   // ✨ 重构区域 (New System)

@@ -51,6 +51,11 @@ export enum ItemTag {
     DanceFloor = 'dance_floor',   // 舞池/跳舞毯
     Chess = 'chess',              // 如下棋
     Toy = 'toy',                  // 玩具
+
+    General = 'general',           // 通用标签 (适用于任何物品)
+    Clothes = 'clothes',           // 衣物
+    Drink = 'drink',              // 饮品
+    Book = 'book',                 // 书籍
   }
   
   // ==========================================
@@ -64,6 +69,8 @@ export enum ItemTag {
     UseToilet = 'use_toilet',    // 上厕所 (对应原 utility: bladder)
     WashHands = 'wash_hands',    // 洗手 (对应原 utility: hygiene)
     Shower = 'shower',           // 洗澡 (对应原 utility: hygiene)
+
+    NapCrib = 'nap_crib',     // 婴儿床小憩 (对应原 utility: nap_crib)
     
     // --- 饮食相关 ---
     // 注意：原 utility: fridge/cooking 被拆分为具体的行为配置
@@ -81,14 +88,29 @@ export enum ItemTag {
     AttendingSchool = 'school_attend', // 上学签到
     
     // --- 娱乐 ---
-    Watch = 'watch',             // 观看 (对应原 utility: TV, cinema_)
+    WatchTV = 'watch',             // 观看 (对应原 utility: TV, cinema_)
     PlayGame = 'play_game',      // 玩游戏 (对应原 utility: play)
     ViewArt = 'view_art',        // 欣赏艺术 (对应原 utility: decor)
+    Movie = 'movie',             // 观看电影 (对应原 utility: cinema_)
     
     // --- 商业交互 ---
     BuyItem = 'buy_item',        // 购买物品 (对应原 utility: buy_item, buy_drink)
+    BuyBook = 'buy_book',      // 购买书籍 (对应原 utility: buy_book)
+    BuyFood = 'buy_food',      // 购买食物/小吃 (对应原 utility: buy_food)
     OrderFood = 'order_food',    // 点餐 (对应原 utility: eat_out/ordering)
     Checkout = 'checkout',       // 结账 (对应原 utility: cashier)
+
+    Read = 'read',               // 对应 BuyBook / Book
+    Study = 'study',             // 对应 Study
+    Garden = 'garden',           // 对应 Garden
+    Fish = 'fish',               // 对应 Fishing
+    Dance = 'dance',             // 对应 Dance
+    PracticeSpeech = 'practice_speech', // 对应 PracticeSpeech
+    Chess = 'chess',             // 对应 PlayChess
+    UseVending = 'use_vending',  // 对应 Vending (喝饮料)
+    Stretch = 'stretch',         // 对应 Stretch (瑜伽)
+    Lift = 'lift',               // 对应 Lift (举铁)
+
   }
   
   // ==========================================
