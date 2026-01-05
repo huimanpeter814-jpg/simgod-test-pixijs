@@ -1,4 +1,4 @@
-//import {FurnitureUtility, FurnitureTag } from './config/furnitureTypes';
+import {FurnitureUtility, FurnitureTag } from './config/furnitureTypes';
 // 2. ✨ 新增：引入严格的枚举定义 (Step 1 创建的文件)
 // 注意：请确保 NeedType 已经移动到了 gameConstants.ts，否则这里不要 import NeedType，而是保留原定义
 import { InteractionType, ItemTag, SlotType, NeedType } from './config/gameConstants';
@@ -118,43 +118,25 @@ export interface CookConfig {
 export interface StorageConfig {
   capacity: number;        // 容量
   preservesFood: boolean;  // 是否保鲜 (冰箱=true)
-  inventoryType: ItemTag;
+  inventoryType: 'food' | 'general' | 'clothes';
 }
 
-// 🌟 [新增] 机构/上班上学配置
-export interface InstitutionConfig {
-  type: 'school' | 'work' | 'service'; // 机构类型
-  startHour?: number;
-  endHour?: number;
+// 💼 工作/学习配置
+export interface WorkConfig {
+  jobType?: string[];      // 允许的工作类型
+  efficiency: number;      // 工作效率倍率 (1.0 = 正常)
 }
 
-// 🌟 [新增] 技能/练习配置
-export interface SkillConfig {
-  skillId: string;           // 练什么技能 (如 'piano', 'painting', 'logic')
-  xpRate: number;            // 经验获取倍率 (基础通常是 0.1)
-  funRate?: number;          // 娱乐增减 (练琴可能加娱乐，做题可能减娱乐)
-  energyCost?: number;       // 精力消耗倍率
-  verb?: string;             // 动作名 (如 "弹奏", "练习")
-  outputTag?: ItemTag;         // (可选，产出物标签，如画完给个 Art 物品)
-  failureChance?: number;      // (可选，基础失败率)
+// 🎮 娱乐配置 (电视/游戏机)
+export interface FunConfig {
+  funRating: number;       // 娱乐值评分
+  groupActivity?: boolean; // 是否允许多人一起 (如看电视)
 }
 
-// 🌟 [新增] 娱乐/使用设施配置
-export interface EntertainmentConfig {
-  funRate: number;           // 娱乐恢复速度
-  energyCost?: number;       // 精力消耗
-  verb?: string;             // 动作名 (如 "看电视", "玩游戏")
-  contentTags?: string[];    // 内容标签 (如 ['cartoon', 'news']) 用于后续扩展
-  validAges?: string[];      // 允许使用的年龄段
-}
-
-// 🌟 [新增] 商店/购物配置
+// 🛒 购物/贩卖机配置
 export interface ShopConfig {
-  shopName?: string;         // 商店名称 (显示在UI上)
-  inventory: string[];       // 卖什么？(填 ItemRegistry 里的 ID)
-  priceMultiplier?: number;  // 价格系数 (0=免费/自家冰箱, 1=原价, 1.5=高价)
-  verb?: string;             // 动作名 (如 "购买", "拿取")
-  interactionDuration?: number; // 交互耗时
+  shopType: 'food' | 'drink' | 'general';
+  priceMultiplier?: number;
 }
 
 // 🛠️ 总表：将枚举映射到具体配置
@@ -162,11 +144,12 @@ export interface InteractionConfigs {
   [InteractionType.Sit]?: SitConfig;
   [InteractionType.Sleep]?: SleepConfig;
   [InteractionType.Cook]?: CookConfig;
-  [InteractionType.OpenStorage]?: StorageConfig; // 冰箱作为容器
-  [InteractionType.Shop]?: ShopConfig;
-  [InteractionType.PracticeSkill]?: SkillConfig;
-  [InteractionType.UseEntertainment]?: EntertainmentConfig;
-  [InteractionType.AttendInstitution]?: InstitutionConfig;
+  [InteractionType.OpenStorage]?: StorageConfig;
+  [InteractionType.Work]?: WorkConfig;
+  [InteractionType.Watch]?: FunConfig;
+  [InteractionType.PlayGame]?: FunConfig;
+  [InteractionType.BuyItem]?: ShopConfig;
+  [InteractionType.OrderFood]?: ShopConfig;
   
   // 允许其他未详细定义的交互使用通用对象，防止报错
   [key: string]: any; 
@@ -176,7 +159,7 @@ export interface FurnitureSlot {
   x: number;      // 相对于家具原点的逻辑 X 偏移
   y: number;      // 相对于家具原点的逻辑 Y 偏移
   height: number; // 这个插槽的视觉高度（解决你的“猜高度”问题）
-  type?: ItemTag;
+  type?: 'decor' | 'computer' | 'food'; // (可选) 限制这个插槽能放什么
   isOccupied?: boolean; // 运行时标记：是否已被占用
 }
 
@@ -205,6 +188,13 @@ export interface Furniture {
   color: string;
   label: string;
 
+  // ==========================================
+  // 🚧 弃用区域 (Deprecated)
+  // 暂时保留以兼容旧代码，但在 Step 4 之后将移除
+  // ==========================================
+  /** @deprecated 请使用 interactions 配置替代 */
+  utility?: FurnitureUtility; // 改为可选，允许新家具不填
+ 
   // ==========================================
   // ✨ 重构区域 (New System)
   // ==========================================

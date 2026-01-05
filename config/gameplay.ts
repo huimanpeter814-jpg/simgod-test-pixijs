@@ -61,6 +61,22 @@ export const HAIR_STYLE_NAMES = [
     '脏辫', '波浪长卷发', '半扎公主头'
 ];
 
+export const ITEMS = [
+    { id: 'drink', label: '冰美式', cost: 28, needs: { [NeedType.Hunger]: 2, [NeedType.Fun]: 5 }, trigger: 'street' },
+    { id: 'book', label: '设计年鉴', cost: 180, needs: { [NeedType.Fun]: 10 }, skill: 'logic', skillVal: 5, attribute: 'iq', attrVal: 2, trigger: 'smart' },
+    { id: 'cinema_2d', label: '文艺片票', cost: 65, needs: { [NeedType.Fun]: 40 }, trigger: 'bored' },
+    { id: 'cinema_3d', label: 'IMAX大片', cost: 120, needs: { [NeedType.Fun]: 60 }, trigger: 'rich' },
+    { id: 'museum_ticket', label: '特展门票', cost: 100, buff: 'art_inspired', needs: { [NeedType.Fun]: 50 }, attribute: 'creativity', attrVal: 3, trigger: 'smart' },
+    { id: 'gym_pass', label: '私教课', cost: 800, needs: { [NeedType.Energy]: -20 }, skill: 'athletics', skillVal: 5, attribute: 'constitution', attrVal: 4, trigger: 'active' },
+    { id: 'medicine', label: '急救包', cost: 300, buff: 'healing', trigger: 'sick' },
+    { id: 'game_coin', label: '代币', cost: 10, needs: { [NeedType.Fun]: 20 }, trigger: 'bored' },
+    { id: 'cosmetic_set', label: '高级美妆', cost: 2200, needs: { [NeedType.Fun]: 20 }, attribute: 'appearanceScore', attrVal: 5, trigger: 'beauty' },
+    { id: 'protein_powder', label: '蛋白粉', cost: 450, needs: { [NeedType.Hunger]: 10 }, attribute: 'constitution', attrVal: 3, trigger: 'active' },
+    { id: 'puzzle_game', label: '益智模型', cost: 260, needs: { [NeedType.Fun]: 20 }, attribute: 'iq', attrVal: 2, trigger: 'smart' },
+    { id: 'fashion_mag', label: '时尚杂志', cost: 45, needs: { [NeedType.Fun]: 10 }, attribute: 'creativity', attrVal: 2, trigger: 'art' },
+    { id: 'gift_chocolates', label: '进口巧克力', cost: 320, needs: { [NeedType.Hunger]: 10, [NeedType.Fun]: 10 }, rel: true, trigger: 'love' },
+    { id: 'protection', label: '安全措施', cost: 20, trigger: 'safe_sex' },
+];
 
 export const SKILLS = [
     { id: 'cooking', label: '烹饪' }, { id: 'athletics', label: '健身' }, { id: 'music', label: '乐理' },

@@ -51,11 +51,6 @@ export enum ItemTag {
     DanceFloor = 'dance_floor',   // 舞池/跳舞毯
     Chess = 'chess',              // 如下棋
     Toy = 'toy',                  // 玩具
-
-    General = 'general',           // 通用标签 (适用于任何物品)
-    Clothes = 'clothes',           // 衣物
-    Drink = 'drink',              // 饮品
-    Book = 'book',                 // 书籍
   }
   
   // ==========================================
@@ -63,49 +58,37 @@ export enum ItemTag {
   // 定义“能对它做什么”，替代原来的 utility
   // ==========================================
   export enum InteractionType {
-   // --- 基础状态 ---
-    Idle = 'idle',
-
-    // --- 核心生理需求 (保留) ---
-    Sit = 'sit',                 // 坐下/休息
-    Sleep = 'sleep',             // 睡觉
-    UseToilet = 'use_toilet',    // 上厕所
-    Shower = 'shower',           // 洗澡
+    // --- 基础生理需求 ---
+    Sit = 'sit',                 // 坐下 (对应原 utility: comfort)
+    Sleep = 'sleep',             // 睡觉 (对应原 utility: energy, nap_crib)
+    UseToilet = 'use_toilet',    // 上厕所 (对应原 utility: bladder)
+    WashHands = 'wash_hands',    // 洗手 (对应原 utility: hygiene)
+    Shower = 'shower',           // 洗澡 (对应原 utility: hygiene)
     
-    // --- 饮食与烹饪 (合并) ---
-    // 无论是吃零食、喝饮料还是吃大餐，都是 Eating，区别在于吃的东西
-    Dining = 'dining',           
-    // 无论是微波炉还是燃气灶，都是 Cooking，区别在于设备等级
-    Cook = 'cook',               
+    // --- 饮食相关 ---
+    // 注意：原 utility: fridge/cooking 被拆分为具体的行为配置
+    OpenStorage = 'open_storage',// 打开储物/冰箱 (对应原 utility: fridge)
+    Cook = 'cook',               // 烹饪 (对应原 utility: cooking)
+    Eat = 'eat',                 // 吃饭 (对应原 utility: dining)
+    WashDishes = 'wash_dishes',  // 洗碗 (对应原 utility: cleaning)
     
-    // --- 🌟 重构核心：通用商业交互 ---
-    // 所有的购买行为（买书、买水、买门票、自动贩卖机）统统走这个
-    // 区别在于家具的 inventory（商品列表）不同
-    Shop = 'shop',                
-
-    // --- 🌟 重构核心：通用娱乐/技能 ---
-    // 看电视、看电影、玩电脑 -> UseEntertainment
-    // 区别在于家具配置的 funRate 和 contentTags
-    UseEntertainment = 'use_entertainment', 
+    // --- 工作与技能 ---
+    Work = 'work',               // 工作/使用电脑 (对应原 utility: work)
+    PracticeMusic = 'practice_music', // 练琴 (对应原 utility: play_instrument)
+    Paint = 'paint',             // 绘画 (对应原 utility: paint)
+    Exercise = 'exercise',       // 运动 (对应原 utility: run)
+    AttendingWork = 'work_attend',   // 上班打卡
+    AttendingSchool = 'school_attend', // 上学签到
     
-    // 练琴、画画、下棋、健身 -> PracticeSkill
-    // 区别在于家具配置的 skillId
-    PracticeSkill = 'practice_skill',       
+    // --- 娱乐 ---
+    Watch = 'watch',             // 观看 (对应原 utility: TV, cinema_)
+    PlayGame = 'play_game',      // 玩游戏 (对应原 utility: play)
+    ViewArt = 'view_art',        // 欣赏艺术 (对应原 utility: decor)
     
-    // --- 机构交互 ---
-    // 上学、上班
-    AttendInstitution = 'attend_institution', 
-    
-    // --- 其他特殊交互 (按需保留) ---
-    OpenStorage = 'open_storage',
-    WashDishes = 'wash_dishes',
-    Garden = 'garden',
-    Fish = 'fish',
-    Dance = 'dance',
-    PracticeSpeech = 'practice_speech',
-    NapCrib = 'nap_crib',
-    PlayBlocks = 'play_blocks',
-
+    // --- 商业交互 ---
+    BuyItem = 'buy_item',        // 购买物品 (对应原 utility: buy_item, buy_drink)
+    OrderFood = 'order_food',    // 点餐 (对应原 utility: eat_out/ordering)
+    Checkout = 'checkout',       // 结账 (对应原 utility: cashier)
   }
   
   // ==========================================

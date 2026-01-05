@@ -1,12 +1,10 @@
-import { BUFFS } from '../../config/gameplay';
-import { Furniture, SimAction, AgeStage } from '../../types';
+import { ITEMS, BUFFS } from '../../constants';
+import { Furniture, NeedType, SimAction, AgeStage } from '../../types';
 import type { Sim } from '../Sim';
 import { SchoolLogic } from './school';
 import { SkillLogic } from './SkillLogic'; 
-import { GameStore } from '../GameStore';
-import { InteractionType, NeedType, ItemTag } from '../../config/gameConstants';
-import { ITEM_REGISTRY } from '../../data/items';
-import { EconomyLogic } from './EconomyLogic';
+import { GameStore } from '../simulation';
+import { FurnitureUtility, FurnitureTag } from '../../config/furnitureTypes';
 
 // === 接口定义 ===
 export interface InteractionHandler {
@@ -19,410 +17,554 @@ export interface InteractionHandler {
     onFinish?: (sim: Sim, obj: Furniture) => void;
 }
 
-// === 辅助函数：统一处理年龄限制 ===
-const checkAgeRestriction = (sim: Sim, minAge: string | undefined, errMsg: string = "太小了，做不到...") => {
-    // 简单的年龄层级判断逻辑 (这里简化处理，实际可根据 Enum 顺序判断)
-    const restricted = [AgeStage.Infant, AgeStage.Toddler];
-    if (minAge === 'Child' && restricted.includes(sim.ageStage)) {
-        sim.say(errMsg, 'bad');
-        return false;
-    }
-    // 婴儿和幼儿几乎大部分通用交互都不能做
-    if (restricted.includes(sim.ageStage)) {
-         sim.say("够不着...", 'bad');
-         return false;
-    }
-    return true;
-};
-
-// === 辅助函数：应用物品/行为效果 ===
-const applyEffects = (sim: Sim, effects: any, f: number = 1.0) => {
-    if (!effects) return;
-
-    // 1. 需求恢复
-    if (effects.needs) {
-        Object.entries(effects.needs).forEach(([need, amount]) => {
-            if (sim.needs[need as NeedType] !== undefined) {
-                // 如果是 onUpdate 这种持续调用的，amount 需要乘以 f (frame delta)
-                // 这里假设 effects 定义的是总值，还是速率，需要根据上下文。
-                // 为了通用，我们假设这里处理的是单次结算(onFinish)或速率(onUpdate)
-                // 在此代码段中，我们主要在 update 中手动处理速率，这里处理单次获得的 buff/attr
-            }
-        });
-    }
-
-    // 2. 属性提升 (IQ, EQ, etc)
-    if (effects.attrGain) {
-        const { id, amount } = effects.attrGain;
-        if ((sim as any)[id] !== undefined) {
-            (sim as any)[id] = Math.min(100, (sim as any)[id] + amount * f);
-        }
-    }
-
-    // 3. Buff (仅限单次触发)
-    if (effects.buffs && f === 1.0) { // f=1.0 暗示是单次调用
-        effects.buffs.forEach((buffId: string) => {
-             if((BUFFS as any)[buffId]) sim.addBuff((BUFFS as any)[buffId]);
-        });
-    }
-};
-
 // === 常量定义 ===
 export const RESTORE_TIMES: Record<string, number> = {
     [NeedType.Bladder]: 15, 
-    [NeedType.Hygiene]: 20, 
-    [NeedType.Hunger]: 30, 
+    [NeedType.Hygiene]: 25, 
+    [NeedType.Hunger]: 45, 
     energy_sleep: 420, 
     energy_nap: 60,
-    fun_high: 60, 
-    fun_low: 120,
+    [NeedType.Fun]: 90, 
+    [NeedType.Social]: 60, 
+    art: 120, 
+    play: 60, 
+    practice_speech: 45,
     default: 60
 };
 
-// === 辅助函数：获取家具的交互配置 ===
-const getConfig = (obj: Furniture, type: InteractionType) => {
-    return obj.interactions?.[type] || {};
+// === 辅助函数 ===
+const genericRestore = (needType: NeedType, timeKey?: string) => {
+    return (sim: Sim, obj: Furniture, f: number, getRate: (m: number) => number) => {
+        const t = timeKey ? RESTORE_TIMES[timeKey] : (RESTORE_TIMES[needType] || RESTORE_TIMES.default);
+        if (sim.needs[needType] !== undefined) {
+            sim.needs[needType] += getRate(t);
+        }
+    };
 };
 
 // 🆕 核心交互策略表
 export const INTERACTIONS: Record<string, InteractionHandler> = {
-
-    // ========================================================
-    // 🛒 通用购物 (Shop)
-    // 涵盖：自动贩卖机、书店、超市、买门票
-    // ========================================================
-    [InteractionType.Shop]: {
-        verb: '购物', 
-        duration: 15,
-        getVerb: (sim, obj) => {
-            const config = obj.interactions?.[InteractionType.Shop];
-            return config?.verb || '购物';
-        },
+    [FurnitureUtility.Vending]: {
+        verb: '咕嘟咕嘟', duration: 5,
         onStart: (sim, obj) => {
-            if (!checkAgeRestriction(sim, 'Child')) return false;
-
-            // 1. 确定要买什么 (优先查看意图，其次查看家具默认售卖列表)
-            let targetItemId = sim.intendedShoppingItemId;
-            
-            // 如果 Sim 没有明确想买的，但点击了该家具，尝试获取该家具售卖列表的第一个作为默认
-            if (!targetItemId) {
-                const shopConfig = obj.interactions?.[InteractionType.Shop];
-                if (shopConfig?.inventory && shopConfig.inventory.length > 0) {
-                    targetItemId = shopConfig.inventory[0];
-                }
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("够不着...", 'bad'); return false; }
+            // 🟢 [新增] 贫困保护：如果钱少于 100 块，且不是极度口渴/饥饿，就忍忍吧
+            if (sim.money < 100 && sim.needs[NeedType.Hunger] > 30) {
+                sim.say("省点钱喝凉水吧...", 'bad');
+                return false;
             }
-
-            if (!targetItemId) {
-                sim.say("没看到想买的东西...", 'normal');
+            if (sim.money >= 5) { 
+                sim.money -= 5; 
+                sim.needs[NeedType.Hunger] += 5; 
+                sim.needs[NeedType.Fun] += 5; 
+                return true; 
+            }
+            sim.say("没钱买水...", 'bad'); return false;
+        }
+    },
+    [FurnitureUtility.BuyBook]: {
+        verb: '买书', duration: 15,
+        onStart: (sim, obj) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("看不懂...", 'bad'); return false; }
+            if (sim.money >= 60) { 
+                // 复用 EconomyLogic.buyItem 来获得物品效果
+                // 注意：这里已经到了书架前，所以是合法的交互
+                sim.buyItem(ITEMS.find((i: any) => i.id === 'book')); 
+                return true; 
+            }
+            sim.say("买不起...", 'bad'); return false;
+        }
+    },
+    [FurnitureUtility.Shelf]: {
+        verb: '购物 🛍️', duration: 15,
+        onStart: (sim, obj) => {
+            // [修复] 婴幼儿不能购物
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("够不着柜台...", 'bad');
                 return false;
             }
 
-            // 2. 获取物品数据
-            const item = ITEM_REGISTRY[targetItemId];
-            if (!item) return false;
-
-            // 3. 检查金钱 (支持家具特定的价格系数，如自家冰箱免费)
-            const shopConfig = obj.interactions?.[InteractionType.Shop];
-            const multiplier = shopConfig?.priceMultiplier ?? 1.0;
-            const finalPrice = Math.floor(item.price * multiplier);
-
-            // 贫困保护逻辑 (保留原汁原味)
-            if (sim.money < 100 && item.tags.includes(ItemTag.Drink) && sim.needs[NeedType.Hunger] > 30 && finalPrice > 0) {
-                 sim.say("省点钱喝凉水吧...", 'bad');
-                 return false;
+            // 🆕 优先检查是否有特定购买意图
+            if (sim.intendedShoppingItemId) {
+                const item = ITEMS.find(i => i.id === sim.intendedShoppingItemId);
+                if (item) {
+                    if (sim.money < item.cost) { 
+                        sim.say("钱不够...", 'bad'); 
+                        sim.intendedShoppingItemId = undefined; // 清理意图
+                        return false; 
+                    }
+                    return true; // 资金充足，开始交互
+                }
             }
 
-            if (sim.money < finalPrice) {
-                sim.say("买不起...", 'bad');
-                // 清理意图，避免死循环
-                sim.intendedShoppingItemId = undefined;
-                return false;
-            }
-
-            // 4. 预扣款 (或在 finish 扣款，这里选择 start 扣款简单点，或者由 buyItem 处理)
-            // 这里我们模拟过程，实际交易在 finish
-            sim['tempTransaction'] = { item, price: finalPrice };
-            
-            return true;
+            sim.say("只是看看...", 'normal');
+            return false;
         },
         onFinish: (sim, obj) => {
-            const transaction = sim['tempTransaction'];
-            if (transaction) {
-                // 真正的购买逻辑：扣钱，加物品进背包或直接使用
-                if (transaction.price > 0) sim.money -= transaction.price;
-                
-                // 如果是食物/饮料，通常直接产生效果（或者放入背包，这里简化为直接消费/获得效果）
-                // 复用 EconomyLogic 或直接写
-                sim.buyItem(transaction.item); 
-                
-                // 触发特殊语音
-                if (transaction.item.tags.includes(ItemTag.Book)) sim.say("知识就是力量 📖", 'act');
-                else sim.say("买到了! ✨", 'money');
-
-                delete sim['tempTransaction'];
-            } else {
-                // 只是看看
-                sim.say("只是看看~", 'act');
-                sim.needs[NeedType.Fun] += 5;
-            }
-            // 交互结束，清理意图
-            sim.intendedShoppingItemId = undefined;
-        }
-    },
-    // ==========================================
-    // 🎨 通用技能/练习逻辑 (PracticeSkill)
-    // 涵盖: 健身, 瑜伽, 画画, 弹琴, 下棋, 园艺, 钓鱼, 演讲
-    // ==========================================
-    [InteractionType.PracticeSkill]: {
-        verb: '练习',
-        duration: 60,
-        getVerb: (sim, obj) => getConfig(obj, InteractionType.PracticeSkill).verb || '练习',
-        
-        onStart: (sim, obj) => {
-            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { 
-                sim.say("我还太小了...", 'bad'); return false; 
-            }
-            // 部分技能需要耗材 (如画画)
-            const cfg = getConfig(obj, InteractionType.PracticeSkill);
-            if (cfg.skillId === 'creativity' && obj.tags.includes(ItemTag.Easel)) {
-                 if (sim.money < 10) { sim.say("没钱买颜料...", 'bad'); return false; }
-                 sim.money -= 10;
-            }
-            if (cfg.skillId === 'gardening' && sim.money < 5) {
-                 sim.say("没钱买种子...", 'bad'); return false;
-            }
-            return true;
-        },
-
-        onUpdate: (sim, obj, f, getRate) => {
-            const cfg = getConfig(obj, InteractionType.PracticeSkill);
-            const skillId = cfg.skillId || 'general';
-            const xpRate = cfg.xpRate || 0.1;
-            
-            // 1. 增加经验
-            SkillLogic.gainExperience(sim, skillId, xpRate * f);
-            
-            // 2. 处理副作用 (精力消耗/卫生消耗)
-            const energyCost = cfg.energyCost || 100;
-            sim.needs[NeedType.Energy] -= getRate(energyCost);
-
-            // 3. 健身特例：消耗卫生
-            if (skillId === 'athletics') {
-                sim.needs[NeedType.Hygiene] -= getRate(200);
-                sim.constitution = Math.min(100, sim.constitution + 0.05 * f);
-            }
-            
-            // 4. 娱乐回馈 (可选)
-            if (cfg.funRate) {
-                sim.needs[NeedType.Fun] += getRate(cfg.funRate);
-            }
-        },
-
-        onFinish: (sim, obj) => {
-            const cfg = getConfig(obj, InteractionType.PracticeSkill);
-            const skillId = cfg.skillId;
-
-            // --- 特殊产出逻辑 ---
-            // 健身受伤逻辑
-            if (skillId === 'athletics' && sim.constitution < 30 && Math.random() < 0.1) {
-                sim.say("哎哟！腰闪了... 🚑", 'bad');
-                sim.health -= 5;
-            }
-            
-            // 1. 园艺产出
-            if (skillId === 'gardening') {
-                const failChance = Math.max(0.05, 0.4 - sim.skills.gardening * 0.01);
-                if (Math.random() < failChance) {
-                    sim.say("枯死了... 🍂", 'bad');
-                } else {
-                    const profit = Math.floor(20 + sim.skills.gardening * 0.5);
-                    if (sim.ageStage === AgeStage.Child) {
-                        sim.say("收菜啦！🥬", 'act');
-                    } else if (sim.hasFreshIngredients) {
-                        sim.earnMoney(profit, 'selling_veggies'); // 冰箱满了就卖掉
-                    } else {
-                        sim.hasFreshIngredients = true;
-                        sim.say("获得新鲜食材 🥬", 'life');
-                    }
+            // 🆕 结算特定意图
+            if (sim.intendedShoppingItemId) {
+                const item = ITEMS.find(i => i.id === sim.intendedShoppingItemId);
+                if (item) {
+                    sim.buyItem(item); // 真正扣款并获得效果
+                    sim.say("买买买! ✨", 'act');
                 }
-            }
-            // 2. 绘画产出
-            if (skillId === 'creativity' || skillId === 'painting') {
-                if (sim.ageStage === AgeStage.Child) {
-                    sim.say("画好了！🎨", 'act');
-                    sim.addMemory("画了一幅画。", 'achievement');
-                } else {
-                    // 卖画逻辑
-                    const quality = sim.skills.creativity || 0;
-                    if (Math.random() < Math.max(0.05, 0.4 - quality * 0.008)) {
-                        sim.say("画毁了... 🗑️", 'bad');
-                    } else {
-                        let val = 30 + quality * 3;
-                        if (quality > 80 && Math.random() > 0.8) {
-                            val *= 3;
-                            sim.say("传世杰作! 🎨", 'act');
-                        } else {
-                            sim.say("卖掉画作 🖼️", 'money');
-                        }
-                        sim.earnMoney(Math.floor(val), 'selling_art');
-                    }
-                }
-            }
-            // 3. 钓鱼产出
-            else if (skillId === 'fishing') {
-                if (Math.random() > 0.6) {
-                    sim.earnMoney(20, 'sell_fish');
-                    sim.say("大鱼! 🐟", 'money');
-                } else {
-                    sim.say("空军...", 'normal');
-                }
-            }
-            // 4. 通用完成反馈
-            else {
-                sim.say("感觉变强了！💪", 'act');
-            }
-        }
-    },
-
-    // ==========================================
-    // 🎮 通用娱乐逻辑 (UseEntertainment)
-    // 涵盖: 电视, 游戏机, 看画, 跳舞毯
-    // ==========================================
-    [InteractionType.UseEntertainment]: {
-        verb: '娱乐', 
-        duration: 90,
-        getVerb: (sim, obj) => obj.interactions?.[InteractionType.UseEntertainment]?.verb || '娱乐',
-        onStart: (sim, obj) => {
-            const config = obj.interactions?.[InteractionType.UseEntertainment];
-            sim.enterInteractionState(SimAction.Using); // 通用动画状态
-            
-            // 特殊 Buff
-            if (config?.contentTags?.includes('movie')) sim.addBuff(BUFFS.movie_fun);
-            
-            return true;
-        },
-        onUpdate: (sim, obj, f, getRate) => {
-            const config = obj.interactions?.[InteractionType.UseEntertainment];
-            const funRate = config?.funRate || 100;
-            const energyCost = config?.energyCost || 50;
-
-            sim.needs[NeedType.Fun] += getRate(funRate);
-            sim.needs[NeedType.Energy] -= getRate(energyCost);
-            
-            // 甚至可以在这里根据 tags 加一点属性，比如看新闻加智商
-        },
-        onFinish: (sim) => {
-            // 简单的结束语
-            sim.say("真有意思！", 'act');
-        }
-    },
-
-    // ==========================================
-    // 💻 工作与学习 (Work & Study)
-    // 涵盖: 电脑工作, 电脑游戏, 写作
-    // 注意: 去公司上班通常是 Map 级的 Rabbit Hole，不在这里处理，这里主要处理互动物件
-    // ==========================================
-    [InteractionType.AttendInstitution]: {
-        verb: '使用电脑',
-        duration: 120,
-        getVerb: (sim) => {
-           if (sim.ageStage === AgeStage.Child || sim.ageStage === AgeStage.Teen) return '上学 🎒';
-            if (sim.isSideHustle) return '接单 💻';
-            return '工作 💼';
-        },
-        onStart: (sim) => {
-            // 意图分流
-            if (sim.currentIntent === SimIntent.FUN) {
-                sim.enterInteractionState(SimAction.Using); // 玩游戏姿态
-            } else {
-                sim.enterWorkingState(); // 工作姿态
-            }
-            return true;
-        },
-        onUpdate: (sim, obj, f, getRate) => {
-            // 模式 A: 玩游戏
-            if (sim.currentIntent === SimIntent.FUN) {
-                sim.needs[NeedType.Fun] += getRate(150);
-                sim.needs[NeedType.Social] += getRate(50); // 假装在联机
+                sim.intendedShoppingItemId = undefined; // 消费完成，清理
                 return;
             }
-            
-            // 模式 B: 工作/接单
-            if (sim.isSideHustle) {
-                // 接单时练习逻辑
-                SkillLogic.gainExperience(sim, 'logic', 0.1 * f);
-                sim.needs[NeedType.Fun] -= getRate(50);
-            }
-        },
-        onFinish: (sim) => {
-            if (sim.currentIntent === SimIntent.FUN) {
-                sim.say("好玩!", 'act');
-            } else if (sim.isSideHustle) {
-                const earned = 50 + sim.skills.logic * 2;
-                sim.earnMoney(earned, 'freelance');
-                sim.say("赚点外快 💰", 'money');
-            }
+
+            // 🟢 [修改后] 如果真的允许无目的闲逛，这里不要扣钱，只加少量乐趣
+            sim.say("只是看看~", 'act');
+            sim.needs[NeedType.Fun] += 5;
         }
     },
-
-    // ==========================================
-    // 🍳 烹饪 (Cook)
-    // 涵盖: 微波炉, 炉灶, 专业厨房
-    // ==========================================
-    [InteractionType.Cook]: {
-        verb: '做饭',
-        duration: 60,
-        onStart: (sim, obj) => {
-            if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
-                sim.say("小孩不能玩火 🔥", 'bad'); return false;
+    [FurnitureUtility.Exercise]: {
+        verb: '健身', duration: 60,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("太危险了!", 'bad'); return false; }
+            // 如果是买课意图，先扣钱
+            if (sim.intendedShoppingItemId === 'gym_pass') {
+                const item = ITEMS.find(i => i.id === 'gym_pass');
+                if (item && sim.money >= item.cost) {
+                    sim.buyItem(item); // 扣钱，加属性
+                    sim.intendedShoppingItemId = undefined;
+                    return true;
+                } else if (item) {
+                    sim.say("办不起卡...", 'bad');
+                    return false;
+                }
             }
-            
-            // 检查食材
-            if (sim.hasFreshIngredients) {
-                sim.hasFreshIngredients = false;
-                sim.say("使用新鲜蔬菜 🥬", 'act');
-            } else {
-                if (sim.money < 15) { sim.say("没钱买菜...", 'bad'); return false; }
-                sim.money -= 15;
-            }
-            
-            sim.enterInteractionState(SimAction.Cooking);
             return true;
         },
         onUpdate: (sim, obj, f, getRate) => {
-            SkillLogic.gainExperience(sim, 'cooking', 0.1 * f);
+            SkillLogic.gainExperience(sim, 'athletics', 0.08 * f);
+            const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
+            sim.needs[NeedType.Energy] -= getRate(120) * decayMod;
+            sim.needs[NeedType.Hygiene] -= getRate(240) * decayMod;
+            sim.constitution = Math.min(100, sim.constitution + 0.05 * f * decayMod);
         },
         onFinish: (sim) => {
-            // 烹饪结果
-            if (Math.random() < 0.1 && sim.skills.cooking < 20) {
-                sim.say("烧焦了... 🔥", 'bad');
-                sim.mood -= 10;
-            } else {
-                sim.say("开饭咯! 🍲", 'act');
-                sim.needs[NeedType.Hunger] = 100;
-                sim.addBuff(BUFFS.good_meal);
+            // 🆕 健身翻车：低体质概率拉伤
+            if (sim.constitution < 30 && Math.random() < 0.1) {
+                sim.say("哎哟！腰闪了... 🚑", 'bad');
+                sim.health -= 5;
+                sim.needs[NeedType.Energy] -= 10;
             }
         }
     },
-
-// ==========================================
-    // 🍽️ 进食 (Dining)
-    // 涵盖: 在餐桌吃饭, 在餐厅吃饭
-    // ==========================================
-    [InteractionType.Dining]: {
-        verb: '用餐',
-        duration: 30,
-        onStart: (sim) => { sim.enterInteractionState(SimAction.Eating); return true; },
+    [FurnitureUtility.Stretch]: {
+        verb: '瑜伽', duration: 60,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("还是玩积木吧", 'bad'); return false; }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
-             sim.needs[NeedType.Hunger] += getRate(60);
-             // 如果是餐厅 (根据 obj 配置或 tag) 还可以加娱乐
-             if (obj.tags.includes(ItemTag.Seat) && obj.cost > 0) { // 假设付费座位是餐厅
-                 sim.needs[NeedType.Fun] += getRate(50);
-             }
+            SkillLogic.gainExperience(sim, 'athletics', 0.05 * f);
+            const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
+            sim.needs[NeedType.Energy] -= getRate(120) * decayMod;
+            sim.needs[NeedType.Hygiene] -= getRate(240) * decayMod;
+            sim.constitution = Math.min(100, sim.constitution + 0.03 * f);
+        }
+    },
+    [FurnitureUtility.Lift]: {
+        verb: '举铁 💪', duration: 45,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("太重了...", 'bad'); return false; }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'athletics', 0.1 * f);
+            const decayMod = SkillLogic.getPerkModifier(sim, 'athletics', 'efficiency');
+            sim.needs[NeedType.Energy] -= getRate(300) * decayMod; 
+            sim.needs[NeedType.Hygiene] -= getRate(300) * decayMod;
+            sim.constitution = Math.min(100, sim.constitution + 0.08 * f);
+        },
+        onFinish: (sim) => {
+            if (sim.constitution < 40 && Math.random() < 0.15) {
+                sim.say("砸到脚了！💢", 'bad');
+                sim.mood -= 10;
+            }
+        }
+    },
+    // 🆕 园艺：产出蔬菜
+    [FurnitureUtility.Garden]: {
+        verb: '照料植物 🌿', duration: 60,
+        onStart: (sim) => {
+            // [新增] 婴幼儿不能园艺
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("还不会种菜...", 'bad');
+                return false;
+            }
+            if (sim.money < 50) { sim.say("买不起种子...", 'bad'); return false; }
+            sim.money -= 5; // 种子成本
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'gardening', 0.08 * f);
+            sim.needs[NeedType.Fun] += getRate(150);
+            sim.needs[NeedType.Energy] -= getRate(200);
+        },
+        onFinish: (sim) => {
+            // 翻车概率
+            const failChance = Math.max(0.05, 0.4 - sim.skills.gardening * 0.01);
+            if (Math.random() < failChance) {
+                sim.say("植物枯死了... 🍂", 'bad');
+                return;
+            }
+            // 成功收获
+            const yieldAmount = Math.floor(2 + sim.skills.gardening * 0.1); 
+            
+            // [新增] 儿童园艺不卖钱
+            if (sim.ageStage === AgeStage.Child) {
+                sim.say("我种的菜长大了！🥬", 'act');
+                sim.addMemory("体验了种植的乐趣。", 'life');
+                return;
+            }
+
+            const shouldSell = sim.money > 500 || sim.hasFreshIngredients;
+            
+            if (shouldSell) {
+                const profit = yieldAmount * 10;
+                sim.earnMoney(profit, 'selling_veggies');
+                sim.say(`卖菜赚钱! +$${profit}`, 'money');
+            } else {
+                sim.hasFreshIngredients = true;
+                sim.say("收菜啦！今晚加餐 🥬", 'act');
+                GameStore.addLog(sim, "收获了新鲜蔬菜，放入了冰箱。", "life");
+            }
+        }
+    },
+    [FurnitureUtility.Fishing]: {
+        verb: '钓鱼 🎣', duration: 60,
+        onStart: (sim) => {
+            // [新增] 婴幼儿不能钓鱼
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("危险！", 'bad');
+                return false;
+            }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'fishing', 0.08 * f);
+            sim.needs[NeedType.Fun] += getRate(120);
+        },
+        onFinish: (sim) => {
+            if (Math.random() < 0.2 && sim.skills.fishing < 30) {
+                sim.say("钓到一只靴子... 👢", 'bad');
+                sim.needs[NeedType.Fun] -= 10;
+                return;
+            }
+            if (Math.random() > (0.6 - sim.skills.fishing * 0.003)) {
+                // [新增] 儿童钓鱼不卖钱
+                if (sim.ageStage === AgeStage.Child) {
+                    sim.say("钓到鱼了！🐟", 'act');
+                    return;
+                }
+
+                const earned = 15 + sim.skills.fishing * 2 + Math.floor(Math.random()*20);
+                sim.earnMoney(earned, 'sell_fish');
+                sim.say("大鱼! 🐟", 'money');
+            } else {
+                sim.say("空军了...", 'normal');
+            }
+        }
+    },
+    // 🆕 烹饪
+    [FurnitureUtility.Cooking]: {
+        verb: '烹饪', duration: 90,
+        getDuration: (sim) => 90 * SkillLogic.getPerkModifier(sim, 'cooking', 'speed'),
+        onStart: (sim) => { 
+            // [修改] 将 Infant, Toddler 扩展为包含 Child
+            if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
+                sim.say("太危险了...", 'bad');
+                return false;
+            }
+
+            if (sim.hasFreshIngredients) {
+                sim.say("使用自家蔬菜 🥗", 'act');
+                sim.hasFreshIngredients = false; 
+            } else {
+                const cost = 20; 
+                if (sim.money < cost) { sim.say("吃不起饭了...", 'bad'); return false; }
+                sim.money -= cost;
+            }
+            if (sim.interactionTarget?.utility === 'work') {
+                sim.enterWorkingState();
+            } else {
+                sim.enterInteractionState(SimAction.Using);
+            }
+            return true; 
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'cooking', 0.05 * f);
+        },
+        onFinish: (sim) => {
+            const failChance = Math.max(0.01, 0.3 - sim.skills.cooking * 0.01);
+            if (Math.random() < failChance) {
+                sim.say("烧焦了... 🔥", 'bad');
+                sim.needs[NeedType.Hunger] += 20;
+                sim.mood -= 10;
+                GameStore.addLog(sim, "做饭把锅烧糊了，含泪吃下黑暗料理。", 'bad');
+            } else {
+                sim.addBuff(BUFFS.good_meal);
+                sim.needs[NeedType.Hunger] = 100;
+                if (sim.skills.cooking >= 50) sim.say("大厨水准! 👨‍🍳", 'act');
+                else sim.say("开饭咯!", 'act');
+            }
+        }
+    },
+    [FurnitureUtility.Art]: {
+        verb: '看展览 🎨', duration: 90,
+        onStart: (sim) => { sim.addBuff(BUFFS.art_inspired); return true; },
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs[NeedType.Fun] += getRate(RESTORE_TIMES.art);
+            SkillLogic.gainExperience(sim, 'creativity', 0.03 * f);
+            sim.creativity = Math.min(100, sim.creativity + 0.05 * f);
+        }
+    },
+    // 🆕 绘画
+    [FurnitureUtility.Easel]: {
+        verb: '绘画 🖌️', duration: 120,
+        getDuration: (sim) => 120 * SkillLogic.getPerkModifier(sim, 'creativity', 'speed'),
+        onStart: (sim) => {
+            // [新增] 婴幼儿不能绘画 (够不着)
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("够不着...", 'bad');
+                return false;
+            }
+            if (sim.money < 100) { sim.say("买不起颜料...", 'bad'); return false; }
+            sim.money -= 20; 
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'creativity', 0.08 * f);
+            sim.creativity = Math.min(100, sim.creativity + 0.08 * f);
+            sim.needs[NeedType.Fun] += getRate(120);
+        },
+        onFinish: (sim) => {
+            const failChance = Math.max(0.05, 0.4 - sim.skills.creativity * 0.008);
+            if (Math.random() < failChance) {
+                sim.say("画得像涂鸦... 🗑️", 'bad');
+                return; 
+            }
+
+            // [新增] 儿童绘画不赚钱
+            if (sim.ageStage === AgeStage.Child) {
+                 sim.say("画好了！妈妈看！🎨", 'act');
+                 sim.addMemory("画了一幅画，感觉很开心。", 'achievement');
+                 return;
+            }
+
+            let value = 30 + sim.skills.creativity * 3 + Math.random() * 50;
+            if (sim.skills.creativity > 80 && Math.random() > 0.8) {
+                value *= 3; 
+                sim.say("传世杰作! 🎨", 'act');
+                sim.addMemory("我创作出了一幅惊人的杰作！", 'achievement');
+            } else {
+                sim.say("卖掉画作 🖼️", 'money');
+            }
+            sim.earnMoney(Math.floor(value), 'selling_art');
+        }
+    },
+    [FurnitureUtility.Game]: {
+        verb: '玩耍 🎈', duration: 45,
+        onStart: (sim) => { sim.addBuff(BUFFS.playful); return true; },
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs[NeedType.Fun] += getRate(RESTORE_TIMES.play);
+            sim.needs[NeedType.Energy] -= getRate(180);
+            sim.needs[NeedType.Hygiene] -= getRate(300);
+        }
+    },
+    [FurnitureUtility.Dance]: {
+        verb: '跳舞 💃', duration: 30,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("站不稳...", 'bad'); return false; }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'dancing', 0.1 * f);
+            sim.appearanceScore = Math.min(100, sim.appearanceScore + 0.02 * f);
+            sim.constitution = Math.min(100, sim.constitution + 0.02 * f);
+            sim.needs[NeedType.Fun] += getRate(60);
+            sim.needs[NeedType.Energy] -= getRate(200); 
+        }
+    },
+    [FurnitureUtility.PracticeSpeech]: {
+        verb: '练习演讲 🗣️', duration: 45,
+        getVerb: () => '对着镜子练习',
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("阿巴阿巴...", 'bad'); return false; }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'charisma', 0.08 * f);
+            sim.eq = Math.min(100, sim.eq + 0.02 * f); 
+            sim.needs[NeedType.Fun] -= getRate(150); 
+            sim.needs[NeedType.Energy] -= getRate(100);
+        },
+        onFinish: (sim) => {
+            if (sim.skills.charisma > 50) {
+                sim.say("我简直是演说家！✨", 'act');
+                sim.addBuff(BUFFS.promoted); 
+            } else {
+                sim.say("感觉更有自信了！", 'act');
+            }
+        }
+    },
+    // 🆕 下棋 (逻辑)
+    [FurnitureUtility.PlayChess]: {
+        verb: '下棋 ♟️', duration: 60,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("只会吃棋子...", 'bad'); return false; }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'logic', 0.08 * f);
+            sim.needs[NeedType.Fun] += getRate(80);
+            sim.iq = Math.min(100, sim.iq + 0.01 * f);
+        },
+        onFinish: (sim) => {
+            if (sim.skills.logic > 50 && Math.random() > 0.7) {
+                sim.say("妙手！", 'act');
+                sim.addBuff(BUFFS.gamer_joy);
+            }
+        }
+    },
+    // 🆕 演奏乐器 (音乐)
+    [FurnitureUtility.Instrument]: {
+        verb: '演奏 🎵', duration: 45,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("乱按...", 'bad'); return false; }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'music', 0.1 * f);
+            sim.needs[NeedType.Fun] += getRate(100);
+            sim.creativity = Math.min(100, sim.creativity + 0.02 * f);
+        },
+        onFinish: (sim) => {
+            sim.say("🎶 ~", 'act');
+        }
+    },
+   [FurnitureUtility.Work]: {
+        verb: '使用电脑', 
+        duration: 240, // 缩短基础时长
+        getDuration: (sim) => sim.isGaming ? 120 : 480, // 玩游戏时间短，工作时间长
+        getVerb: (sim) => {
+            if (sim.isGaming) return '玩游戏 🎮';
+            return sim.isSideHustle ? (sim.skills.coding > sim.skills.creativity ? '接单修Bug 💻' : '闭关写作 ✍️') : '工作 💻';
+        },
+        onStart: (sim, obj) => {
+            // 判定是否是玩游戏：如果娱乐低，且不是在通过副业赚钱，也不是上班时间（简单判定）
+            // 注意：需要在 decision.ts 里配合设置 sim.isGaming，或者在这里动态判定
+            // 这里使用动态判定兜底
+            if (!sim.isSideHustle && sim.needs[NeedType.Fun] < 60 && sim.job.id !== 'internet') {
+                sim['isGaming'] = true; // 临时标记
+                sim.enterInteractionState(SimAction.Using);
+            } else {
+                sim['isGaming'] = false;
+                if (sim.isSideHustle) sim.enterInteractionState(SimAction.Using);
+                else sim.enterWorkingState();
+            }
+            return true;
+        },
+
+        onUpdate: (sim, obj, f, getRate) => {
+            // 游戏模式
+            if (sim['isGaming']) {
+                sim.needs[NeedType.Fun] += getRate(150);
+                sim.needs[NeedType.Social] += getRate(50); // 网游社交
+                sim.needs[NeedType.Energy] -= getRate(80);
+                return;
+            }
+
+            // 工作模式 (原有逻辑)
+            if (sim.skills.logic > sim.skills.creativity) {
+                sim.iq = Math.min(100, sim.iq + 0.01 * f);
+            } else {
+                sim.creativity = Math.min(100, sim.creativity + 0.01 * f);
+            }
+        },
+
+        onFinish: (sim, obj) => {
+            if (sim['isGaming']) {
+                sim.say("好玩！", 'act');
+                sim['isGaming'] = false; // 清理标记
+                return;
+            }
+            if (sim.isSideHustle && obj.label.includes('电脑')) {
+                // [新增] 严格禁止未成年人接私活赚钱
+                if ([AgeStage.Infant, AgeStage.Toddler, AgeStage.Child].includes(sim.ageStage)) {
+                    sim.say("好玩！", 'act');
+                    sim.needs[NeedType.Fun] = 100;
+                    return;
+                }
+
+                const isWriting = sim.skills.creativity > sim.skills.coding;
+                if (isWriting) {
+                    SkillLogic.gainExperience(sim, 'creativity', 0.6);
+                    if (Math.random() < 0.2 && sim.skills.creativity < 30) {
+                        sim.say("毫无灵感... 🤯", 'bad');
+                        sim.needs[NeedType.Fun] -= 20;
+                        return;
+                    }
+                    const quality = sim.skills.creativity;
+                    const royaltyPerDay = Math.floor(10 + quality * 0.5);
+                    const durationDays = 3 + Math.floor(quality / 20); 
+                    
+                    if (!sim.royalty) sim.royalty = { amount: 0, daysLeft: 0 };
+                    sim.royalty.amount += royaltyPerDay;
+                    sim.royalty.daysLeft = Math.max(sim.royalty.daysLeft, durationDays);
+                    
+                    sim.say("新书发布! 📖", 'act');
+                    GameStore.addLog(sim, `发布了新文章，预计未来 ${durationDays} 天每天获得 $${royaltyPerDay} 版税。`, 'career');
+                } else {
+                    SkillLogic.gainExperience(sim, 'logic', 0.6);
+                    if (Math.random() < 0.2 && sim.skills.logic < 30) {
+                        sim.say("修不好这Bug... 😭", 'bad');
+                        sim.mood -= 10;
+                        return;
+                    }
+                    const earned = 30 + sim.skills.logic * 4; 
+                    sim.iq = Math.min(100, sim.iq + 0.2);
+                    sim.earnMoney(earned, 'freelance_coding');
+                }
+            }
+        }
+    },
+    // [优化] 电视/电影
+    [FurnitureUtility.Cinema]: { 
+        verb: '看电视 📺', duration: 90,
+        getVerb: (sim, obj) => obj.label.includes('电影') ? '看电影 🎬' : '看电视 📺',
+        onStart: (sim) => { 
+            sim.addBuff(BUFFS.movie_fun); 
+            sim.enterInteractionState(SimAction.WatchingMovie); // 确保有看电视的动画状态
+            return true; 
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+             sim.needs[NeedType.Fun] += getRate(150); // 提高娱乐回复速度
+             sim.needs[NeedType.Energy] -= getRate(50); // 坐着看电视耗能低
+             // 如果是新闻频道加智商，娱乐频道加娱乐 (简化统一处理)
         }
     },
 
-    [InteractionType.Sleep]: {
+    // [新增] 阅读 (对应书架)
+    [FurnitureUtility.Book]: {
+        verb: '阅读 📖', duration: 60,
+        onStart: (sim) => {
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("看不懂...", 'bad'); return false; }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs[NeedType.Fun] += getRate(80);
+            // 随机提升一门技能
+            if (Math.random() < 0.01) sim.skills.writing = (sim.skills.writing || 0) + 0.1;
+        },
+        onFinish: (sim) => {
+            sim.say("书中自有黄金屋", 'act');
+        }
+    },
+
+    [NeedType.Energy]: {
         verb: '睡觉 💤', duration: 420,
         getVerb: (sim, obj) => (obj.label.includes('沙发') || obj.label.includes('长椅')) ? '小憩' : '睡觉 💤',
         getDuration: (sim, obj) => {
@@ -453,72 +595,161 @@ export const INTERACTIONS: Record<string, InteractionHandler> = {
             }
         }
     },
-
-    // ==========================================
-    // 🚽 核心需求: 卫生与排泄
-    // ==========================================
-    [InteractionType.UseToilet]: {
-        verb: '方便', duration: 15,
-        onUpdate: genericRestore(NeedType.Bladder)
-    },
-    [InteractionType.Shower]: {
+    [FurnitureUtility.Shower]: {
         verb: '洗澡 🚿', duration: 20,
         onStart: (sim) => { 
-            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) return false; 
+            // [修复 B] 禁止婴幼儿独自使用淋浴
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) {
+                sim.say("我需要大人帮忙洗...", 'bad');
+                // 暂时没有“给宝宝洗澡”的交互，所以只能先失败，避免穿模
+                // 建议：如果没有大人帮忙，可以让他们通过 "Waiting" 状态缓慢恢复一点卫生（模拟擦洗）
+                return false; 
+            }
+
             sim.enterInteractionState(SimAction.Using); 
+            return true; 
+        }, 
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs[NeedType.Hygiene] += getRate(20); 
+            sim.needs[NeedType.Energy] += getRate(400); 
+            sim.needs[NeedType.Comfort] = 100;
+            if (sim.appearanceScore < 80) sim.appearanceScore += 0.05 * f;
+        }
+    },
+    [NeedType.Hunger]: {
+        verb: '用餐 🍴', duration: 30,
+        onStart: (sim) => { sim.enterInteractionState(SimAction.Eating); return true; },
+        onUpdate: genericRestore(NeedType.Hunger)
+    },
+    [NeedType.Comfort]: {
+        verb: '休息', 
+        duration: 60,
+        getVerb: () => '小憩 💤',
+        onStart: (sim) => { 
+            sim.enterInteractionState(SimAction.Using);
             return true; 
         },
         onUpdate: (sim, obj, f, getRate) => {
-            sim.needs[NeedType.Hygiene] += getRate(20);
-            sim.needs[NeedType.Comfort] += getRate(50);
+            sim.needs[NeedType.Energy] += getRate(RESTORE_TIMES.energy_nap);
+            if (sim.needs[NeedType.Comfort] !== undefined) sim.needs[NeedType.Comfort] = 100;
+            sim.needs[NeedType.Fun] += getRate(60);
         }
     },
-    
-    // ==========================================
-    // 🛋️ 坐下/休息 (Sit)
-    // ==========================================
-    [InteractionType.Sit]: {
-        verb: '休息', duration: 30,
-        onStart: (sim) => { sim.enterInteractionState(SimAction.Using); return true; },
+    [FurnitureUtility.EatOut]: {
+        verb: '享用美食 🍝', duration: 60,
+        onStart: (sim, obj) => {
+             const cost = obj.cost || 60;
+             if (sim.money < cost) { sim.say("吃不起...", 'bad'); return false; }
+             return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
-            sim.needs[NeedType.Energy] += getRate(60);
-            sim.needs[NeedType.Comfort] = 100;
+            sim.needs[NeedType.Hunger] += getRate(40); 
+            sim.needs[NeedType.Fun] += getRate(100);
+            sim.needs[NeedType.Social] += getRate(200); 
+        },
+        onFinish: (sim) => {
+            sim.addBuff(BUFFS.good_meal);
         }
     },
-
-    // ==========================================
-    // 👶 幼儿交互
-    // ==========================================
-    [InteractionType.NapCrib]: {
-        verb: '睡午觉', duration: 120,
+    [FurnitureUtility.BuyFood]: {
+        verb: '吃点心 🌭', 
+        duration: 15,
+        onStart: (sim, obj) => {
+            // [新增] 婴幼儿不能买吃的
+            if ([AgeStage.Infant, AgeStage.Toddler].includes(sim.ageStage)) { sim.say("...", 'bad'); return false; }
+            
+            const cost = 20; 
+            if (sim.money >= cost) { 
+                sim.money -= cost; 
+                sim.needs[NeedType.Hunger] += 40; 
+                sim.needs[NeedType.Fun] += 10;    
+                return true; 
+            }
+            sim.say("买不起吃的...", 'bad'); 
+            return false;
+        }
+    },
+    'default': {
+        verb: '使用', duration: 30,
+        getVerb: (sim, obj) => {
+             if (!obj.label) return "使用";
+             if (obj.label.includes('沙发')) return "葛优躺";
+             if (obj.label.includes('马桶') || obj.label.includes('公厕')) return "方便";
+             if (obj.label.includes('淋浴')) return "洗澡";
+             if (obj.label.includes('电脑')) return "上网 ⌨️";
+             if (obj.label.includes('试妆') || obj.label.includes('镜')) return "照镜子 🪞";
+             return "使用";
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            const u = obj.utility;
+            const t = RESTORE_TIMES[u] || RESTORE_TIMES.default;
+            if (sim.needs[u as NeedType] !== undefined) sim.needs[u as NeedType] += getRate(t);
+            
+            // ✅ 修复：先判断 obj.label 是否存在
+            if (obj.label && (obj.label.includes('试妆') || obj.label.includes('镜'))) {
+                sim.appearanceScore = Math.min(100, sim.appearanceScore + 0.1 * f);
+            }
+        }
+    },
+    [FurnitureUtility.NapCrib]: {
+        verb: '午睡 👶', duration: 120,
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs[NeedType.Energy] += getRate(120);
-            sim.health += 0.01 * f;
+            if (sim.ageStage === AgeStage.Infant) sim.health += 0.01 * f;
         }
     },
-    [InteractionType.PlayBlocks]: {
-        verb: '玩积木', duration: 45,
+    [FurnitureUtility.PlayBlocks]: {
+        verb: '堆积木 🧱', duration: 40,
         onUpdate: (sim, obj, f, getRate) => {
             sim.needs[NeedType.Fun] += getRate(60);
             SkillLogic.gainExperience(sim, 'creativity', 0.05 * f);
+            sim.needs[NeedType.Social] += getRate(180); 
         }
     },
-
-    // 默认回退
-    'default': {
-        verb: '使用', duration: 30,
+    [FurnitureUtility.Study]: {
+        verb: '写作业 📝', duration: 60,
+        onStart: (sim) => {
+            if (sim.mood < 40 && !sim.mbti.includes('J')) {
+                sim.say("不想写...", 'bad');
+                return false;
+            }
+            return true;
+        },
         onUpdate: (sim, obj, f, getRate) => {
-             // 简单的回血逻辑，防止报错
-             if (sim.needs[NeedType.Fun] !== undefined) sim.needs[NeedType.Fun] += getRate(30);
+            sim.needs[NeedType.Fun] -= getRate(200); 
+        },
+        onFinish: (sim) => {
+            SchoolLogic.doHomework(sim);
         }
-    }
+    },
+    [FurnitureUtility.StudyHigh]: {
+        verb: '自习 📖', duration: 90,
+        onUpdate: (sim, obj, f, getRate) => {
+            SkillLogic.gainExperience(sim, 'logic', 0.05 * f);
+        },
+        onFinish: (sim) => {
+            SchoolLogic.doHomework(sim);
+        }
+    },
+    [FurnitureUtility.EatCanteen]: {
+        verb: '吃食堂 🍛', duration: 20,
+        onStart: (sim, obj) => {
+            const isStudent = [AgeStage.Child, AgeStage.Teen].includes(sim.ageStage);
+            
+            if (!isStudent && sim.money < 10) { 
+                sim.say("饭卡没钱了...", 'bad'); 
+                return false; 
+            }
+            
+            if (!isStudent) {
+                sim.money -= 10;
+            } else {
+                if (Math.random() > 0.8) sim.health += 0.5;
+            }
+            return true;
+        },
+        onUpdate: (sim, obj, f, getRate) => {
+            sim.needs[NeedType.Hunger] += getRate(40);
+        }
+    },
 };
-
-// 简单的辅助函数，用于快速生成回血逻辑
-function genericRestore(needType: NeedType, time: number = 30) {
-    return (sim: Sim, obj: Furniture, f: number, getRate: (m: number) => number) => {
-        if (sim.needs[needType] !== undefined) {
-            sim.needs[needType] += getRate(time);
-        }
-    };
-}

@@ -1,5 +1,5 @@
 import { Sim } from '../Sim';
-import { GameStore } from '../GameStore';
+import { GameStore } from '../simulation';
 import { AgeStage } from '../../types';
 
 export const MovementLogic = {

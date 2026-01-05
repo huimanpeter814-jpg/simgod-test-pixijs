@@ -1,5 +1,5 @@
 import type { Sim } from '../Sim'; 
-import { GameStore } from '../GameStore';
+import { GameStore } from '../simulation';
 import { SOCIAL_TYPES, BUFFS, ELE_COMP, AGE_CONFIG } from '../../constants';
 import { DIALOGUE_TEMPLATES } from '../../data/dialogues';
 import { AgeStage } from '../../types';
